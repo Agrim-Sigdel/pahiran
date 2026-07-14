@@ -58,9 +58,10 @@ create table leads (
   created_at timestamptz not null default now()
 );
 
--- Per-IP generation rate limits (server-only via service role)
+-- Rate-limit buckets, keyed by scope ("tryon:ip:…", "tryon:global:…",
+-- "lead:ip:…", "log:ip:…"). Server-only via service role.
 create table rate_limits (
-  ip text primary key,
+  key text primary key,
   count integer not null default 0,
   reset_at timestamptz not null
 );

@@ -1,55 +1,39 @@
 import crypto from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { mapCategory } from "@/lib/constants";
+import { overLimit, clientIp } from "@/lib/ratelimit";
 
 /* Server-side proxy for fal.ai FASHN try-on.
    - FAL_KEY stays on the server (set it in .env.local).
-   - Results are cached by (person, garment, category) hash so re-trying
-     the same combination costs nothing.
-   - Per-IP rate limiting caps generation spend.
-   With SUPABASE_SERVICE_ROLE_KEY set, cache + rate buckets live in Postgres
-   (tryon_results / rate_limits) so they survive restarts and work across
-   serverless instances; every try-on is also logged to tryon_events for
-   the vendor's "most-tried items" analytics. Otherwise both are in-memory. */
+   - Results cached by (person, garment, category) hash; cache hits are free
+     and do NOT consume rate-limit quota.
+   - Abuse controls: per-IP limit + global daily generation cap
+     (TRYON_DAILY_CAP env, default 500) so a distributed abuser can't drain
+     the fal account. In Supabase mode the garment must exist in the shop's
+     catalog — the server uses the catalog's own image URL and ignores
+     arbitrary URLs from the client.
+   - With SUPABASE_SERVICE_ROLE_KEY set, cache/limits live in Postgres and
+     every try-on lands in tryon_events for analytics; in-memory otherwise. */
 
 const FAL_ENDPOINT = "https://fal.run/fal-ai/fashn/tryon/v1.6";
 
-const RATE_LIMIT = 30; // generations per IP per window
-const RATE_WINDOW_MS = 10 * 60 * 1000;
+const IP_LIMIT = 30; // generations per IP per window
+const IP_WINDOW_MS = 10 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_IMAGE_CHARS = 4_000_000; // ~3MB of base64 — far above the app's own compression
 
 const memCache = new Map<string, string>();
-const memBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function dailyCap(): number {
+  const n = Number(process.env.TRYON_DAILY_CAP);
+  return Number.isFinite(n) && n > 0 ? n : 500;
+}
 
 function serviceClient(): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false } });
-}
-
-async function rateLimited(sb: SupabaseClient | null, ip: string): Promise<boolean> {
-  const now = Date.now();
-  if (!sb) {
-    const b = memBuckets.get(ip);
-    if (!b || now > b.resetAt) {
-      memBuckets.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
-      return false;
-    }
-    b.count += 1;
-    return b.count > RATE_LIMIT;
-  }
-  const { data } = await sb.from("rate_limits").select("*").eq("ip", ip).maybeSingle();
-  if (!data || now > new Date(data.reset_at).getTime()) {
-    await sb.from("rate_limits").upsert({
-      ip,
-      count: 1,
-      reset_at: new Date(now + RATE_WINDOW_MS).toISOString(),
-    });
-    return false;
-  }
-  const count = data.count + 1;
-  await sb.from("rate_limits").update({ count }).eq("ip", ip);
-  return count > RATE_LIMIT;
 }
 
 async function cacheGet(sb: SupabaseClient | null, key: string): Promise<string | null> {
@@ -115,13 +99,6 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const sb = serviceClient();
-  const ip = (req.headers.get("x-forwarded-for") || "local").split(",")[0].trim();
-  if (await rateLimited(sb, ip)) {
-    return Response.json(
-      { error: "Too many try-ons right now — please wait a few minutes." },
-      { status: 429 }
-    );
-  }
 
   let body: any;
   try {
@@ -130,20 +107,46 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { personImage, garmentImage, category } = body || {};
-  const shopId: string | null = typeof body?.shopId === "string" ? body.shopId : null;
+  const { personImage, category } = body || {};
   const garmentId: string | null = typeof body?.garmentId === "string" ? body.garmentId : null;
   const sessionId: string | null =
     typeof body?.sessionId === "string" ? body.sessionId.slice(0, 64) : null;
-  const garmentIsUrl = typeof garmentImage === "string" && /^https:\/\//.test(garmentImage);
-  if (
-    !personImage?.startsWith("data:image/") ||
-    !(garmentImage?.startsWith("data:image/") || garmentIsUrl)
-  ) {
+
+  if (!personImage?.startsWith("data:image/") || personImage.length > MAX_IMAGE_CHARS) {
     return Response.json(
-      { error: "personImage must be an image data URL; garmentImage a data URL or https URL" },
+      { error: "personImage must be a reasonably sized image data URL" },
       { status: 400 }
     );
+  }
+
+  /* Resolve the garment. Supabase mode: it must exist in a shop's catalog —
+     the server trusts only the catalog's own image URL, so strangers can't
+     spend our fal credits on arbitrary images. Local mode (no Supabase):
+     the kiosk sends the garment photo as a data URL. */
+  let garmentImage: string;
+  let shopId: string | null = null;
+  if (sb) {
+    if (!garmentId) {
+      return Response.json({ error: "garmentId is required" }, { status: 400 });
+    }
+    const { data: garment } = await sb
+      .from("garments")
+      .select("shop_id, image_url, tryon_enabled")
+      .eq("id", garmentId)
+      .maybeSingle();
+    if (!garment || !garment.tryon_enabled) {
+      return Response.json({ error: "Unknown garment" }, { status: 400 });
+    }
+    garmentImage = garment.image_url;
+    shopId = garment.shop_id;
+  } else {
+    garmentImage = typeof body?.garmentImage === "string" ? body.garmentImage : "";
+    if (!garmentImage.startsWith("data:image/") || garmentImage.length > MAX_IMAGE_CHARS) {
+      return Response.json(
+        { error: "garmentImage must be a reasonably sized image data URL" },
+        { status: 400 }
+      );
+    }
   }
 
   const key = crypto
@@ -151,10 +154,27 @@ export async function POST(req: Request): Promise<Response> {
     .update(personImage + "|" + garmentImage + "|" + (category || ""))
     .digest("hex");
 
+  // Cache hits are free: no fal spend, so no quota consumed.
   const cachedUrl = await cacheGet(sb, key);
   if (cachedUrl) {
     await logEvent(sb, shopId, garmentId, true, sessionId);
     return Response.json({ url: cachedUrl, cached: true });
+  }
+
+  const ip = clientIp(req);
+  if (await overLimit(sb, "tryon:ip:" + ip, IP_LIMIT, IP_WINDOW_MS)) {
+    return Response.json(
+      { error: "Too many try-ons right now — please wait a few minutes." },
+      { status: 429 }
+    );
+  }
+  const day = new Date().toISOString().slice(0, 10);
+  if (await overLimit(sb, "tryon:global:" + day, dailyCap(), DAY_MS)) {
+    await logError(sb, "global daily try-on cap reached", { day, cap: dailyCap() }, shopId);
+    return Response.json(
+      { error: "The try-on service is very busy today — please try again tomorrow." },
+      { status: 429 }
+    );
   }
 
   let res: globalThis.Response;

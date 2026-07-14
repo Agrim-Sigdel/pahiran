@@ -1,14 +1,24 @@
 import { createClient } from "@supabase/supabase-js";
+import { overLimit, clientIp } from "@/lib/ratelimit";
 
 /* Shopper "I'm interested" → vendor leads inbox. Anonymous shoppers can't
    write through RLS, so the server inserts with the service role after
-   validating shape and capping sizes. */
+   validating shape and capping sizes. Rate-limited per IP so nobody can
+   flood a vendor's inbox. */
 
 export async function POST(req: Request): Promise<Response> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
     return Response.json({ error: "Leads need Supabase configured" }, { status: 500 });
+  }
+
+  const sb = createClient(url, key, { auth: { persistSession: false } });
+  if (await overLimit(sb, "lead:ip:" + clientIp(req), 5, 10 * 60 * 1000)) {
+    return Response.json(
+      { error: "Too many requests — please tell the staff directly." },
+      { status: 429 }
+    );
   }
 
   let body: any;
@@ -23,8 +33,6 @@ export async function POST(req: Request): Promise<Response> {
   if (!shopId || !garmentId) {
     return Response.json({ error: "shopId and garmentId are required" }, { status: 400 });
   }
-
-  const sb = createClient(url, key, { auth: { persistSession: false } });
 
   // The garment must really belong to the shop — keeps junk out of inboxes
   const { data: garment } = await sb

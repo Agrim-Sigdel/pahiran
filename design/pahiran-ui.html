@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pahiran · UI mockup v2 (sage edition, all screens)</title>
+<!--
+  ══════════════════════════════════════════════════════════════════
+  PAHIRAN UI MOCKUP v2 · "SAGE EDITION"
+  Light, airy e-commerce aesthetic: pale sage + cream + deep green,
+  thin serif display type, outlined uppercase buttons.
+  Every screen of the app is here, in order, inside a frame.
+  All colors/fonts/spacing live in the :root tokens below.
+
+  ROUTE SEPARATION (unchanged):
+    SHOPPER  (no login, phone-first):  /s/{shop}  storefront (full homepage)
+                                       /k/{shop}  try-on kiosk (QR target)
+    VENDOR   (login required):         /login, /dashboard (tabbed), own kiosk
+    SHARED:                            /          landing page
+
+  FLOW CHANGES vs v1 (marked ✦ in screen titles):
+    ✦ Storefront → try-on bridge: every garment card has a "TRY ON"
+      action that deep-links /k/{shop}?g={id} with garment preselected.
+      Hero CTA is "SEE IT ON YOU", not a generic button.
+    ✦ Kiosk: consent is merged INTO the capture screen (one less step).
+      Attract screen offers the saved-photo fast path immediately.
+    ✦ Lead flow: size + contact + send collapsed into one modal;
+      success screen pushes WhatsApp chat as the primary continuation.
+    ✦ Dashboard: one long page → 4 tabs (Overview · Leads · Catalog ·
+      Settings). Leads get status chips (New / Contacted / Done).
+  ══════════════════════════════════════════════════════════════════
+-->
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ════════ DESIGN TOKENS · change these to retheme everything ════════ */
+:root {
+  --forest: #3A5240;       /* primary · deep sage green */
+  --forest-deep: #2A3D2F;  /* headings, dark surfaces */
+  --sage: #EDEFE0;         /* page background (pale sage) */
+  --sage-mist: #E2E6D0;    /* alternate section background */
+  --cream: #FDFCF6;        /* card / surface white-cream */
+  --camel: #B08968;        /* warm accent · prices, highlights */
+  --ink: #26332A;          /* body text */
+  --mut: #8A9184;          /* muted text */
+  --line: #D9DDC8;         /* borders */
+  --whatsapp: #25D366;
+
+  --radius-card: 4px;      /* reference look = near-square corners */
+  --radius-btn: 3px;
+  --radius-modal: 8px;
+  --shadow-soft: 0 12px 34px rgba(42,61,47,.10);
+}
+
+* { box-sizing: border-box; margin: 0; }
+body { font-family: 'Jost', sans-serif; color: var(--ink); background: #E6E8DA; font-weight: 400; }
+.display { font-family: 'Cormorant Garamond', serif; font-weight: 500; letter-spacing: .02em; }
+button, a.btn { border: none; cursor: pointer; font-family: 'Jost', sans-serif; text-decoration: none; display: inline-block; background: none; }
+
+/* ════════ MOCKUP CHROME (frames + labels · not part of the app) ════ */
+.mock-note { max-width: 1100px; margin: 26px auto 0; padding: 18px 22px; background: var(--cream); border: 1px dashed var(--forest); border-radius: 8px; font-size: 14px; line-height: 1.6; }
+.screen { max-width: 1100px; margin: 34px auto; }
+.screen > h2 { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--mut); margin: 0 0 8px 4px; font-weight: 500; }
+.screen > h2 code { background: var(--forest-deep); color: var(--sage); padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 8px; letter-spacing: 0; }
+.frame { border-radius: 10px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow-soft); background: var(--sage); }
+.phone { max-width: 420px; }  /* shopper screens are phone-first */
+
+/* ════════ SHARED APP PIECES ════════ */
+.btn-solid { background: var(--forest); color: var(--cream); padding: 14px 30px; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; font-weight: 500; border-radius: var(--radius-btn); }
+.btn-outline { border: 1px solid var(--forest); color: var(--forest); padding: 13px 28px; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; font-weight: 500; border-radius: var(--radius-btn); background: transparent; }
+.btn-wa { background: var(--whatsapp); color: #fff; padding: 14px 28px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; font-weight: 500; border-radius: var(--radius-btn); }
+.linklike { text-decoration: underline; text-underline-offset: 4px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 500; color: var(--forest-deep); padding: 0; }
+.chip { padding: 8px 18px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; border-radius: 20px; white-space: nowrap; font-weight: 500; }
+.chip.on { background: var(--forest); color: var(--cream); }
+.chip.off { background: transparent; color: var(--mut); border: 1px solid var(--line); }
+.kicker { font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: var(--camel); font-weight: 500; }
+.ph-img { background: linear-gradient(145deg, #D7DCC4, #C3CBAE); }  /* photo placeholder */
+
+/* ════════ TOP NAV (storefront + landing) ════════ */
+.nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 18px 28px; background: var(--cream); border-bottom: 1px solid var(--line); gap: 12px; }
+.nav .links { display: flex; gap: 22px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 500; color: var(--ink); }
+.nav .links a { color: inherit; text-decoration: none; }
+.nav .logo { text-align: center; }
+.nav .logo .word { font-family: 'Cormorant Garamond', serif; font-size: 22px; letter-spacing: .34em; text-transform: uppercase; color: var(--forest-deep); }
+.nav .tools { display: flex; gap: 18px; justify-content: flex-end; align-items: center; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; font-weight: 500; }
+.nav .tools .icon { font-size: 16px; }
+
+/* ════════ 1. LANDING ════════ */
+.hero { display: grid; grid-template-columns: 1.1fr 1fr; min-height: 440px; background: var(--sage); }
+.hero .copy { display: flex; flex-direction: column; justify-content: center; padding: 48px 20px 48px 56px; gap: 22px; }
+.hero h1 { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-size: clamp(36px, 5.4vw, 58px); line-height: 1.12; color: var(--forest-deep); letter-spacing: .08em; text-transform: uppercase; }
+.hero p { color: var(--mut); font-size: 16px; font-weight: 300; max-width: 380px; line-height: 1.7; }
+.hero .actions { display: flex; gap: 14px; flex-wrap: wrap; }
+.hero .visual { position: relative; margin: 36px 36px 36px 0; }
+.hero .visual .photo { position: absolute; inset: 0; border-radius: 4px; box-shadow: var(--shadow-soft); display: flex; align-items: center; justify-content: center; color: var(--forest); font-size: 13px; letter-spacing: .1em; }
+@media (max-width: 720px) { .hero { grid-template-columns: 1fr; } .hero .visual { min-height: 260px; margin: 0 20px 28px; } .hero .copy { padding: 40px 24px 24px; } }
+
+.strip { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); background: var(--cream); }
+.strip .cell { padding: 26px 20px; text-align: center; border-left: 1px solid var(--line); }
+.strip .cell:first-child { border-left: none; }
+.strip .t { font-family: 'Cormorant Garamond', serif; font-size: 19px; color: var(--forest-deep); margin-bottom: 4px; }
+.strip .d { font-size: 13px; color: var(--mut); line-height: 1.5; }
+
+/* ════════ 2. LOGIN ════════ */
+.login { min-height: 460px; display: flex; align-items: center; justify-content: center; padding: 40px 24px; background: var(--sage); }
+.login .card { background: var(--cream); border: 1px solid var(--line); border-radius: var(--radius-modal); padding: 40px 36px; width: 380px; max-width: 100%; text-align: center; box-shadow: var(--shadow-soft); }
+.login .word { font-family: 'Cormorant Garamond', serif; font-size: 20px; letter-spacing: .34em; text-transform: uppercase; color: var(--forest-deep); margin-bottom: 26px; }
+.login h1 { font-family: 'Cormorant Garamond', serif; font-weight: 500; font-size: 26px; color: var(--forest-deep); margin-bottom: 4px; }
+.login .sub { color: var(--mut); font-size: 13px; margin-bottom: 24px; }
+.login form { display: flex; flex-direction: column; gap: 12px; }
+.login input { padding: 13px 14px; border-radius: var(--radius-btn); border: 1px solid var(--line); background: #fff; color: var(--ink); font-size: 15px; font-family: 'Jost', sans-serif; }
+.login input::placeholder { color: var(--mut); }
+.login .switch { color: var(--mut); font-size: 13px; margin-top: 20px; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ════════ 3. VENDOR DASHBOARD (tabbed) ════════ */
+.dash { padding: 0 26px 50px; max-width: 1080px; margin: 0 auto; background: var(--sage); }
+.dash-top { display: flex; align-items: center; justify-content: space-between; padding: 22px 0 16px; flex-wrap: wrap; gap: 12px; }
+.dash-top .word { font-family: 'Cormorant Garamond', serif; font-size: 22px; letter-spacing: .3em; text-transform: uppercase; color: var(--forest-deep); }
+.dash-top .shopname { font-size: 12px; color: var(--mut); letter-spacing: .12em; text-transform: uppercase; margin-top: 3px; }
+.dash-top .actions { display: flex; gap: 12px; align-items: center; }
+.dash-top .signout { color: var(--mut); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 22px; overflow-x: auto; }
+.tabs button { padding: 12px 20px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 500; color: var(--mut); border-bottom: 2px solid transparent; white-space: nowrap; }
+.tabs button.on { color: var(--forest-deep); border-bottom-color: var(--forest); }
+.tabs .badge { background: var(--camel); color: #fff; font-size: 10px; border-radius: 10px; padding: 1px 7px; margin-left: 6px; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tile { background: var(--cream); border: 1px solid var(--line); border-radius: var(--radius-card); padding: 16px 18px; }
+.tile.accent { border-color: var(--camel); }
+.tile .label { font-size: 10px; color: var(--mut); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; }
+.tile .value { font-family: 'Cormorant Garamond', serif; font-size: 34px; color: var(--forest-deep); margin-top: 2px; }
+.tile.accent .value { color: var(--camel); }
+.tile .hint { font-size: 11px; color: var(--mut); }
+
+.panel { background: var(--cream); border: 1px solid var(--line); border-radius: var(--radius-card); padding: 20px 22px; margin-top: 16px; }
+.panel-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.panel-head .title { font-family: 'Cormorant Garamond', serif; font-size: 21px; color: var(--forest-deep); }
+.panel-head .sub { font-size: 12px; color: var(--mut); }
+.panel-head .right { margin-left: auto; color: var(--mut); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; padding: 5px 10px; border: 1px solid var(--line); border-radius: var(--radius-btn); }
+
+.chart { display: flex; align-items: flex-end; gap: 2px; height: 110px; }
+.chart .bar { flex: 1; background: var(--forest); border-radius: 2px 2px 0 0; opacity: .85; }
+.chart .bar.zero { background: var(--line); height: 2px !important; }
+.chart-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--mut); margin-top: 6px; }
+
+/* leads (tab) · ✦ now with status chips */
+.lead { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.lead:first-of-type { border-top: none; }
+.lead .ph { width: 40px; height: 52px; border-radius: 3px; flex-shrink: 0; }
+.lead .name { font-size: 14px; font-weight: 500; }
+.lead .name .size { color: var(--camel); margin-left: 8px; font-weight: 600; }
+.lead .who { font-size: 12px; color: var(--mut); margin-top: 1px; }
+.lead .who b { color: var(--forest); }
+.lead .status { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.lead .st { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; padding: 4px 10px; border-radius: 12px; }
+.lead .st.new { background: var(--camel); color: #fff; }
+.lead .st.contacted { background: var(--sage-mist); color: var(--forest-deep); }
+.lead .st.done { background: transparent; color: var(--mut); border: 1px solid var(--line); }
+.lead .act { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 7px 12px; border: 1px solid var(--forest); color: var(--forest); border-radius: var(--radius-btn); font-weight: 500; }
+.lead .act.wa { border-color: var(--whatsapp); color: var(--whatsapp); }
+.lead.handled { opacity: .5; }
+
+table.tried { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.tried th { color: var(--mut); font-size: 10px; text-transform: uppercase; letter-spacing: .12em; text-align: left; padding: 6px 8px 10px; font-weight: 500; }
+table.tried td { padding: 9px 8px; border-top: 1px solid var(--line); }
+table.tried .num { text-align: right; }
+table.tried .tries { font-weight: 600; color: var(--camel); }
+table.tried .thumb { width: 28px; height: 36px; border-radius: 3px; display: inline-block; vertical-align: middle; margin-right: 10px; }
+
+/* catalog (tab) */
+.catalog-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+.catalog-head .count { color: var(--mut); margin-left: 10px; font-size: 13px; }
+.catalog-head select { padding: 10px 12px; border-radius: var(--radius-btn); border: 1px solid var(--line); background: var(--cream); font-size: 13px; font-family: 'Jost', sans-serif; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px; }
+.gcard { background: var(--cream); border-radius: var(--radius-card); overflow: hidden; border: 1px solid var(--line); }
+.gcard.out { opacity: .6; }
+.gcard .photo { aspect-ratio: 3/4; position: relative; }
+.gcard .photo .cat { position: absolute; top: 10px; left: 10px; background: var(--cream); color: var(--forest-deep); font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; padding: 4px 10px; border-radius: 2px; }
+.gcard .photo .oos { position: absolute; bottom: 10px; left: 10px; background: var(--forest-deep); color: var(--cream); font-size: 10px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; padding: 4px 9px; border-radius: 2px; }
+.gcard .photo .tries { position: absolute; top: 10px; right: 10px; background: rgba(42,61,47,.8); color: var(--cream); font-size: 10px; padding: 4px 8px; border-radius: 2px; }
+.gcard .body { padding: 13px 14px 14px; }
+.gcard .name { font-weight: 500; font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 4px; }
+.gcard .sizes { display: flex; gap: 4px; flex-wrap: wrap; margin: 4px 0 6px; }
+.gcard .sizes span { font-size: 10px; font-weight: 500; color: var(--mut); border: 1px solid var(--line); border-radius: 3px; padding: 2px 6px; }
+.gcard .row { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
+.gcard .price { color: var(--camel); font-weight: 500; font-size: 14px; }
+.gcard .row .ops button { color: var(--mut); font-size: 11px; padding: 4px 5px; font-weight: 500; letter-spacing: .04em; }
+.gcard .row .ops button.dark { color: var(--forest-deep); }
+
+/* settings (tab) */
+.settings { display: flex; flex-direction: column; gap: 14px; max-width: 560px; }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--mut); font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
+.field input { padding: 12px 13px; border-radius: var(--radius-btn); border: 1px solid var(--line); font-size: 15px; background: #fff; color: var(--ink); font-weight: 400; letter-spacing: 0; text-transform: none; font-family: 'Jost', sans-serif; }
+.linkbox { display: flex; gap: 8px; align-items: center; }
+.linkbox code { padding: 11px 13px; border-radius: var(--radius-btn); border: 1px solid var(--line); font-size: 13px; background: #fff; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.linkbox .copy { background: var(--forest-deep); color: var(--cream); padding: 11px 16px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; border-radius: var(--radius-btn); }
+.linkbox .edit { color: var(--mut); padding: 10px 8px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+
+/* ════════ 4. MODALS (dashboard) ════════ */
+.modal-stage { display: flex; gap: 24px; flex-wrap: wrap; padding: 34px; justify-content: center; background: rgba(42,61,47,.45); }
+.modal { background: var(--cream); border-radius: var(--radius-modal); width: 400px; max-width: 100%; padding: 28px 26px; }
+.modal h3 { font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 500; color: var(--forest-deep); margin-bottom: 18px; }
+.modal .drop { border: 1.5px dashed var(--line); border-radius: 6px; height: 170px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; background: var(--sage); color: var(--mut); font-size: 14px; text-align: center; line-height: 1.6; }
+.modal input, .modal select { width: 100%; padding: 12px 13px; border-radius: var(--radius-btn); border: 1px solid var(--line); font-size: 15px; font-family: 'Jost', sans-serif; margin-bottom: 10px; background: #fff; }
+.modal .half { display: flex; gap: 10px; }
+.modal .sizes { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 12px; }
+.modal .sizes button { padding: 7px 13px; font-size: 12px; border-radius: var(--radius-btn); background: var(--sage); color: var(--mut); border: 1px solid var(--line); font-weight: 500; }
+.modal .sizes button.on { background: var(--forest); color: var(--cream); border-color: var(--forest); }
+.modal .foot { display: flex; gap: 10px; margin-top: 12px; }
+.modal .foot .cancel { flex: 1; background: transparent; color: var(--forest-deep); padding: 13px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: var(--radius-btn); font-weight: 500; }
+.modal .foot .save { flex: 2; background: var(--forest); color: var(--cream); padding: 13px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; border-radius: var(--radius-btn); font-weight: 500; }
+.modal.qr { text-align: center; }
+.modal.qr .qrbox { width: 200px; height: 200px; margin: 14px auto; background: repeating-conic-gradient(var(--forest-deep) 0 25%, #fff 0 50%) 0 0/22px 22px; border-radius: 4px; }
+.modal.qr code { display: block; font-size: 11px; color: var(--mut); margin: 12px 0; word-break: break-all; }
+
+/* ════════ 5. KIOSK (shopper, LIGHT now, phone-first) ════════ */
+.kiosk { display: flex; flex-direction: column; min-height: 640px; background: var(--sage); }
+.kiosk-bar { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; gap: 8px; flex-wrap: wrap; background: var(--cream); border-bottom: 1px solid var(--line); }
+.kiosk-bar .shop { font-family: 'Cormorant Garamond', serif; font-size: 19px; color: var(--forest-deep); }
+.kiosk-bar .area { color: var(--mut); font-size: 12px; margin-left: 8px; }
+.kiosk-bar .right { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.kiosk-bar .right button { padding: 8px 13px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 500; color: var(--forest-deep); border: 1px solid var(--line); border-radius: var(--radius-btn); background: var(--cream); }
+.kiosk-bar .right .looks { color: var(--camel); border-color: var(--camel); }
+.kiosk-bar .right .quiet { border: none; color: var(--mut); }
+
+.k-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 28px 24px; }
+.k-headline { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-size: clamp(28px, 6vw, 40px); line-height: 1.18; color: var(--forest-deep); text-transform: uppercase; letter-spacing: .08em; }
+.k-sub { color: var(--mut); font-size: 15px; font-weight: 300; max-width: 400px; margin: 16px 0 28px; line-height: 1.7; }
+.reuse { display: flex; align-items: center; gap: 10px; padding: 10px 20px 10px 10px; font-size: 14px; border: 1px solid var(--line); border-radius: 30px; background: var(--cream); color: var(--forest-deep); font-weight: 500; }
+.reuse .avatar { width: 36px; height: 36px; border-radius: 50%; }
+.k-note { color: var(--mut); font-size: 12px; margin-top: 12px; }
+.forget { color: var(--mut); font-size: 12px; margin-top: 14px; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ✦ capture · consent lives here now, above the shutter */
+.cam { height: 320px; width: 250px; border-radius: 8px; background: var(--forest-deep); display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.55); font-size: 13px; margin: 14px 0 16px; letter-spacing: .08em; }
+.consent-inline { max-width: 340px; text-align: left; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; font-size: 13px; color: var(--ink); line-height: 1.6; }
+.consent-inline b { color: var(--forest-deep); }
+.cap-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin: 16px 0 12px; }
+.remember { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--mut); }
+
+.stage-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px 16px 0; }
+.stage { height: 380px; width: 285px; border-radius: 8px; position: relative; box-shadow: var(--shadow-soft); }
+.stage .hint { position: absolute; inset: auto 0 0 0; padding: 16px; text-align: center; color: var(--cream); font-size: 14px; background: linear-gradient(transparent, rgba(42,61,47,.85)); border-radius: 0 0 8px 8px; }
+.result-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; font-size: 14px; width: 100%; max-width: 390px; }
+.result-bar .price { color: var(--camel); font-weight: 500; }
+.result-bar .want { background: var(--forest); color: var(--cream); padding: 11px 20px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; font-weight: 500; border-radius: var(--radius-btn); }
+.result-bar .savelook { border: 1px solid var(--forest); color: var(--forest); padding: 10px 18px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; font-weight: 500; border-radius: var(--radius-btn); }
+.result-bar .fine { font-size: 11px; color: var(--mut); width: 100%; text-align: center; }
+
+.rail { display: flex; gap: 12px; overflow-x: auto; padding: 14px 16px 20px; }
+.rail .rcard { flex-shrink: 0; width: 104px; border-radius: var(--radius-card); overflow: hidden; background: var(--cream); border: 2px solid var(--line); }
+.rail .rcard.sel { border-color: var(--camel); }
+.rail .rcard .ph { aspect-ratio: 3/4; }
+.rail .rcard .nm { font-size: 9.5px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; padding: 7px 8px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rail .rcard .pr { font-size: 11px; color: var(--camel); font-weight: 500; padding: 2px 8px 8px; }
+.railchips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 16px 0; }
+
+/* kiosk modals */
+.k-modal { background: var(--cream); border: 1px solid var(--line); border-radius: var(--radius-modal); width: 360px; max-width: 100%; padding: 26px 24px; text-align: center; }
+.k-modal h3 { font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 500; color: var(--forest-deep); margin-bottom: 4px; }
+.k-modal .sub { color: var(--mut); font-size: 13px; margin-bottom: 16px; line-height: 1.5; }
+.k-modal input { width: 100%; padding: 12px 13px; border-radius: var(--radius-btn); border: 1px solid var(--line); background: #fff; color: var(--ink); font-size: 15px; margin-bottom: 10px; font-family: 'Jost', sans-serif; }
+.k-modal .sizes { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; justify-content: center; }
+.k-modal .sizes button { padding: 8px 14px; font-size: 12px; border-radius: var(--radius-btn); background: var(--sage); color: var(--mut); border: 1px solid var(--line); font-weight: 500; }
+.k-modal .sizes button.on { background: var(--forest); color: var(--cream); border-color: var(--forest); }
+.k-modal .foot { display: flex; gap: 10px; margin-top: 8px; }
+.k-modal .foot .cancel { flex: 1; border: 1px solid var(--line); color: var(--forest-deep); padding: 13px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; border-radius: var(--radius-btn); font-weight: 500; }
+.k-modal .foot .send { flex: 2; background: var(--forest); color: var(--cream); padding: 13px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; border-radius: var(--radius-btn); font-weight: 500; }
+
+/* my looks */
+.looks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; padding: 16px 18px 26px; }
+.look { background: var(--cream); border-radius: var(--radius-card); overflow: hidden; border: 1px solid var(--line); }
+.look.fav { border-color: var(--camel); }
+.look .ph { aspect-ratio: 3/4; position: relative; }
+.look .ph .heart { position: absolute; top: 8px; right: 8px; background: var(--cream); color: var(--mut); font-size: 15px; padding: 5px 9px; border-radius: 14px; }
+.look.fav .ph .heart { color: var(--camel); }
+.look .body { padding: 10px 11px 11px; font-size: 12px; }
+.look .pr { color: var(--camel); font-weight: 500; }
+.look .shopn { font-size: 10.5px; color: var(--mut); }
+.look .row { display: flex; gap: 6px; margin-top: 8px; }
+.look .row .share { flex: 1; border: 1px solid var(--forest); color: var(--forest); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; padding: 7px 0; border-radius: var(--radius-btn); font-weight: 500; }
+.look .row .del { color: var(--mut); font-size: 11px; padding: 7px 8px; }
+
+/* ════════ 6. STOREFRONT · full homepage ════════ */
+.announce { background: var(--forest-deep); color: var(--sage); text-align: center; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; padding: 9px 12px; }
+.announce b { color: var(--camel); }
+
+.s-hero { display: grid; grid-template-columns: 1fr 1fr; background: var(--sage); min-height: 380px; }
+.s-hero .copy { display: flex; flex-direction: column; justify-content: center; padding: 44px 24px 44px 52px; gap: 18px; }
+.s-hero h1 { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-size: clamp(30px, 4.6vw, 48px); line-height: 1.14; color: var(--forest-deep); text-transform: uppercase; letter-spacing: .08em; }
+.s-hero p { color: var(--mut); font-size: 15px; font-weight: 300; max-width: 360px; line-height: 1.7; }
+.s-hero .visual { margin: 32px 32px 32px 8px; border-radius: 4px; box-shadow: var(--shadow-soft); display: flex; align-items: center; justify-content: center; color: var(--forest); font-size: 12px; letter-spacing: .1em; min-height: 280px; }
+@media (max-width: 720px) { .s-hero { grid-template-columns: 1fr; } .s-hero .visual { margin: 0 20px 28px; } .s-hero .copy { padding: 36px 24px 20px; } }
+
+.s-section { padding: 44px 32px; }
+.s-section.alt { background: var(--sage-mist); }
+.s-section .head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 22px; flex-wrap: wrap; gap: 10px; }
+.s-section .head h2 { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-size: 24px; letter-spacing: .14em; text-transform: uppercase; color: var(--forest-deep); }
+
+/* shop cards · ✦ every card carries a TRY ON deep-link */
+.scard { background: var(--cream); border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; }
+.scard .photo { aspect-ratio: 3/4; position: relative; }
+.scard .photo .oos { position: absolute; bottom: 10px; left: 10px; background: var(--forest-deep); color: var(--cream); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; padding: 4px 9px; border-radius: 2px; }
+.scard .body { padding: 13px 14px 15px; }
+.scard .name { font-size: 11.5px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 4px; }
+.scard .price { color: var(--camel); font-weight: 500; font-size: 14px; margin-bottom: 10px; }
+.scard .acts { display: flex; justify-content: space-between; align-items: center; }
+.scard .tryon { text-decoration: underline; text-underline-offset: 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; color: var(--forest-deep); }
+.scard .heart { color: var(--mut); font-size: 15px; }
+
+.bestrow { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 18px; }
+
+.promo { display: grid; grid-template-columns: 1fr 1fr; gap: 0; background: var(--cream); border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; }
+.promo .copy { padding: 40px 36px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+.promo h3 { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-size: 28px; line-height: 1.25; letter-spacing: .02em; color: var(--forest-deep); }
+.promo p { color: var(--mut); font-size: 14px; font-weight: 300; line-height: 1.7; }
+.promo .visual { min-height: 220px; }
+@media (max-width: 680px) { .promo { grid-template-columns: 1fr; } }
+
+.s-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 18px; }
+.s-filter { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 20px; }
+
+.s-footer { background: var(--forest-deep); color: var(--sage); padding: 44px 32px 30px; }
+.s-footer .cols { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 28px; max-width: 900px; margin: 0 auto; }
+.s-footer h4 { font-family: 'Cormorant Garamond', serif; font-size: 19px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 12px; color: var(--cream); }
+.s-footer p, .s-footer a { font-size: 13px; color: rgba(237,239,224,.65); line-height: 1.8; text-decoration: none; display: block; }
+.s-footer .wa-row { display: flex; gap: 8px; margin-top: 12px; }
+.s-footer .wa-row input { flex: 1; padding: 11px 12px; border-radius: var(--radius-btn); border: 1px solid rgba(237,239,224,.25); background: rgba(255,255,255,.06); color: var(--cream); font-size: 13px; font-family: 'Jost', sans-serif; }
+.s-footer .wa-row button { background: var(--whatsapp); color: #fff; padding: 11px 18px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; border-radius: var(--radius-btn); font-weight: 500; }
+.s-footer .powered { text-align: center; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: rgba(237,239,224,.4); margin-top: 34px; }
+.s-footer .powered b { color: var(--camel); }
+@media (max-width: 680px) { .s-footer .cols { grid-template-columns: 1fr; } }
+
+/* garment sheet */
+.sheet { background: var(--cream); border-radius: var(--radius-modal); width: 380px; max-width: 100%; overflow: hidden; }
+.sheet .ph { aspect-ratio: 3/4; }
+.sheet .body { padding: 18px 20px 20px; }
+.sheet .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-weight: 500; font-size: 17px; }
+.sheet .row .price { color: var(--camel); font-weight: 500; }
+.sheet .meta { color: var(--mut); font-size: 13px; margin-top: 3px; }
+.sheet .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+.sheet .actions .btn { text-align: center; }
+.sheet .actions .close { color: var(--mut); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; padding: 10px; }
+
+/* ════════ MOBILE (phone-first: most shoppers arrive on a phone) ════════ */
+@media (max-width: 640px) {
+  /* nav collapses: logo + tools on top, category links scroll below */
+  .nav { grid-template-columns: 1fr auto; grid-template-areas: "logo tools" "links links"; padding: 14px 16px 10px; }
+  .nav .logo { grid-area: logo; text-align: left; }
+  .nav .logo .word { font-size: 17px; letter-spacing: .22em; }
+  .nav .tools { grid-area: tools; gap: 12px; }
+  .nav .links { grid-area: links; overflow-x: auto; padding-top: 10px; gap: 18px; -webkit-overflow-scrolling: touch; }
+
+  /* landing */
+  .strip { grid-template-columns: 1fr; }
+  .strip .cell { border-left: none; border-top: 1px solid var(--line); padding: 18px 20px; }
+  .strip .cell:first-child { border-top: none; }
+
+  /* storefront: 2-up cards, tighter sections */
+  .s-section { padding: 30px 16px; }
+  .s-section .head h2 { font-size: 19px; }
+  .s-grid, .bestrow { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .scard .body { padding: 10px 11px 12px; }
+  .promo .copy { padding: 26px 20px; }
+  .s-footer { padding: 32px 20px 22px; }
+
+  /* vendor dashboard on a phone */
+  .dash { padding: 0 14px 40px; }
+  .grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .panel { padding: 16px 14px; overflow-x: auto; }
+  table.tried { min-width: 420px; }
+  .lead { flex-wrap: wrap; }
+  .lead .status { margin-left: 52px; width: 100%; justify-content: flex-start; }
+
+  /* modals + buttons: full-bleed friendly, comfy touch targets */
+  .modal-stage { padding: 16px; }
+  .modal, .k-modal, .sheet { width: 100%; }
+  .btn-solid, .btn-outline, .btn-wa { padding: 14px 22px; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<div class="mock-note">
+  <strong>Pahiran mockup v2 · sage edition.</strong> Light, airy reskin: pale sage + cream +
+  deep green, Cormorant Garamond display type, outlined uppercase buttons.
+  Restyle the <code>:root</code> tokens to retheme everything at once.
+  Shopper screens are no-login and phone-first; vendor screens sit behind /login.
+  Screens marked ✦ carry
+  <strong>flow changes</strong>, described in the comment at the top of this file:
+  storefront→kiosk deep links, merged consent+capture, one-step lead modal, tabbed dashboard.
+</div>
+
+<!-- ═══════════════ 1. LANDING ═══════════════ -->
+<section class="screen">
+  <h2>1 · Landing · shared entry <code>/</code></h2>
+  <div class="frame">
+    <nav class="nav">
+      <div class="links"><a href="#">Shops</a><a href="#">How it works</a></div>
+      <div class="logo"><div class="word">Pahiran</div></div>
+      <div class="tools"><span class="icon">⌕</span><a href="#" style="color:inherit;text-decoration:none">Vendor log in</a></div>
+    </nav>
+    <div class="hero">
+      <div class="copy">
+        <div class="kicker">Virtual try-on · Nepal</div>
+        <h1>Try it on,<br>without<br>trying it on</h1>
+        <p>One photo is all it takes. See any garment from your favourite local shop on you, before you visit.</p>
+        <div class="actions">
+          <a class="btn btn-solid" href="#">Find a shop</a>
+          <a class="btn btn-outline" href="#">For vendors</a>
+        </div>
+      </div>
+      <div class="visual"><div class="photo ph-img">model / hero photo</div></div>
+    </div>
+    <div class="strip">
+      <div class="cell"><div class="t">One photo</div><div class="d">Snap once, try the whole catalog.</div></div>
+      <div class="cell"><div class="t">No account</div><div class="d">No name, no number, no sign-up.</div></div>
+      <div class="cell"><div class="t">Order on WhatsApp</div><div class="d">Tell the shop with one tap.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 2. LOGIN ═══════════════ -->
+<section class="screen">
+  <h2>2 · Vendor login <code>/login</code></h2>
+  <div class="frame">
+    <div class="login">
+      <div class="card">
+        <div class="word">Pahiran</div>
+        <h1>Vendor sign in</h1>
+        <div class="sub">Manage your catalog and kiosk.</div>
+        <form onsubmit="return false">
+          <input type="email" placeholder="you@shop.com">
+          <input type="password" placeholder="Password (6+ characters)">
+          <button class="btn-solid" style="width:100%">Sign in</button>
+        </form>
+        <button class="switch">New here? Create a shop account</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 3. VENDOR DASHBOARD · ✦ TABBED ═══════════════ -->
+<section class="screen">
+  <h2>3a · ✦ Dashboard · Overview tab <code>/dashboard</code></h2>
+  <div class="frame">
+    <div class="dash">
+      <div class="dash-top">
+        <div>
+          <div class="word">Pahiran</div>
+          <div class="shopname">Juju Fashion House · New Road</div>
+        </div>
+        <div class="actions">
+          <button class="signout">Sign out</button>
+          <button class="btn-solid">Launch kiosk</button>
+        </div>
+      </div>
+      <div class="tabs">
+        <button class="on">Overview</button>
+        <button>Leads<span class="badge">3</span></button>
+        <button>Catalog</button>
+        <button>Settings</button>
+      </div>
+
+      <div class="tiles">
+        <div class="tile"><div class="label">Try-ons · 30 days</div><div class="value">128</div></div>
+        <div class="tile"><div class="label">This week</div><div class="value">41</div></div>
+        <div class="tile"><div class="label">Shoppers · 30 days</div><div class="value">57</div><div class="hint">unique kiosk sessions</div></div>
+        <div class="tile accent"><div class="label">Open leads</div><div class="value">3</div><div class="hint">tap the Leads tab</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <span class="title">Try-ons per day</span><span class="sub">last 30 days</span>
+          <button class="right">Export CSV</button>
+        </div>
+        <div class="chart">
+          <div class="bar" style="height:20%"></div><div class="bar" style="height:35%"></div><div class="bar zero"></div>
+          <div class="bar" style="height:50%"></div><div class="bar" style="height:28%"></div><div class="bar" style="height:64%"></div>
+          <div class="bar" style="height:42%"></div><div class="bar zero"></div><div class="bar" style="height:22%"></div>
+          <div class="bar" style="height:75%"></div><div class="bar" style="height:58%"></div><div class="bar" style="height:90%"></div>
+          <div class="bar" style="height:40%"></div><div class="bar" style="height:33%"></div><div class="bar" style="height:66%"></div>
+          <div class="bar" style="height:100%"></div><div class="bar" style="height:52%"></div><div class="bar" style="height:47%"></div>
+          <div class="bar zero"></div><div class="bar" style="height:38%"></div><div class="bar" style="height:70%"></div>
+          <div class="bar" style="height:44%"></div><div class="bar" style="height:61%"></div><div class="bar" style="height:29%"></div>
+          <div class="bar" style="height:55%"></div><div class="bar" style="height:83%"></div><div class="bar" style="height:36%"></div>
+          <div class="bar" style="height:48%"></div><div class="bar" style="height:72%"></div><div class="bar" style="height:60%"></div>
+        </div>
+        <div class="chart-axis"><span>15 Jun</span><span>peak 9/day</span><span>14 Jul</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><span class="title">Most-tried items</span><span class="sub">last 90 days</span></div>
+        <table class="tried">
+          <tr><th>Garment</th><th class="num">Tries</th><th class="num">This week</th><th class="num">Last tried</th></tr>
+          <tr><td><span class="thumb ph-img"></span>Red Banarasi Silk Sari</td><td class="num tries">34</td><td class="num">12</td><td class="num" style="color:var(--mut)">2h ago</td></tr>
+          <tr><td><span class="thumb ph-img"></span>Marigold Lehenga</td><td class="num tries">22</td><td class="num">7</td><td class="num" style="color:var(--mut)">5h ago</td></tr>
+          <tr><td><span class="thumb ph-img"></span>Teal Block-Print Kurtha</td><td class="num tries">15</td><td class="num">4</td><td class="num" style="color:var(--mut)">1d ago</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="screen">
+  <h2>3b · ✦ Dashboard · Leads tab (status chips + WhatsApp reply)</h2>
+  <div class="frame">
+    <div class="dash">
+      <div class="tabs" style="margin-top:22px">
+        <button>Overview</button>
+        <button class="on">Leads<span class="badge">3</span></button>
+        <button>Catalog</button>
+        <button>Settings</button>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="title">Leads</span><span class="sub">shoppers who tapped "I want this" · newest first</span></div>
+        <div class="lead">
+          <div class="ph ph-img"></div>
+          <div><div class="name">Red Banarasi Silk Sari<span class="size">size M</span></div>
+          <div class="who">Sunita · 98510xxxxx · 2h ago · <b>रू 12,500</b></div></div>
+          <div class="status"><span class="st new">New</span><button class="act wa">WhatsApp</button><button class="act">Done ✓</button></div>
+        </div>
+        <div class="lead">
+          <div class="ph ph-img"></div>
+          <div><div class="name">Marigold Lehenga</div>
+          <div class="who">anonymous shopper · 5h ago · <b>रू 18,000</b></div></div>
+          <div class="status"><span class="st contacted">Contacted</span><button class="act">Done ✓</button></div>
+        </div>
+        <div class="lead handled">
+          <div class="ph ph-img"></div>
+          <div><div class="name">Ivory Daura Suruwal</div>
+          <div class="who">Bikash · yesterday</div></div>
+          <div class="status"><span class="st done">Done</span><button class="act">Reopen</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="screen">
+  <h2>3c · ✦ Dashboard · Catalog tab (try counts on cards)</h2>
+  <div class="frame">
+    <div class="dash">
+      <div class="tabs" style="margin-top:22px">
+        <button>Overview</button>
+        <button>Leads<span class="badge">3</span></button>
+        <button class="on">Catalog</button>
+        <button>Settings</button>
+      </div>
+      <div class="catalog-head">
+        <div><span class="display" style="font-size:22px;color:var(--forest-deep)">Catalog</span><span class="count">12 items</span></div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <select><option>All</option><option>Sari</option><option>Lehenga</option></select>
+          <button class="btn-solid" style="padding:11px 20px;font-size:12px">+ Add garment</button>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="gcard">
+          <div class="photo ph-img"><span class="cat">Sari</span><span class="tries">34 tries</span></div>
+          <div class="body">
+            <div class="name">Red Banarasi Silk Sari</div>
+            <div class="sizes"><span>Free size</span></div>
+            <div class="row"><span class="price">रू 12,500</span>
+              <span class="ops"><button class="dark">Edit</button><button class="dark">QR</button><button>In stock</button></span></div>
+          </div>
+        </div>
+        <div class="gcard">
+          <div class="photo ph-img"><span class="cat">Lehenga</span><span class="tries">22 tries</span></div>
+          <div class="body">
+            <div class="name">Marigold Lehenga</div>
+            <div class="sizes"><span>S</span><span>M</span><span>L</span></div>
+            <div class="row"><span class="price">रू 18,000</span>
+              <span class="ops"><button class="dark">Edit</button><button class="dark">QR</button><button>In stock</button></span></div>
+          </div>
+        </div>
+        <div class="gcard out">
+          <div class="photo ph-img"><span class="cat">Kurtha</span><span class="oos">Out of stock</span></div>
+          <div class="body">
+            <div class="name">Teal Block-Print Kurtha</div>
+            <div class="row"><span class="price">रू 3,200</span>
+              <span class="ops"><button class="dark">Edit</button><button class="dark">QR</button><button style="color:var(--camel)">Restock</button></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="screen">
+  <h2>3d · ✦ Dashboard · Settings tab (identity + links)</h2>
+  <div class="frame">
+    <div class="dash">
+      <div class="tabs" style="margin-top:22px">
+        <button>Overview</button>
+        <button>Leads<span class="badge">3</span></button>
+        <button>Catalog</button>
+        <button class="on">Settings</button>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="title">Shop identity</span></div>
+        <div class="settings">
+          <label class="field">Shop name<input value="Juju Fashion House"></label>
+          <label class="field">Area / city<input value="New Road, Kathmandu"></label>
+          <label class="field">WhatsApp number (orders)<input value="9779841000000"></label>
+          <div class="field">Kiosk link (QR target)
+            <div class="linkbox"><code>pahiran.app/k/juju-fashion</code><button class="copy">Copy</button><button class="edit">Edit</button></div>
+          </div>
+          <div class="field">Storefront link (share anywhere)
+            <div class="linkbox"><code>pahiran.app/s/juju-fashion</code><button class="copy">Copy</button></div>
+          </div>
+          <button class="btn-solid" style="align-self:flex-start;margin-top:6px">Save changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 4. DASHBOARD MODALS ═══════════════ -->
+<section class="screen">
+  <h2>4 · Dashboard modals · add/edit garment & QR</h2>
+  <div class="frame">
+    <div class="modal-stage">
+      <div class="modal">
+        <h3>Add a garment</h3>
+        <div class="drop">Tap to upload a garment photo<br>Flat-lay or mannequin, plain background</div>
+        <input placeholder="Garment name (e.g. Red Banarasi Silk Sari)">
+        <div class="half"><select><option>Sari</option></select><input placeholder="Price (NPR)"></div>
+        <div class="field" style="margin-bottom:7px">Available sizes (optional)</div>
+        <div class="sizes"><button>XS</button><button class="on">S</button><button class="on">M</button><button class="on">L</button><button>XL</button><button>XXL</button><button>Free size</button></div>
+        <div class="foot"><button class="cancel">Cancel</button><button class="save">Save to catalog</button></div>
+      </div>
+      <div class="modal qr">
+        <h3 style="margin-bottom:4px">Try-on QR</h3>
+        <div style="font-size:14px;font-weight:500">Red Banarasi Silk Sari</div>
+        <div style="font-size:12px;color:var(--mut)">Shoppers scan this on the hanger tag and try it on their own phone.</div>
+        <div class="qrbox"></div>
+        <code>pahiran.app/k/juju-fashion?g=8f3a…</code>
+        <div class="foot"><button class="cancel">Close</button><button class="save">Download PNG</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 5. KIOSK FLOW (now light) ═══════════════ -->
+<section class="screen">
+  <h2>5a · ✦ Kiosk · attract <code>/k/{shop}</code> (saved-photo fast path is right here)</h2>
+  <div class="frame phone">
+    <div class="kiosk">
+      <div class="kiosk-bar">
+        <div><span class="shop">Juju Fashion House</span><span class="area">New Road</span></div>
+        <div class="right"><button>नेपाली</button><button class="quiet">✕</button></div>
+      </div>
+      <div class="k-center">
+        <div class="kicker" style="margin-bottom:16px">Virtual trial room</div>
+        <div class="k-headline">Try it on,<br>without trying it on</div>
+        <p class="k-sub">Take one photo, then browse 12 pieces from this shop and see them on you.</p>
+        <button class="btn-solid" style="padding:17px 40px;font-size:14px">Tap to begin</button>
+        <div style="height:14px"></div>
+        <button class="reuse"><span class="avatar ph-img"></span>Continue with my saved photo</button>
+        <button class="forget">Forget my saved photo</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="screen">
+  <h2>5b · ✦ Kiosk · capture (consent merged in · one less step)</h2>
+  <div class="frame phone">
+    <div class="kiosk">
+      <div class="kiosk-bar"><div><span class="shop">Juju Fashion House</span></div>
+        <div class="right"><button>नेपाली</button><button class="quiet">↺ Start over</button></div></div>
+      <div class="k-center" style="justify-content:flex-start;padding-top:14px">
+        <div class="k-headline" style="font-size:22px">Stand back so we can see you fully</div>
+        <div class="cam">▣ live camera</div>
+        <div class="consent-inline">
+          <b>Your photo, your call.</b> It's used only to show these clothes on you,
+          processed securely by our AI service, and never kept by the shop.
+          Nothing is stored unless you save a look, and that stays on this device.
+        </div>
+        <div class="cap-actions">
+          <button class="btn-solid" style="padding:15px 32px;font-size:13px">Agree &amp; take photo</button>
+          <button class="btn-outline" style="padding:14px 22px;font-size:12px">Upload instead</button>
+        </div>
+        <label class="remember"><input type="checkbox" style="accent-color:var(--forest);width:16px;height:16px"> Remember my photo on this device for 7 days</label>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="screen">
+  <h2>5c · Kiosk · try-on result + garment rail</h2>
+  <div class="frame phone">
+    <div class="kiosk">
+      <div class="kiosk-bar"><div><span class="shop">Juju Fashion House</span></div>
+        <div class="right"><button class="looks">♥ My looks (2)</button><button class="quiet">↺</button></div></div>
+      <div class="stage-wrap">
+        <div class="stage ph-img"><div class="hint">(AI result image fills this stage)</div></div>
+        <div class="result-bar">
+          <span><b>Red Banarasi Silk Sari</b> <span class="price">रू 12,500</span></span>
+          <button class="want">I want this</button>
+          <button class="savelook">♡ Save look</button>
+          <span class="fine">AI try-on · ask staff to see it in person</span>
+        </div>
+      </div>
+      <div class="railchips">
+        <button class="chip on">All</button><button class="chip off">Sari</button><button class="chip off">Lehenga</button><button class="chip off">Kurtha</button>
+      </div>
+      <div class="rail">
+        <div class="rcard sel"><div class="ph ph-img"></div><div class="nm">Banarasi Silk Sari</div><div class="pr">रू 12,500</div></div>
+        <div class="rcard"><div class="ph ph-img"></div><div class="nm">Marigold Lehenga</div><div class="pr">रू 18,000</div></div>
+        <div class="rcard"><div class="ph ph-img"></div><div class="nm">Teal Kurtha</div><div class="pr">रू 3,200</div></div>
+        <div class="rcard"><div class="ph ph-img"></div><div class="nm">Sage Dress</div><div class="pr">रू 5,400</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="screen">
+  <h2>5d · ✦ Kiosk modals · one-step "I want this" &amp; WhatsApp-first success</h2>
+  <div class="frame">
+    <div class="modal-stage">
+      <div class="k-modal">
+        <h3>Tell the shop</h3>
+        <div class="sub">Red Banarasi Silk Sari · रू 12,500. Name and number are optional.</div>
+        <div class="sizes"><button class="on">S</button><button>M</button><button>L</button></div>
+        <input placeholder="Your name (optional)">
+        <input placeholder="Phone (optional)">
+        <div class="foot"><button class="cancel">Cancel</button><button class="send">Send to shop</button></div>
+      </div>
+      <div class="k-modal">
+        <h3>The shop knows!</h3>
+        <div class="sub">Red Banarasi Silk Sari · size S is saved to the shop's list. Chat now to arrange pickup or delivery.</div>
+        <a class="btn btn-wa" href="#" style="display:block;margin-bottom:10px">Chat on WhatsApp</a>
+        <button class="btn-outline" style="width:100%">Keep browsing</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="screen">
+  <h2>5e · Kiosk · My looks gallery (on-device)</h2>
+  <div class="frame phone">
+    <div class="kiosk" style="min-height:520px">
+      <div class="kiosk-bar">
+        <div><span class="shop">My looks</span><span class="area">saved only on this device</span></div>
+        <div class="right"><button class="quiet">Delete all</button><button>✕ Close</button></div>
+      </div>
+      <div class="looks-grid">
+        <div class="look fav">
+          <div class="ph ph-img"><span class="heart">♥</span></div>
+          <div class="body"><b>Banarasi Silk Sari</b><div class="pr">रू 12,500</div><div class="shopn">Juju Fashion House</div>
+            <div class="row"><button class="share">Share</button><button class="del">Delete</button></div></div>
+        </div>
+        <div class="look">
+          <div class="ph ph-img"><span class="heart">♡</span></div>
+          <div class="body"><b>Marigold Lehenga</b><div class="pr">रू 18,000</div><div class="shopn">Juju Fashion House</div>
+            <div class="row"><button class="share">Share</button><button class="del">Delete</button></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 6. STOREFRONT · ✦ FULL HOMEPAGE ═══════════════ -->
+<section class="screen">
+  <h2>6 · ✦ Storefront · full homepage <code>/s/{shop}</code></h2>
+  <div class="frame">
+    <div class="announce">Every piece below can be <b>tried on you</b> · one photo, no account</div>
+    <nav class="nav">
+      <div class="links"><a href="#">Sari</a><a href="#">Lehenga</a><a href="#">Kurtha</a></div>
+      <div class="logo"><div class="word" style="letter-spacing:.18em">Juju Fashion House</div><div style="font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--mut);margin-top:2px">New Road, Kathmandu</div></div>
+      <div class="tools"><span class="icon">⌕</span><a href="#" style="color:var(--camel);text-decoration:none">♥ My looks</a></div>
+    </nav>
+
+    <div class="s-hero">
+      <div class="copy">
+        <div class="kicker">Virtual try-on</div>
+        <h1>Elegance in<br>every thread</h1>
+        <p>Browse the collection below, or take one photo and see any piece on you before you visit the shop.</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <a class="btn btn-solid" href="#">See it on you</a>
+          <a class="btn btn-outline" href="#">Browse collection</a>
+        </div>
+      </div>
+      <div class="visual ph-img">featured garment / model photo</div>
+    </div>
+
+    <div class="s-section">
+      <div class="head">
+        <h2>Most tried this week</h2>
+        <a class="linklike" href="#">View all →</a>
+      </div>
+      <div class="bestrow">
+        <div class="scard"><div class="photo ph-img"></div><div class="body"><div class="name">Red Banarasi Silk Sari</div><div class="price">रू 12,500</div><div class="acts"><a class="tryon" href="#">Try on →</a><span class="heart">♡</span></div></div></div>
+        <div class="scard"><div class="photo ph-img"></div><div class="body"><div class="name">Marigold Lehenga</div><div class="price">रू 18,000</div><div class="acts"><a class="tryon" href="#">Try on →</a><span class="heart">♡</span></div></div></div>
+        <div class="scard"><div class="photo ph-img"></div><div class="body"><div class="name">Sage Green Dress</div><div class="price">रू 5,400</div><div class="acts"><a class="tryon" href="#">Try on →</a><span class="heart">♡</span></div></div></div>
+        <div class="scard"><div class="photo ph-img"></div><div class="body"><div class="name">Ivory Kurtha</div><div class="price">रू 3,600</div><div class="acts"><a class="tryon" href="#">Try on →</a><span class="heart">♡</span></div></div></div>
+      </div>
+    </div>
+
+    <div class="s-section alt">
+      <div class="promo">
+        <div class="copy">
+          <div class="kicker">The trial room, reinvented</div>
+          <h3>Your perfect look is one photo away</h3>
+          <p>No queue, no changing room. Take one photo and see the whole collection on you, then tell the shop what you want with a tap.</p>
+          <div><a class="btn btn-solid" href="#">Start try-on</a></div>
+        </div>
+        <div class="visual ph-img"></div>
+      </div>
+    </div>
+
+    <div class="s-section">
+      <div class="head"><h2>The collection</h2><span style="color:var(--mut);font-size:13px">12 pieces</span></div>
+      <div class="s-filter">
+        <button class="chip on">All</button><button class="chip off">Sari</button><button class="chip off">Lehenga</button><button class="chip off">Kurtha</button><button class="chip off">Dress</button>
+      </div>
+      <div class="s-grid">
+        <div class="scard"><div class="photo ph-img"></div><div class="body"><div class="name">Red Banarasi Silk Sari</div><div class="price">रू 12,500</div><div class="acts"><a class="tryon" href="#">Try on →</a><span class="heart">♡</span></div></div></div>
+        <div class="scard"><div class="photo ph-img"></div><div class="body"><div class="name">Marigold Lehenga</div><div class="price">रू 18,000</div><div class="acts"><a class="tryon" href="#">Try on →</a><span class="heart">♡</span></div></div></div>
+        <div class="scard out"><div class="photo ph-img"><span class="oos">Out of stock</span></div><div class="body"><div class="name">Teal Block-Print Kurtha</div><div class="price">रू 3,200</div><div class="acts"><a class="tryon" href="#">Try on →</a><span class="heart">♡</span></div></div></div>
+        <div class="scard"><div class="photo ph-img"></div><div class="body"><div class="name">Sage Green Dress</div><div class="price">रू 5,400</div><div class="acts"><a class="tryon" href="#">Try on →</a><span class="heart">♡</span></div></div></div>
+      </div>
+    </div>
+
+    <footer class="s-footer">
+      <div class="cols">
+        <div>
+          <h4>Juju Fashion House</h4>
+          <p>New Road, Kathmandu<br>Open 10am – 7pm, Sun – Fri</p>
+        </div>
+        <div>
+          <h4>Visit</h4>
+          <a href="#">Try clothes on you</a>
+          <a href="#">My saved looks</a>
+          <a href="#">Browse collection</a>
+        </div>
+        <div>
+          <h4>Order &amp; ask</h4>
+          <p>Fastest reply on WhatsApp:</p>
+          <div class="wa-row"><input placeholder="What are you looking for?"><button>Send</button></div>
+        </div>
+      </div>
+      <div class="powered">Powered by <b>Pahiran</b> · try it on, without trying it on</div>
+    </footer>
+  </div>
+</section>
+
+<section class="screen">
+  <h2>7 · ✦ Storefront · garment sheet ("See it on you" deep-links kiosk with this garment)</h2>
+  <div class="frame">
+    <div class="modal-stage">
+      <div class="sheet">
+        <div class="ph ph-img"></div>
+        <div class="body">
+          <div class="row"><span>Red Banarasi Silk Sari</span><span class="price">रू 12,500</span></div>
+          <div class="meta">Sari · Sizes: Free size · 34 shoppers tried this on</div>
+          <div class="actions">
+            <a class="btn btn-solid" href="#">See it on you</a>
+            <a class="btn btn-wa" href="#">Order on WhatsApp</a>
+            <button class="close">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
