@@ -1,0 +1,425 @@
+"use client";
+
+import { useState, useEffect, useRef, useCallback } from "react";
+import { npr } from "@/lib/constants";
+import { fileToCompressedDataURL } from "@/lib/images";
+import { runTryOn } from "@/lib/tryon";
+import { logLocalTryOn } from "@/lib/storage";
+import type { Garment, Shop } from "@/lib/types";
+
+/* Kiosk — full-screen, dark, touch-first shopper flow:
+   attract → consent → capture (camera or upload) → try on (AI via /api/tryon,
+   manual positioning preview as fallback). Also serves /k/[slug] on shoppers'
+   own phones; ?g=<garmentId> (from a hanger QR) jumps straight to that piece. */
+
+interface KioskProps {
+  shop: Shop;
+  catalog: Garment[];
+  exit: () => void;
+  initialGarmentId?: string | null;
+}
+
+export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskProps) {
+  const [step, setStep] = useState<"attract" | "consent" | "capture" | "tryon">("attract");
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Garment | null>(null);
+  const [catFilter, setCatFilter] = useState("All");
+  const cats = ["All", ...Array.from(new Set(catalog.map((g) => g.category)))];
+  const rail = catFilter === "All" ? catalog : catalog.filter((g) => g.category === catFilter);
+  const initialGarment = initialGarmentId ? catalog.find((g) => g.id === initialGarmentId) ?? null : null;
+
+  const reset = () => { setPhoto(null); setSelected(null); setStep("attract"); };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "radial-gradient(120% 100% at 50% 0%, #3A2140 0%, var(--ink) 55%)", color: "#fff", display: "flex", flexDirection: "column", zIndex: 40 }}>
+      {/* top bar */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px" }}>
+        <div>
+          <span className="ph-display" style={{ fontSize: 20 }}>{shop.name || "Pahiran"}</span>
+          {shop.area && <span style={{ color: "rgba(255,255,255,.45)", fontSize: 13, marginLeft: 10 }}>{shop.area}</span>}
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          {step !== "attract" && (
+            <button className="ph-btn" onClick={reset} style={{ background: "rgba(255,255,255,.1)", color: "#fff", padding: "9px 16px", fontSize: 13 }}>
+              ↺ Start over
+            </button>
+          )}
+          <button className="ph-btn" onClick={exit} style={{ background: "transparent", color: "rgba(255,255,255,.4)", padding: "9px 12px", fontSize: 13 }}>
+            Exit kiosk
+          </button>
+        </div>
+      </div>
+
+      {step === "attract" && (
+        <AttractScreen count={catalog.length} highlight={initialGarment} start={() => setStep("consent")} />
+      )}
+      {step === "consent" && <ConsentScreen agree={() => setStep("capture")} back={reset} />}
+      {step === "capture" && <CaptureScreen onPhoto={(p) => { setPhoto(p); setStep("tryon"); }} />}
+      {step === "tryon" && photo && (
+        <TryOnScreen photo={photo} shop={shop} rail={rail} cats={cats} catFilter={catFilter} setCatFilter={setCatFilter}
+          selected={selected} setSelected={setSelected} retakePhoto={() => setStep("capture")}
+          initialGarment={initialGarment} />
+      )}
+    </div>
+  );
+}
+
+function AttractScreen({ count, highlight, start }: { count: number; highlight: Garment | null; start: () => void }) {
+  return (
+    <div className="fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 24 }}>
+      <div style={{ fontSize: 13, letterSpacing: ".28em", textTransform: "uppercase", color: "var(--marigold)", marginBottom: 18 }}>
+        Virtual trial room
+      </div>
+      <div className="ph-display" style={{ fontSize: "clamp(34px, 6vw, 58px)", lineHeight: 1.15, maxWidth: 640 }}>
+        Try it on —<br />without trying it on.
+      </div>
+      {highlight ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "20px 0 30px", background: "rgba(255,255,255,.08)", borderRadius: 16, padding: "10px 18px 10px 10px" }}>
+          <img src={highlight.image} alt={highlight.name} style={{ width: 52, height: 68, objectFit: "cover", borderRadius: 10 }} />
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>{highlight.name}</div>
+            <div style={{ color: "var(--marigold)", fontWeight: 700, fontSize: 14 }}>{npr(highlight.price)}</div>
+          </div>
+        </div>
+      ) : (
+        <p style={{ color: "rgba(255,255,255,.55)", fontSize: 17, maxWidth: 440, margin: "18px 0 34px" }}>
+          Take one photo, then browse {count} piece{count !== 1 ? "s" : ""} from this shop and see them on you.
+        </p>
+      )}
+      <button className="ph-btn" onClick={start}
+        style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "20px 46px", fontSize: 20, borderRadius: 40, boxShadow: "0 10px 34px rgba(196,37,97,.45)" }}>
+        {highlight ? "See it on you" : "Tap to begin"}
+      </button>
+    </div>
+  );
+}
+
+/* ---------- consent: shown once before any photo is taken ---------- */
+function ConsentScreen({ agree, back }: { agree: () => void; back: () => void }) {
+  return (
+    <div className="fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center" }}>
+      <div style={{ fontSize: 30, marginBottom: 14 }}>🔒</div>
+      <div className="ph-display" style={{ fontSize: "clamp(22px, 4vw, 30px)", marginBottom: 16 }}>Your photo, your call</div>
+      <div style={{ maxWidth: 460, display: "flex", flexDirection: "column", gap: 10, textAlign: "left", background: "rgba(255,255,255,.06)", borderRadius: 18, padding: "18px 22px", fontSize: 14.5, color: "rgba(255,255,255,.75)", lineHeight: 1.55 }}>
+        <div>• Your photo is used <strong style={{ color: "#fff" }}>only</strong> to show these clothes on you.</div>
+        <div>• It is sent securely to our AI try-on service and processed there — the shop never keeps a copy.</div>
+        <div>• The photo is deleted automatically when you finish or walk away; it is never saved to this device.</div>
+        <div>• No account, no name, no phone number needed.</div>
+      </div>
+      <div style={{ display: "flex", gap: 12, marginTop: 26, flexWrap: "wrap", justifyContent: "center" }}>
+        <button className="ph-btn" onClick={back} style={{ background: "rgba(255,255,255,.1)", color: "#fff", padding: "15px 24px", fontSize: 15, borderRadius: 30 }}>
+          Not now
+        </button>
+        <button className="ph-btn" onClick={agree}
+          style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "15px 34px", fontSize: 16, borderRadius: 30, boxShadow: "0 8px 26px rgba(196,37,97,.4)" }}>
+          I agree — take my photo
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- photo capture: camera with upload fallback ---------- */
+function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string) => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [camState, setCamState] = useState<"starting" | "live" | "denied">("starting");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1280 } } });
+        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
+        setCamState("live");
+      } catch { if (!cancelled) setCamState("denied"); }
+    })();
+    return () => { cancelled = true; streamRef.current?.getTracks().forEach((t) => t.stop()); };
+  }, []);
+
+  const snap = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    const c = document.createElement("canvas");
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    const ctx = c.getContext("2d")!;
+    ctx.translate(c.width, 0); ctx.scale(-1, 1); // un-mirror
+    ctx.drawImage(v, 0, 0);
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    onPhoto(c.toDataURL("image/jpeg", 0.85));
+  };
+
+  const handleUpload = async (file: File | undefined) => {
+    if (!file) return;
+    try { onPhoto(await fileToCompressedDataURL(file, 1000, 0.85)); }
+    catch { alert("Could not read that photo."); }
+  };
+
+  return (
+    <div className="fade-up" style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: "6px 20px 30px", gap: 18 }}>
+      <div className="ph-display" style={{ fontSize: "clamp(19px, 3vw, 26px)", textAlign: "center" }}>Stand back so we can see you fully</div>
+
+      <div
+        onClick={camState === "denied" ? () => fileRef.current?.click() : undefined}
+        style={{ height: "min(50vh, 520px)", maxWidth: "92vw", aspectRatio: "3/4", borderRadius: 24, overflow: "hidden", background: "#141018", border: "1px solid rgba(255,255,255,.12)", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: camState === "denied" ? "pointer" : "default" }}>
+        {camState !== "denied" ? (
+          <video ref={videoRef} playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" }} />
+        ) : (
+          <div style={{ textAlign: "center", color: "rgba(255,255,255,.55)", padding: 24, fontSize: 15 }}>
+            <div style={{ fontSize: 30, marginBottom: 10 }}>📷</div>
+            Camera isn't available here.<br />
+            <span style={{ color: "var(--marigold)", fontWeight: 600 }}>Tap anywhere in this box</span><br />to upload a full-body photo instead.
+          </div>
+        )}
+        {camState === "starting" && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.5)", fontSize: 14 }}>
+            Starting camera…
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+        {camState === "live" && (
+          <button className="ph-btn" onClick={snap}
+            style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "17px 38px", fontSize: 18, borderRadius: 34, boxShadow: "0 8px 26px rgba(196,37,97,.4)" }}>
+            📸 Take photo
+          </button>
+        )}
+        <button className="ph-btn" onClick={() => fileRef.current?.click()}
+          style={{ background: "rgba(255,255,255,.12)", color: "#fff", padding: "17px 28px", fontSize: 16, borderRadius: 34 }}>
+          Upload a photo
+        </button>
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleUpload(e.target.files?.[0])} />
+      </div>
+      <div style={{ color: "rgba(255,255,255,.35)", fontSize: 12 }}>Your photo stays on this screen — it is never saved.</div>
+    </div>
+  );
+}
+
+/* ---------- generating overlay: AI scanner sweep ---------- */
+const GEN_MESSAGES = ["Reading your pose…", "Draping the fabric…", "Matching the light…", "Stitching the details…", "Final touches…"];
+const SPARKLES = [
+  { top: "14%", left: "18%", size: 16, delay: 0 },
+  { top: "26%", left: "74%", size: 12, delay: 0.7 },
+  { top: "48%", left: "10%", size: 11, delay: 1.3 },
+  { top: "58%", left: "82%", size: 15, delay: 0.4 },
+  { top: "74%", left: "30%", size: 12, delay: 1.8 },
+  { top: "36%", left: "48%", size: 10, delay: 1.0 },
+];
+
+function GeneratingOverlay({ garment }: { garment: Garment | null }) {
+  const [msg, setMsg] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setMsg((m) => (m + 1) % GEN_MESSAGES.length), 3200);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+      {/* scan line — default top hides it when animations are disabled */}
+      <div style={{ position: "absolute", top: "-12%", left: "-6%", width: "112%", height: 3, borderRadius: 3, background: "linear-gradient(90deg, transparent, var(--marigold) 30%, #FFE3AE 50%, var(--marigold) 70%, transparent)", boxShadow: "0 0 18px 4px rgba(242,169,59,.55), 0 0 60px 18px rgba(242,169,59,.25)", animation: "scan 2.8s ease-in-out infinite alternate" }} />
+      {SPARKLES.map((s, i) => (
+        <span key={i} style={{ position: "absolute", top: s.top, left: s.left, fontSize: s.size, opacity: 0, animation: `twinkle 2.2s ease-in-out ${s.delay}s infinite` }}>✨</span>
+      ))}
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "40px 18px 16px", background: "linear-gradient(transparent, rgba(20,16,24,.9) 55%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
+        {garment && (
+          <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.1)", borderRadius: 30, padding: "5px 14px 5px 5px" }}>
+            <img src={garment.image} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", display: "block" }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.85)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{garment.name}</span>
+          </div>
+        )}
+        <div key={msg} className="fade-up ph-display" style={{ fontSize: 18, color: "#fff" }}>{GEN_MESSAGES[msg]}</div>
+        <div style={{ width: "72%", maxWidth: 300, height: 4, borderRadius: 4, background: "rgba(255,255,255,.15)", overflow: "hidden" }}>
+          <div style={{ height: "100%", minWidth: "8%", borderRadius: 4, background: "linear-gradient(90deg, var(--rani), var(--marigold))", animation: "fillUp 28s cubic-bezier(.16,.8,.35,1) forwards" }} />
+        </div>
+        <div style={{ color: "rgba(255,255,255,.4)", fontSize: 12 }}>AI try-on · usually 15–30 seconds</div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- try-on screen: photo stage + garment rail ---------- */
+interface TryOnScreenProps {
+  photo: string;
+  shop: Shop;
+  rail: Garment[];
+  cats: string[];
+  catFilter: string;
+  setCatFilter: (c: string) => void;
+  selected: Garment | null;
+  setSelected: (g: Garment | null) => void;
+  retakePhoto: () => void;
+  initialGarment: Garment | null;
+}
+
+function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selected, setSelected, retakePhoto, initialGarment }: TryOnScreenProps) {
+  const [phase, setPhase] = useState<"idle" | "generating" | "result" | "preview">("idle");
+  const [resultImage, setResultImage] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+  const [overlay, setOverlay] = useState({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
+  const stageRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ rect: DOMRect } | null>(null);
+  const requestSeq = useRef(0); // ignore stale responses if shopper taps another garment mid-generation
+  const autoStarted = useRef(false);
+
+  const startTryOn = useCallback(async (garment: Garment) => {
+    const seq = ++requestSeq.current;
+    setSelected(garment);
+    setNotice("");
+    setResultImage(null);
+    setPhase("generating");
+    setOverlay({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
+    try {
+      const url = await runTryOn(photo, garment.image, garment.category, {
+        shopId: shop.id, garmentId: garment.id,
+      });
+      if (seq !== requestSeq.current) return;
+      logLocalTryOn(garment.id); // no-op in Supabase mode (server logs it)
+      setResultImage(url);
+      setPhase("result");
+    } catch (e) {
+      if (seq !== requestSeq.current) return;
+      console.error("Try-on failed, falling back to manual preview:", e);
+      setNotice("AI try-on unavailable here — showing a positioning preview instead.");
+      setPhase("preview");
+    }
+  }, [setSelected, photo, shop.id]);
+
+  /* hanger QR deep link: start the scanned garment as soon as we have a photo */
+  useEffect(() => {
+    if (initialGarment && !autoStarted.current) {
+      autoStarted.current = true;
+      startTryOn(initialGarment);
+    }
+  }, [initialGarment, startTryOn]);
+
+  /* drag the garment overlay */
+  const onPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const rect = stageRef.current!.getBoundingClientRect();
+    dragRef.current = { rect };
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!dragRef.current) return;
+    const { rect } = dragRef.current;
+    setOverlay((o) => ({ ...o, x: Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)), y: Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)) }));
+  };
+  const onPointerUp = () => { dragRef.current = null; };
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflowY: "auto", padding: "0 16px 14px" }}>
+      <div style={{ flex: 1, display: "flex", gap: 18, minHeight: 0, justifyContent: "center", flexWrap: "wrap", alignContent: "flex-start" }}>
+
+        {/* stage */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+          <div ref={stageRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
+            style={{ height: "min(52vh, 520px)", maxWidth: "90vw", aspectRatio: "3/4", borderRadius: 22, overflow: "hidden", position: "relative", background: "#141018", border: "1px solid rgba(255,255,255,.12)", touchAction: "none", flexShrink: 0 }}>
+            <img
+              src={phase === "result" && resultImage ? resultImage : photo}
+              alt={phase === "result" ? "You wearing " + (selected?.name || "the garment") : "You"}
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: phase === "generating" ? "brightness(.55)" : "none", transition: "filter .3s" }} />
+
+            {phase === "preview" && selected && (
+              <img src={selected.image} alt={selected.name} onPointerDown={onPointerDown}
+                style={{
+                  position: "absolute",
+                  left: overlay.x * 100 + "%", top: overlay.y * 100 + "%",
+                  transform: "translate(-50%, -50%)",
+                  width: overlay.scale * 100 + "%",
+                  opacity: overlay.opacity,
+                  cursor: "grab", userSelect: "none",
+                  mixBlendMode: "normal",
+                  filter: "drop-shadow(0 6px 18px rgba(0,0,0,.45))",
+                }} draggable={false} />
+            )}
+
+            {phase === "generating" && <GeneratingOverlay garment={selected} />}
+
+            {phase === "idle" && (
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 18, background: "linear-gradient(transparent 60%, rgba(20,16,24,.85))" }}>
+                <div style={{ color: "rgba(255,255,255,.8)", fontSize: 15 }}>👇 Pick a piece from the rack below</div>
+              </div>
+            )}
+          </div>
+
+          {/* AI result info bar */}
+          {phase === "result" && selected && (
+            <div className="fade-up" style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", justifyContent: "center", background: "rgba(255,255,255,.07)", borderRadius: 14, padding: "10px 16px" }}>
+              <div style={{ fontSize: 14 }}>
+                <span style={{ fontWeight: 600 }}>{selected.name}</span>
+                <span style={{ color: "var(--marigold)", marginLeft: 8, fontWeight: 700 }}>{npr(selected.price)}</span>
+                {selected.sizes.length > 0 && (
+                  <span style={{ color: "rgba(255,255,255,.55)", marginLeft: 8, fontSize: 12 }}>
+                    Sizes: {selected.sizes.join(" · ")}
+                  </span>
+                )}
+              </div>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>✨ AI try-on · ask staff to see it in person</span>
+            </div>
+          )}
+
+          {notice && phase === "preview" && (
+            <div style={{ fontSize: 12, color: "var(--marigold)", background: "rgba(242,169,59,.12)", padding: "7px 14px", borderRadius: 10 }}>
+              {notice}
+            </div>
+          )}
+
+          {/* preview controls */}
+          {phase === "preview" && selected && (
+            <div className="fade-up" style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", justifyContent: "center", background: "rgba(255,255,255,.07)", borderRadius: 14, padding: "10px 16px" }}>
+              <div style={{ fontSize: 14 }}>
+                <span style={{ fontWeight: 600 }}>{selected.name}</span>
+                <span style={{ color: "var(--marigold)", marginLeft: 8, fontWeight: 700 }}>{npr(selected.price)}</span>
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "rgba(255,255,255,.6)" }}>
+                Size
+                <input type="range" min="0.3" max="1.4" step="0.01" value={overlay.scale}
+                  onChange={(e) => setOverlay((o) => ({ ...o, scale: +e.target.value }))} style={{ accentColor: "var(--rani)" }} />
+              </label>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>Drag the garment to position · preview mode</span>
+            </div>
+          )}
+          <button className="ph-btn" onClick={retakePhoto} style={{ background: "transparent", color: "rgba(255,255,255,.45)", fontSize: 13, padding: "4px 8px" }}>
+            Retake my photo
+          </button>
+        </div>
+      </div>
+
+      {/* category chips */}
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "10px 2px 8px" }} className="garment-rail">
+        {cats.map((c) => (
+          <button key={c} className="ph-btn" onClick={() => setCatFilter(c)}
+            style={{ background: catFilter === c ? "var(--marigold)" : "rgba(255,255,255,.09)", color: catFilter === c ? "var(--ink)" : "rgba(255,255,255,.75)", padding: "8px 16px", fontSize: 13, borderRadius: 20, whiteSpace: "nowrap", flexShrink: 0 }}>
+            {c}
+          </button>
+        ))}
+      </div>
+
+      {/* garment rail — the rack */}
+      <div className="garment-rail" style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 4 }}>
+        {rail.map((g) => (
+          <button key={g.id} onClick={() => startTryOn(g)} className="ph-btn"
+            style={{
+              flexShrink: 0, width: 108, padding: 0, borderRadius: 14, overflow: "hidden", textAlign: "left",
+              background: "#fff", border: selected?.id === g.id ? "3px solid var(--marigold)" : "3px solid transparent",
+            }}>
+            <div style={{ aspectRatio: "3/4", background: "var(--plum)" }}>
+              <img src={g.image} alt={g.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            </div>
+            <div style={{ padding: "6px 8px 8px" }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</div>
+              <div style={{ fontSize: 11, color: "var(--rani)", fontWeight: 700 }}>{npr(g.price)}</div>
+              {g.sizes.length > 0 && (
+                <div style={{ fontSize: 9.5, color: "var(--mut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.sizes.join(" ")}</div>
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}

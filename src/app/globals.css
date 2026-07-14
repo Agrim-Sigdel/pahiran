@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Marcellus&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --ink: #211423;
+  --plum: #2E1B33;
+  --rani: #C42561;
+  --rani-soft: #E85D8A;
+  --marigold: #F2A93B;
+  --cream: #FBF7F2;
+  --line: #E8DFE4;
+  --mut: #8A7A85;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  color: var(--ink);
+  background: var(--cream);
+  min-height: 100vh;
+}
+
+.ph-display { font-family: 'Marcellus', serif; letter-spacing: .01em; }
+
+.ph-btn {
+  border: none;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  border-radius: 14px;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.ph-btn:active { transform: scale(.97); }
+.ph-btn:focus-visible { outline: 3px solid var(--marigold); outline-offset: 2px; }
+
+input, select { font-family: 'Outfit', sans-serif; }
+input:focus-visible, select:focus-visible { outline: 2px solid var(--rani); outline-offset: 1px; }
+
+.garment-rail::-webkit-scrollbar { height: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+@keyframes shimmer { 0% { background-position: -400px 0 } 100% { background-position: 400px 0 } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
+.fade-up { animation: fadeUp .45s ease both; }
+@keyframes scan { from { top: -12% } to { top: 104% } }
+@keyframes twinkle { 0%, 100% { opacity: 0; transform: scale(.5) } 50% { opacity: 1; transform: scale(1) } }
+@keyframes fillUp { from { width: 0 } to { width: 92% } }
