@@ -9,6 +9,7 @@ create table shops (
   name text not null,
   area text,
   whatsapp text,                      -- order-link number shown on storefront/kiosk
+  listed boolean not null default false, -- opt-in: show on the landing page directory
   created_at timestamptz not null default now()
 );
 

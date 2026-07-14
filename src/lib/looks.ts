@@ -150,11 +150,12 @@ export function lookImageURL(look: SavedLook): string {
   return look.image instanceof Blob ? URL.createObjectURL(look.image) : look.image;
 }
 
-export async function shareLook(look: SavedLook): Promise<void> {
-  const blob =
-    look.image instanceof Blob ? look.image : await (await fetch(look.image)).blob();
+/* Works with a fresh result URL too, so the kiosk can share straight from
+   the result bar without saving a look first. */
+export async function shareImage(image: Blob | string, garmentName: string, shopName: string): Promise<void> {
+  const blob = image instanceof Blob ? image : await (await fetch(image)).blob();
   const file = new File([blob], "easyfitcheck-look.jpg", { type: blob.type || "image/jpeg" });
-  const text = look.garmentName + " at " + (look.shopName || "the shop") + " — tried on with EasyFitCheck";
+  const text = garmentName + " at " + (shopName || "the shop") + " — tried on with EasyFitCheck";
   if (navigator.canShare?.({ files: [file] })) {
     await navigator.share({ files: [file], text }).catch(() => {});
     return;
@@ -164,4 +165,8 @@ export async function shareLook(look: SavedLook): Promise<void> {
   a.download = "easyfitcheck-look.jpg";
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+export async function shareLook(look: SavedLook): Promise<void> {
+  return shareImage(look.image, look.garmentName, look.shopName);
 }

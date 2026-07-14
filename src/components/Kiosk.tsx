@@ -9,7 +9,7 @@ import { reportError } from "@/lib/logging";
 import {
   getRememberedPhoto, rememberPhoto, forgetPhoto,
   saveLook, listLooks, setLookFavorite, deleteLook, clearAllLooks,
-  lookImageURL, shareLook, type SavedLook,
+  lookImageURL, shareLook, shareImage, type SavedLook,
 } from "@/lib/looks";
 import { LangContext, STRINGS, useLangState, useT } from "@/lib/i18n";
 import type { Garment, Shop } from "@/lib/types";
@@ -53,6 +53,11 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
 
   const reset = () => { setPhoto(null); setSelected(null); setStep("attract"); };
 
+  const contactWa = waLink(
+    shop.whatsapp,
+    `Namaste! I have a question about ${shop.name || "your shop"}. (via EasyFitCheck)`
+  );
+
   const takePhoto = (p: string, remember: boolean) => {
     if (remember) { rememberPhoto(p); setSavedPhoto(p); }
     setPhoto(p);
@@ -70,6 +75,13 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
           <button className="ph-btn" onClick={toggleLang} style={barBtn}>{t.switchLang}</button>
+          {contactWa && (
+            <a className="ph-btn" href={contactWa} target="_blank" rel="noopener noreferrer"
+              aria-label={t.contact}
+              style={{ ...barBtn, color: "var(--whatsapp)", borderColor: "var(--whatsapp)", textDecoration: "none" }}>
+              ✆<span className="hide-sm"> {t.contact}</span>
+            </a>
+          )}
           {looksCount > 0 && (
             <button className="ph-btn" onClick={() => setShowLooks(true)} aria-label={t.myLooksLabel}
               style={{ ...barBtn, color: "var(--camel)", borderColor: "var(--camel)" }}>
@@ -248,19 +260,49 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boole
   );
 }
 
-/* ---------- generating overlay: AI scanner sweep (sits on the photo) ---------- */
+/* ---------- generating overlay: viewfinder + scanner sweep (sits on the photo) ---------- */
 function GeneratingOverlay({ garment }: { garment: Garment | null }) {
   const t = useT();
   const [msg, setMsg] = useState(0);
+  // Asymptotic progress — quick at first, eases toward (never reaching) done,
+  // so it stays honest whether the result lands in 2s (cache) or 40s.
+  const [progress, setProgress] = useState(4);
   useEffect(() => {
     const timer = setInterval(() => setMsg((m) => (m + 1) % t.genMessages.length), 3200);
     return () => clearInterval(timer);
   }, [t.genMessages.length]);
+  useEffect(() => {
+    const t0 = performance.now();
+    const timer = setInterval(() => {
+      const s = (performance.now() - t0) / 1000;
+      setProgress(Math.max(4, Math.min(96, Math.round(100 * (1 - Math.exp(-s / 11))))));
+    }, 300);
+    return () => clearInterval(timer);
+  }, []);
+
+  const corner = (pos: React.CSSProperties): React.CSSProperties => ({
+    position: "absolute", width: 22, height: 22, borderColor: "rgba(253,252,246,.75)", borderStyle: "solid", borderWidth: 0, ...pos,
+  });
+  // sparkles start at opacity 0, so reduced-motion (animation: none) hides them
+  const spark = (top: string, left: string, delay: string, size: number): React.CSSProperties => ({
+    position: "absolute", top, left, width: size, height: size, borderRadius: "50%", opacity: 0,
+    background: "radial-gradient(circle, #E5D3BC 0%, rgba(229,211,188,0) 70%)",
+    animation: `twinkle 2.6s ease-in-out ${delay} infinite`,
+  });
 
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+      {/* viewfinder corners */}
+      <div style={corner({ top: 10, left: 10, borderTopWidth: 2, borderLeftWidth: 2 })} />
+      <div style={corner({ top: 10, right: 10, borderTopWidth: 2, borderRightWidth: 2 })} />
+      <div style={corner({ bottom: 10, left: 10, borderBottomWidth: 2, borderLeftWidth: 2 })} />
+      <div style={corner({ bottom: 10, right: 10, borderBottomWidth: 2, borderRightWidth: 2 })} />
       {/* scan line — default top hides it when animations are disabled */}
       <div style={{ position: "absolute", top: "-12%", left: "-6%", width: "112%", height: 3, borderRadius: 3, background: "linear-gradient(90deg, transparent, var(--camel) 30%, #E5D3BC 50%, var(--camel) 70%, transparent)", boxShadow: "0 0 18px 4px rgba(176,137,104,.55), 0 0 60px 18px rgba(176,137,104,.25)", animation: "scan 2.8s ease-in-out infinite alternate" }} />
+      <div style={spark("20%", "16%", "0s", 10)} />
+      <div style={spark("32%", "74%", ".9s", 8)} />
+      <div style={spark("52%", "28%", "1.6s", 12)} />
+      <div style={spark("14%", "56%", "2.1s", 7)} />
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "40px 18px 16px", background: "linear-gradient(transparent, rgba(42,61,47,.9) 55%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
         {garment && (
           <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.14)", borderRadius: 30, padding: "5px 14px 5px 5px" }}>
@@ -270,9 +312,9 @@ function GeneratingOverlay({ garment }: { garment: Garment | null }) {
         )}
         <div key={msg} className="fade-up ph-display" style={{ fontSize: 18, color: "#fff" }}>{t.genMessages[msg % t.genMessages.length]}</div>
         <div style={{ width: "72%", maxWidth: 300, height: 4, borderRadius: 4, background: "rgba(255,255,255,.2)", overflow: "hidden" }}>
-          <div style={{ height: "100%", minWidth: "8%", borderRadius: 4, background: "linear-gradient(90deg, var(--forest), var(--camel))", animation: "fillUp 28s cubic-bezier(.16,.8,.35,1) forwards" }} />
+          <div style={{ height: "100%", width: progress + "%", borderRadius: 4, background: "linear-gradient(90deg, var(--forest), var(--camel))", transition: "width .3s linear" }} />
         </div>
-        <div style={{ color: "rgba(255,255,255,.5)", fontSize: 12 }}>{t.genFooter}</div>
+        <div style={{ color: "rgba(255,255,255,.5)", fontSize: 12 }}>{progress}% · {t.genFooter}</div>
       </div>
     </div>
   );
@@ -381,7 +423,10 @@ function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garm
     `Namaste! I tried on "${garment.name}"${size ? " (size " + size + ")" : ""} at ${shop.name || "your shop"} with EasyFitCheck and I want it.`
   );
 
+  const canSend = name.trim().length >= 2 && phone.replace(/\D/g, "").length >= 7;
+
   const send = async () => {
+    if (!canSend) return;
     setState("sending");
     try {
       await submitLead(shop, garment, { name: name.trim(), phone: phone.trim(), size });
@@ -420,7 +465,7 @@ function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garm
           <>
             <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 4 }}>{t.tellShop}</div>
             <p style={{ color: "var(--mut)", fontSize: 13, margin: "0 0 16px", lineHeight: 1.5 }}>
-              {t.optionalNote(garment.name, npr(garment.price))}
+              {t.leadNote(garment.name, npr(garment.price))}
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10, textAlign: "left" }}>
               {garment.sizes.length > 0 && (
@@ -440,8 +485,8 @@ function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garm
               )}
               <input style={input} placeholder={t.yourName} value={name} maxLength={80}
                 onChange={(e) => setName(e.target.value)} />
-              <input style={input} placeholder={t.phoneOptional} value={phone} maxLength={30} inputMode="tel"
-                onChange={(e) => setPhone(e.target.value)} />
+              <input style={input} placeholder={t.phoneNumber} value={phone} maxLength={30} inputMode="tel"
+                onChange={(e) => setPhone(e.target.value.replace(/[^0-9+ ]/g, ""))} />
             </div>
             {state === "error" && (
               <div style={{ fontSize: 12, color: "var(--camel)", marginTop: 10 }}>
@@ -453,11 +498,17 @@ function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garm
                 style={{ flex: 1, border: "1px solid var(--line)", color: "var(--forest-deep)", padding: 13, fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
                 {t.cancel}
               </button>
-              <button className="ph-btn" disabled={state === "sending"} onClick={send}
-                style={{ flex: 2, background: "var(--forest)", color: "var(--cream)", padding: 13, fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", borderRadius: "var(--radius-btn)", fontWeight: 500, opacity: state === "sending" ? 0.6 : 1 }}>
+              <button className="ph-btn" disabled={!canSend || state === "sending"} onClick={send}
+                style={{ flex: 2, background: "var(--forest)", color: "var(--cream)", padding: 13, fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", borderRadius: "var(--radius-btn)", fontWeight: 500, opacity: !canSend || state === "sending" ? 0.6 : 1 }}>
                 {state === "sending" ? t.sending : t.sendToShop}
               </button>
             </div>
+            {wa && (
+              <a href={wa} target="_blank" rel="noopener noreferrer" className="ph-btn btn-wa"
+                style={{ display: "block", marginTop: 10 }}>
+                {t.chatWhatsApp}
+              </a>
+            )}
           </>
         )}
       </div>
@@ -486,6 +537,10 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
   const [notice, setNotice] = useState("");
   const [interested, setInterested] = useState(false);
   const [lookState, setLookState] = useState<"idle" | "saving" | "saved">("idle");
+  const [shareState, setShareState] = useState<"idle" | "sharing">("idle");
+  const [showOriginal, setShowOriginal] = useState(false); // hold-to-compare
+  const [history, setHistory] = useState<{ garment: Garment; url: string }[]>([]); // this session's generated looks
+  const savedIds = useRef<Set<string>>(new Set()); // garments already saved to My Looks this session
   const [overlay, setOverlay] = useState({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
   const stageRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ rect: DOMRect } | null>(null);
@@ -498,7 +553,8 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     setSelected(garment);
     setNotice("");
     setResultImage(null);
-    setLookState("idle");
+    setLookState(savedIds.current.has(garment.id) ? "saved" : "idle");
+    setShowOriginal(false);
     setPhase("generating");
     setOverlay({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
     try {
@@ -508,6 +564,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
       if (seq !== requestSeq.current) return;
       logLocalTryOn(garment.id, getKioskSessionId()); // no-op in Supabase mode (server logs it)
       setResultImage(url);
+      setHistory((h) => [{ garment, url }, ...h.filter((x) => x.garment.id !== garment.id)].slice(0, 12));
       setPhase("result");
     } catch (e) {
       if (seq !== requestSeq.current) return;
@@ -528,6 +585,17 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     }
   }, [initialGarment, startTryOn]);
 
+  /* filmstrip tap: an already-generated look comes back instantly, no re-generation */
+  const showFromHistory = (h: { garment: Garment; url: string }) => {
+    requestSeq.current++; // drop any in-flight generation's response
+    setSelected(h.garment);
+    setResultImage(h.url);
+    setNotice("");
+    setLookState(savedIds.current.has(h.garment.id) ? "saved" : "idle");
+    setShowOriginal(false);
+    setPhase("result");
+  };
+
   /* drag the garment overlay (manual preview fallback) */
   const onPointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -546,12 +614,29 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflowY: "auto", padding: "0 0 14px" }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "16px 16px 0" }}>
         {/* stage */}
+        {/* touchAction only locks during drag-preview — otherwise swiping on the photo must scroll the page */}
         <div ref={stageRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="k-stage"
-          style={{ borderRadius: 8, overflow: "hidden", position: "relative", background: "var(--sage-mist)", boxShadow: "var(--shadow-soft)", touchAction: "none", flexShrink: 0 }}>
+          style={{ borderRadius: 8, overflow: "hidden", position: "relative", background: "var(--sage-mist)", boxShadow: "var(--shadow-soft)", touchAction: phase === "preview" ? "none" : "auto", flexShrink: 0 }}>
           <img
-            src={phase === "result" && resultImage ? resultImage : photo}
-            alt={phase === "result" ? "You wearing " + (selected?.name || "the garment") : "You"}
+            src={photo} alt="You"
             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: phase === "generating" ? "brightness(.55)" : "none", transition: "filter .3s" }} />
+
+          {/* result sits on top of the original so hold-to-compare is a crossfade */}
+          {phase === "result" && resultImage && (
+            <img src={resultImage} alt={"You wearing " + (selected?.name || "the garment")} draggable={false}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: showOriginal ? 0 : 1, transition: "opacity .22s ease", pointerEvents: "none" }} />
+          )}
+          {phase === "result" && resultImage && (
+            <button className="ph-btn"
+              onPointerDown={(e) => { e.preventDefault(); setShowOriginal(true); }}
+              onPointerUp={() => setShowOriginal(false)}
+              onPointerLeave={() => setShowOriginal(false)}
+              onPointerCancel={() => setShowOriginal(false)}
+              onContextMenu={(e) => e.preventDefault()}
+              style={{ position: "absolute", top: 10, left: 10, background: "rgba(42,61,47,.65)", color: "var(--cream)", fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", fontWeight: 500, padding: "9px 13px", borderRadius: 20, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}>
+              {showOriginal ? t.originalPhoto : t.holdToCompare}
+            </button>
+          )}
 
           {phase === "preview" && selected && (
             <img src={selected.image} alt={selected.name} onPointerDown={onPointerDown}
@@ -590,6 +675,16 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
               style={{ background: "var(--forest)", color: "var(--cream)", padding: "11px 20px", fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 500, borderRadius: "var(--radius-btn)" }}>
               {t.iWantThis}
             </button>
+            <button className="ph-btn" disabled={shareState === "sharing"}
+              onClick={async () => {
+                if (!resultImage) return;
+                setShareState("sharing");
+                try { await shareImage(resultImage, selected.name, shop.name); } catch {}
+                setShareState("idle");
+              }}
+              style={{ border: "1px solid var(--line)", color: "var(--forest-deep)", padding: "10px 18px", fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 500, borderRadius: "var(--radius-btn)", background: "transparent", opacity: shareState === "sharing" ? 0.6 : 1 }}>
+              {shareState === "sharing" ? t.sharing : t.share}
+            </button>
             <button className="ph-btn" disabled={lookState !== "idle"}
               onClick={async () => {
                 if (!resultImage) return;
@@ -598,7 +693,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
                   garmentId: selected.id, garmentName: selected.name,
                   price: selected.price, shopName: shop.name, imageUrl: resultImage,
                 });
-                if (saved) { setLookState("saved"); onLookSaved(); }
+                if (saved) { setLookState("saved"); savedIds.current.add(selected.id); onLookSaved(); }
                 else setLookState("idle");
               }}
               style={{ border: "1px solid var(--forest)", color: lookState === "saved" ? "var(--camel)" : "var(--forest)", borderColor: lookState === "saved" ? "var(--camel)" : "var(--forest)", padding: "10px 18px", fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 500, borderRadius: "var(--radius-btn)", background: "transparent" }}>
@@ -637,6 +732,27 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
           {t.retakePhoto}
         </button>
       </div>
+
+      {/* session filmstrip — flip between already-generated looks instantly */}
+      {history.length > 0 && (
+        <div style={{ padding: "12px 16px 0" }}>
+          <div style={{ fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--mut)", fontWeight: 500, marginBottom: 7 }}>
+            {t.thisSession}
+          </div>
+          <div className="garment-rail" style={{ display: "flex", gap: 9, overflowX: "auto" }}>
+            {history.map((h) => {
+              const active = phase === "result" && selected?.id === h.garment.id;
+              return (
+                <button key={h.garment.id} className="ph-btn" onClick={() => showFromHistory(h)}
+                  aria-label={"You wearing " + h.garment.name}
+                  style={{ flexShrink: 0, width: 62, padding: 0, borderRadius: "var(--radius-card)", overflow: "hidden", background: "var(--sage-mist)", border: "2px solid " + (active ? "var(--camel)" : "var(--line)") }}>
+                  <img src={h.url} alt="" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", display: "block" }} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* category chips */}
       <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "10px 16px 0" }} className="garment-rail">

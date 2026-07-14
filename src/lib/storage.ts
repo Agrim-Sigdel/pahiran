@@ -25,7 +25,7 @@ const lsSet = (k: string, v: string) => localStorage.setItem(PREFIX + k, v);
 const lsDel = (k: string) => localStorage.removeItem(PREFIX + k);
 
 function rowToShop(r: ShopRow): Shop {
-  return { id: r.id, slug: r.slug, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "" };
+  return { id: r.id, slug: r.slug, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "", listed: r.listed ?? false };
 }
 
 /* ---------- vendor's own shop (auth-scoped in Supabase mode) ---------- */
@@ -34,7 +34,7 @@ export async function loadShop(): Promise<Shop | null> {
   if (!isSupabaseConfigured()) {
     try {
       const s = lsGet("shop:profile");
-      return s ? { id: null, slug: null, whatsapp: "", ...JSON.parse(s) } : null;
+      return s ? { id: null, slug: null, whatsapp: "", listed: false, ...JSON.parse(s) } : null;
     } catch {
       return null;
     }
@@ -64,7 +64,7 @@ export async function saveShop(profile: Shop): Promise<void> {
   if (!isSupabaseConfigured()) {
     try {
       lsSet("shop:profile", JSON.stringify({
-        name: profile.name, area: profile.area, whatsapp: profile.whatsapp,
+        name: profile.name, area: profile.area, whatsapp: profile.whatsapp, listed: profile.listed,
       }));
     } catch {}
     return;
@@ -72,7 +72,7 @@ export async function saveShop(profile: Shop): Promise<void> {
   if (!profile.id) return;
   await supabase()
     .from("shops")
-    .update({ name: profile.name, area: profile.area, whatsapp: profile.whatsapp || null })
+    .update({ name: profile.name, area: profile.area, whatsapp: profile.whatsapp || null, listed: profile.listed })
     .eq("id", profile.id);
 }
 

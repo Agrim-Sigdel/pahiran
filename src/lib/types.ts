@@ -7,6 +7,7 @@ export interface Shop {
   name: string;
   area: string;
   whatsapp: string; // digits for wa.me links; "" = no order button
+  listed: boolean; // opt-in: show on the landing page directory
 }
 
 export interface Garment {
@@ -53,6 +54,7 @@ export interface ShopRow {
   name: string;
   area: string | null;
   whatsapp: string | null;
+  listed: boolean | null;
 }
 
 export interface GarmentRow {

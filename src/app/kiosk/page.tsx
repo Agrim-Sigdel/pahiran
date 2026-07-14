@@ -13,7 +13,7 @@ import type { Garment, Shop } from "@/lib/types";
 function KioskOwn() {
   const router = useRouter();
   const params = useSearchParams();
-  const [shop, setShop] = useState<Shop>({ id: null, slug: null, name: "", area: "", whatsapp: "" });
+  const [shop, setShop] = useState<Shop>({ id: null, slug: null, name: "", area: "", whatsapp: "", listed: false });
   const [catalog, setCatalog] = useState<Garment[] | null>(null); // null = loading
 
   useEffect(() => {

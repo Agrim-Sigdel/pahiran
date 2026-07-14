@@ -235,10 +235,11 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
   const [name, setName] = useState(shop.name);
   const [area, setArea] = useState(shop.area);
   const [whatsapp, setWhatsapp] = useState(shop.whatsapp);
+  const [listed, setListed] = useState(shop.listed);
   const [saved, setSaved] = useState(false);
-  useEffect(() => { setName(shop.name); setArea(shop.area); setWhatsapp(shop.whatsapp); }, [shop]);
+  useEffect(() => { setName(shop.name); setArea(shop.area); setWhatsapp(shop.whatsapp); setListed(shop.listed); }, [shop]);
 
-  const dirty = name !== shop.name || area !== shop.area || whatsapp !== shop.whatsapp;
+  const dirty = name !== shop.name || area !== shop.area || whatsapp !== shop.whatsapp || listed !== shop.listed;
 
   return (
     <div className="panel">
@@ -264,8 +265,18 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
             <LinkBox url={storeUrl} />
           </div>
         )}
+        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", fontSize: 13.5, color: "var(--ink)", lineHeight: 1.5 }}>
+          <input type="checkbox" checked={listed} style={{ marginTop: 3, accentColor: "var(--forest)" }}
+            onChange={(e) => { setListed(e.target.checked); setSaved(false); }} />
+          <span>
+            Show my shop on the EasyFitCheck landing page
+            <span style={{ display: "block", fontSize: 12, color: "var(--mut)" }}>
+              Shoppers can find and browse your storefront and kiosk.
+            </span>
+          </span>
+        </label>
         <button className="ph-btn btn-solid" disabled={!dirty}
-          onClick={() => { updateShop({ ...shop, name, area, whatsapp }); setSaved(true); }}
+          onClick={() => { updateShop({ ...shop, name, area, whatsapp, listed }); setSaved(true); }}
           style={{ alignSelf: "flex-start", marginTop: 6, opacity: dirty ? 1 : 0.55 }}>
           {saved && !dirty ? "Saved ✓" : "Save changes"}
         </button>

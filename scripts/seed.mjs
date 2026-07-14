@@ -141,6 +141,7 @@ async function getOrCreateShop(ownerId) {
       name: "EasyFitCheck Demo Store",
       area: "Kathmandu",
       whatsapp: null,
+      listed: true,
     })
     .select()
     .single();

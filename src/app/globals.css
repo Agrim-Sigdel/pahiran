@@ -130,8 +130,11 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--forest); ou
   .btn-solid, .btn-outline { padding: 14px 22px; font-size: 12px; }
 
   .hide-sm { display: none; }
-  .k-stage { height: auto; width: min(85vw, 400px); }
-  .k-cam { height: auto; width: min(80vw, 360px); }
+  /* width-driven so the photo fills the screen, but capped by height so the
+     name/price/action bar under the stage stays above the fold — width follows
+     via aspect-ratio, no cropping */
+  .k-stage { height: min(56svh, calc(min(85vw, 400px) * 4 / 3)); width: auto; }
+  .k-cam { height: min(50svh, calc(min(80vw, 360px) * 4 / 3)); width: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -143,4 +146,3 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--forest); ou
 .fade-up { animation: fadeUp .45s ease both; }
 @keyframes scan { from { top: -12% } to { top: 104% } }
 @keyframes twinkle { 0%, 100% { opacity: 0; transform: scale(.5) } 50% { opacity: 1; transform: scale(1) } }
-@keyframes fillUp { from { width: 0 } to { width: 92% } }

@@ -45,11 +45,17 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "Unknown garment" }, { status: 400 });
   }
 
+  const name = String(body?.name || "").trim().slice(0, 80);
+  const phone = String(body?.phone || "").trim().slice(0, 30);
+  if (name.length < 2 || phone.replace(/\D/g, "").length < 7) {
+    return Response.json({ error: "name and phone are required" }, { status: 400 });
+  }
+
   const { error } = await sb.from("leads").insert({
     shop_id: shopId,
     garment_id: garmentId,
-    name: String(body?.name || "").slice(0, 80) || null,
-    phone: String(body?.phone || "").slice(0, 30) || null,
+    name,
+    phone,
     size: String(body?.size || "").slice(0, 20) || null,
   });
   if (error) {

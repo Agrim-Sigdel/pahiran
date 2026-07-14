@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Dashboard from "@/components/Dashboard";
+import Onboarding, { slugify } from "@/components/Onboarding";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import {
   loadShop, saveShop, loadCatalog, addGarment as persistGarment,
@@ -15,7 +16,7 @@ import type { ErrorLog, Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [shop, setShop] = useState<Shop>({ id: null, slug: null, name: "", area: "", whatsapp: "" });
+  const [shop, setShop] = useState<Shop>({ id: null, slug: null, name: "", area: "", whatsapp: "", listed: false });
   const [catalog, setCatalog] = useState<Garment[]>([]);
   const [events, setEvents] = useState<TryOnEvent[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -98,6 +99,29 @@ export default function DashboardPage() {
 
   const updateShop = useCallback((s: Shop) => { setShop(s); saveShop(s); }, []);
 
+  /* First login: save the profile, then point /k and /s links at a slug
+     built from the shop name (falling back to name-2 … if taken). */
+  const completeOnboarding = async (info: { name: string; area: string; whatsapp: string; listed: boolean }) => {
+    let next: Shop = { ...shop, ...info };
+    await saveShop(next);
+    if (next.id) {
+      const base = slugify(info.name);
+      if (base.length >= 3 && base !== next.slug) {
+        const candidates = [base, ...[2, 3, 4, 5].map((n) => `${base.slice(0, 37)}-${n}`)];
+        for (const candidate of candidates) {
+          try {
+            const updated = await updateShopSlug(next, candidate);
+            next = { ...next, slug: updated.slug };
+            break;
+          } catch {
+            // slug taken: try the next candidate; keep the provisioned slug if all fail
+          }
+        }
+      }
+    }
+    setShop(next);
+  };
+
   const handleLead = async (id: string, handled: boolean) => {
     setLeads((ls) => ls.map((l) => (l.id === id ? { ...l, handled } : l)));
     try { await setLeadHandled(id, handled); } catch {}
@@ -106,6 +130,10 @@ export default function DashboardPage() {
   const signOut = isSupabaseConfigured()
     ? async () => { await supabase().auth.signOut(); router.replace("/login"); }
     : null;
+
+  if (!loading && !shop.name.trim()) {
+    return <Onboarding shop={shop} onComplete={completeOnboarding} />;
+  }
 
   return (
     <Dashboard

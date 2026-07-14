@@ -9,6 +9,7 @@ export type Lang = "en" | "ne";
 
 const en = {
   switchLang: "नेपाली",
+  contact: "Contact",
   myLooksLabel: "My looks",
   startOver: "Start over",
   exitKiosk: "Exit kiosk",
@@ -45,6 +46,10 @@ const en = {
   pickAPiece: "Pick a piece from the rack below",
   sizes: "Sizes:",
   aiResultNote: "AI try-on · ask staff to see it in person",
+  holdToCompare: "Hold to compare",
+  originalPhoto: "Your photo",
+  thisSession: "Tried this session",
+  sharing: "Sharing…",
   iWantThis: "I want this",
   saveLook: "♡ Save look",
   savedLook: "♥ Saved",
@@ -55,9 +60,9 @@ const en = {
   retakePhoto: "Retake my photo",
 
   tellShop: "Tell the shop",
-  optionalNote: (g: string, p: string) => `${g} · ${p}. Name and number are optional.`,
-  yourName: "Your name (optional)",
-  phoneOptional: "Phone (optional)",
+  leadNote: (g: string, p: string) => `${g} · ${p}. Leave your name and number so the shop can reach you.`,
+  yourName: "Your name",
+  phoneNumber: "Phone number",
   sendFailed: "Could not send — please tell the staff directly.",
   cancel: "Cancel",
   sending: "Sending…",
@@ -80,6 +85,7 @@ const en = {
 
 const ne: typeof en = {
   switchLang: "English",
+  contact: "सम्पर्क",
   myLooksLabel: "मेरा लुक",
   startOver: "फेरि सुरु",
   exitKiosk: "बाहिर निस्कनुहोस्",
@@ -116,6 +122,10 @@ const ne: typeof en = {
   pickAPiece: "तलको र्‍याकबाट एउटा लुगा छान्नुहोस्",
   sizes: "साइज:",
   aiResultNote: "AI ट्राई-अन · सक्कली हेर्न स्टाफलाई भन्नुहोस्",
+  holdToCompare: "तुलना गर्न थिचिराख्नुहोस्",
+  originalPhoto: "तपाईंको फोटो",
+  thisSession: "अहिलेसम्म लगाएर हेरेका",
+  sharing: "सेयर हुँदैछ…",
   iWantThis: "मलाई यो चाहियो",
   saveLook: "♡ लुक सेभ गर्नुहोस्",
   savedLook: "♥ सेभ भयो",
@@ -126,9 +136,9 @@ const ne: typeof en = {
   retakePhoto: "फेरि फोटो खिच्नुहोस्",
 
   tellShop: "पसललाई भन्नुहोस्",
-  optionalNote: (g: string, p: string) => `${g} · ${p}। नाम र नम्बर वैकल्पिक हो।`,
-  yourName: "तपाईंको नाम (वैकल्पिक)",
-  phoneOptional: "फोन (वैकल्पिक)",
+  leadNote: (g: string, p: string) => `${g} · ${p}। पसलले सम्पर्क गर्न सकोस् भनेर आफ्नो नाम र नम्बर लेख्नुहोस्।`,
+  yourName: "तपाईंको नाम",
+  phoneNumber: "फोन नम्बर",
   sendFailed: "पठाउन सकिएन — कृपया स्टाफलाई सिधै भन्नुहोस्।",
   cancel: "रद्द गर्नुहोस्",
   sending: "पठाउँदै…",

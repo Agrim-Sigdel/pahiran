@@ -54,6 +54,7 @@ export default function StorefrontPage() {
   const askWa = shop.whatsapp
     ? waLink(shop.whatsapp, ask.trim() ? `Namaste! ${ask.trim()} (via ${shop.name || "your"} EasyFitCheck storefront)` : `Namaste! I have a question about your collection.`)
     : null;
+  const contactWa = waLink(shop.whatsapp, `Namaste! I have a question about ${shop.name || "your shop"}. (via EasyFitCheck)`);
 
   return (
     <div style={{ background: "var(--sage)", minHeight: "100vh" }}>
@@ -78,6 +79,9 @@ export default function StorefrontPage() {
           )}
         </div>
         <div className="nav-tools">
+          {contactWa && (
+            <a href={contactWa} target="_blank" rel="noopener noreferrer" style={{ color: "var(--whatsapp)" }}>Contact</a>
+          )}
           <Link href={tryonHref} style={{ color: "var(--camel)" }}>♥ My looks</Link>
         </div>
       </nav>
