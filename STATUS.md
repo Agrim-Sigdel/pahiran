@@ -44,6 +44,10 @@ _Last updated: 2026-07-14 · Companion to [PRODUCT_PLAN.md](./PRODUCT_PLAN.md)_
   chart, per-garment history table, CSV export), anonymous per-session ids on
   try-on events, **leads inbox** ("I want this" button on the kiosk result →
   name/phone/size land in the vendor dashboard), error-log viewer
+- **Phase A shopper "My Looks"** (on-device only, IndexedDB — servers never
+  store shopper photos): remember-my-photo (opt-in, 7-day expiry, forgettable),
+  save-look gallery with favourites, share/download, per-look delete and a
+  delete-everything button; consent copy updated to match
 
 ## ❌ What we don't have
 

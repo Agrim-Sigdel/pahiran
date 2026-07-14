@@ -6,6 +6,11 @@ import { fileToCompressedDataURL } from "@/lib/images";
 import { runTryOn, getKioskSessionId } from "@/lib/tryon";
 import { logLocalTryOn, submitLead } from "@/lib/storage";
 import { reportError } from "@/lib/logging";
+import {
+  getRememberedPhoto, rememberPhoto, forgetPhoto,
+  saveLook, listLooks, setLookFavorite, deleteLook, clearAllLooks,
+  lookImageURL, shareLook, type SavedLook,
+} from "@/lib/looks";
 import type { Garment, Shop } from "@/lib/types";
 
 /* Kiosk — full-screen, dark, touch-first shopper flow:
@@ -25,11 +30,25 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
   const [photo, setPhoto] = useState<string | null>(null);
   const [selected, setSelected] = useState<Garment | null>(null);
   const [catFilter, setCatFilter] = useState("All");
+  const [savedPhoto, setSavedPhoto] = useState<string | null>(null);
+  const [looksCount, setLooksCount] = useState(0);
+  const [showLooks, setShowLooks] = useState(false);
   const cats = ["All", ...Array.from(new Set(catalog.map((g) => g.category)))];
   const rail = catFilter === "All" ? catalog : catalog.filter((g) => g.category === catFilter);
   const initialGarment = initialGarmentId ? catalog.find((g) => g.id === initialGarmentId) ?? null : null;
 
+  useEffect(() => {
+    getRememberedPhoto().then(setSavedPhoto);
+    listLooks().then((l) => setLooksCount(l.length));
+  }, []);
+
   const reset = () => { setPhoto(null); setSelected(null); setStep("attract"); };
+
+  const takePhoto = (p: string, remember: boolean) => {
+    if (remember) { rememberPhoto(p); setSavedPhoto(p); }
+    setPhoto(p);
+    setStep("tryon");
+  };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "radial-gradient(120% 100% at 50% 0%, #3A2140 0%, var(--ink) 55%)", color: "#fff", display: "flex", flexDirection: "column", zIndex: 40 }}>
@@ -40,6 +59,12 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
           {shop.area && <span style={{ color: "rgba(255,255,255,.45)", fontSize: 13, marginLeft: 10 }}>{shop.area}</span>}
         </div>
         <div style={{ display: "flex", gap: 10 }}>
+          {looksCount > 0 && (
+            <button className="ph-btn" onClick={() => setShowLooks(true)}
+              style={{ background: "rgba(255,255,255,.1)", color: "var(--marigold)", padding: "9px 16px", fontSize: 13 }}>
+              ♥ My looks ({looksCount})
+            </button>
+          )}
           {step !== "attract" && (
             <button className="ph-btn" onClick={reset} style={{ background: "rgba(255,255,255,.1)", color: "#fff", padding: "9px 16px", fontSize: 13 }}>
               ↺ Start over
@@ -51,15 +76,23 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
         </div>
       </div>
 
+      {showLooks && <LooksGallery onClose={() => setShowLooks(false)} onCountChange={setLooksCount} />}
+
       {step === "attract" && (
         <AttractScreen count={catalog.length} highlight={initialGarment} start={() => setStep("consent")} />
       )}
-      {step === "consent" && <ConsentScreen agree={() => setStep("capture")} back={reset} />}
-      {step === "capture" && <CaptureScreen onPhoto={(p) => { setPhoto(p); setStep("tryon"); }} />}
+      {step === "consent" && (
+        <ConsentScreen agree={() => setStep("capture")} back={reset}
+          savedPhoto={savedPhoto}
+          useSaved={() => { setPhoto(savedPhoto); setStep("tryon"); }}
+          forgetSaved={() => { forgetPhoto(); setSavedPhoto(null); }} />
+      )}
+      {step === "capture" && <CaptureScreen onPhoto={takePhoto} />}
       {step === "tryon" && photo && (
         <TryOnScreen photo={photo} shop={shop} rail={rail} cats={cats} catFilter={catFilter} setCatFilter={setCatFilter}
           selected={selected} setSelected={setSelected} retakePhoto={() => setStep("capture")}
-          initialGarment={initialGarment} />
+          initialGarment={initialGarment}
+          onLookSaved={() => setLooksCount((n) => n + 1)} />
       )}
     </div>
   );
@@ -96,36 +129,53 @@ function AttractScreen({ count, highlight, start }: { count: number; highlight: 
 }
 
 /* ---------- consent: shown once before any photo is taken ---------- */
-function ConsentScreen({ agree, back }: { agree: () => void; back: () => void }) {
+function ConsentScreen({ agree, back, savedPhoto, useSaved, forgetSaved }: {
+  agree: () => void; back: () => void;
+  savedPhoto: string | null; useSaved: () => void; forgetSaved: () => void;
+}) {
   return (
-    <div className="fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center" }}>
+    <div className="fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", overflowY: "auto" }}>
       <div style={{ fontSize: 30, marginBottom: 14 }}>🔒</div>
       <div className="ph-display" style={{ fontSize: "clamp(22px, 4vw, 30px)", marginBottom: 16 }}>Your photo, your call</div>
       <div style={{ maxWidth: 460, display: "flex", flexDirection: "column", gap: 10, textAlign: "left", background: "rgba(255,255,255,.06)", borderRadius: 18, padding: "18px 22px", fontSize: 14.5, color: "rgba(255,255,255,.75)", lineHeight: 1.55 }}>
         <div>• Your photo is used <strong style={{ color: "#fff" }}>only</strong> to show these clothes on you.</div>
         <div>• It is sent securely to our AI try-on service and processed there — the shop never keeps a copy.</div>
-        <div>• The photo is deleted automatically when you finish or walk away; it is never saved to this device.</div>
+        <div>• Nothing is stored unless <strong style={{ color: "#fff" }}>you</strong> choose "Save look" or "Remember my photo" — and that stays on this device only, deletable anytime.</div>
         <div>• No account, no name, no phone number needed.</div>
       </div>
       <div style={{ display: "flex", gap: 12, marginTop: 26, flexWrap: "wrap", justifyContent: "center" }}>
         <button className="ph-btn" onClick={back} style={{ background: "rgba(255,255,255,.1)", color: "#fff", padding: "15px 24px", fontSize: 15, borderRadius: 30 }}>
           Not now
         </button>
+        {savedPhoto && (
+          <button className="ph-btn" onClick={useSaved}
+            style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(255,255,255,.12)", color: "#fff", padding: "10px 22px 10px 10px", fontSize: 15, borderRadius: 30 }}>
+            <img src={savedPhoto} alt="Your saved photo" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover" }} />
+            Use my last photo
+          </button>
+        )}
         <button className="ph-btn" onClick={agree}
           style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "15px 34px", fontSize: 16, borderRadius: 30, boxShadow: "0 8px 26px rgba(196,37,97,.4)" }}>
           I agree — take my photo
         </button>
       </div>
+      {savedPhoto && (
+        <button className="ph-btn" onClick={forgetSaved}
+          style={{ background: "transparent", color: "rgba(255,255,255,.4)", fontSize: 12, marginTop: 14, padding: "4px 8px" }}>
+          Forget my saved photo
+        </button>
+      )}
     </div>
   );
 }
 
 /* ---------- photo capture: camera with upload fallback ---------- */
-function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string) => void }) {
+function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boolean) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [camState, setCamState] = useState<"starting" | "live" | "denied">("starting");
+  const [remember, setRemember] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,12 +200,12 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string) => void }) {
     ctx.translate(c.width, 0); ctx.scale(-1, 1); // un-mirror
     ctx.drawImage(v, 0, 0);
     streamRef.current?.getTracks().forEach((t) => t.stop());
-    onPhoto(c.toDataURL("image/jpeg", 0.85));
+    onPhoto(c.toDataURL("image/jpeg", 0.85), remember);
   };
 
   const handleUpload = async (file: File | undefined) => {
     if (!file) return;
-    try { onPhoto(await fileToCompressedDataURL(file, 1000, 0.85)); }
+    try { onPhoto(await fileToCompressedDataURL(file, 1000, 0.85), remember); }
     catch { alert("Could not read that photo."); }
   };
 
@@ -195,7 +245,14 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string) => void }) {
         </button>
         <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleUpload(e.target.files?.[0])} />
       </div>
-      <div style={{ color: "rgba(255,255,255,.35)", fontSize: 12 }}>Your photo stays on this screen — it is never saved.</div>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "rgba(255,255,255,.65)", cursor: "pointer" }}>
+        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}
+          style={{ accentColor: "var(--rani)", width: 16, height: 16 }} />
+        Remember my photo on this device for 7 days
+      </label>
+      <div style={{ color: "rgba(255,255,255,.35)", fontSize: 12 }}>
+        {remember ? "Saved only on this device — delete it anytime from the consent screen." : "Your photo stays on this screen — it is never saved."}
+      </div>
     </div>
   );
 }
@@ -238,6 +295,98 @@ function GeneratingOverlay({ garment }: { garment: Garment | null }) {
         </div>
         <div style={{ color: "rgba(255,255,255,.4)", fontSize: 12 }}>AI try-on · usually 15–30 seconds</div>
       </div>
+    </div>
+  );
+}
+
+/* ---------- "My looks": on-device gallery of saved try-ons ---------- */
+function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCountChange: (n: number) => void }) {
+  const [looks, setLooks] = useState<SavedLook[] | null>(null);
+  const urls = useRef<Map<string, string>>(new Map());
+
+  const refresh = async () => {
+    const l = await listLooks();
+    setLooks(l);
+    onCountChange(l.length);
+  };
+  useEffect(() => {
+    refresh();
+    const map = urls.current;
+    return () => { map.forEach((u) => { if (u.startsWith("blob:")) URL.revokeObjectURL(u); }); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const imgSrc = (l: SavedLook) => {
+    if (!urls.current.has(l.id)) urls.current.set(l.id, lookImageURL(l));
+    return urls.current.get(l.id)!;
+  };
+
+  const sorted = looks ? [...looks].sort((a, b) => Number(b.favorite) - Number(a.favorite)) : [];
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(20,16,24,.96)", zIndex: 55, display: "flex", flexDirection: "column", color: "#fff" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px", flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <span className="ph-display" style={{ fontSize: 22 }}>My looks</span>
+          <span style={{ fontSize: 12, color: "rgba(255,255,255,.45)", marginLeft: 10 }}>
+            saved only on this device · show staff your ♥ favourites
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          {looks && looks.length > 0 && (
+            <button className="ph-btn"
+              onClick={async () => {
+                if (confirm("Delete all saved looks and your remembered photo from this device?")) {
+                  await clearAllLooks();
+                  refresh();
+                }
+              }}
+              style={{ background: "transparent", color: "rgba(255,255,255,.4)", fontSize: 13, padding: "9px 12px" }}>
+              Delete all
+            </button>
+          )}
+          <button className="ph-btn" onClick={onClose} style={{ background: "rgba(255,255,255,.12)", color: "#fff", padding: "9px 18px", fontSize: 14 }}>
+            ✕ Close
+          </button>
+        </div>
+      </div>
+
+      {looks && looks.length === 0 ? (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.5)", padding: 24, textAlign: "center" }}>
+          Nothing saved yet — tap "♡ Save look" after a try-on to keep it here.
+        </div>
+      ) : (
+        <div style={{ flex: 1, overflowY: "auto", padding: "4px 22px 30px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14, alignContent: "start" }}>
+          {sorted.map((l) => (
+            <div key={l.id} className="fade-up" style={{ background: "rgba(255,255,255,.06)", borderRadius: 16, overflow: "hidden", border: l.favorite ? "2px solid var(--marigold)" : "2px solid transparent" }}>
+              <div style={{ aspectRatio: "3/4", position: "relative", background: "#141018" }}>
+                <img src={imgSrc(l)} alt={"You wearing " + l.garmentName} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                <button className="ph-btn"
+                  onClick={async () => { await setLookFavorite(l.id, !l.favorite); refresh(); }}
+                  style={{ position: "absolute", top: 8, right: 8, background: "rgba(20,16,24,.65)", color: l.favorite ? "var(--marigold)" : "#fff", fontSize: 16, padding: "6px 10px", borderRadius: 18 }}>
+                  {l.favorite ? "♥" : "♡"}
+                </button>
+              </div>
+              <div style={{ padding: "9px 11px 11px" }}>
+                <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.garmentName}</div>
+                <div style={{ fontSize: 12, color: "var(--marigold)", fontWeight: 700 }}>{npr(l.price)}</div>
+                {l.shopName && <div style={{ fontSize: 10.5, color: "rgba(255,255,255,.4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.shopName}</div>}
+                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                  <button className="ph-btn" onClick={() => shareLook(l).catch(() => {})}
+                    style={{ flex: 1, background: "rgba(255,255,255,.12)", color: "#fff", fontSize: 12, padding: "7px 0" }}>
+                    Share
+                  </button>
+                  <button className="ph-btn"
+                    onClick={async () => { await deleteLook(l.id); refresh(); }}
+                    style={{ background: "transparent", color: "rgba(255,255,255,.4)", fontSize: 12, padding: "7px 10px" }}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -337,13 +486,15 @@ interface TryOnScreenProps {
   setSelected: (g: Garment | null) => void;
   retakePhoto: () => void;
   initialGarment: Garment | null;
+  onLookSaved: () => void;
 }
 
-function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selected, setSelected, retakePhoto, initialGarment }: TryOnScreenProps) {
+function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selected, setSelected, retakePhoto, initialGarment, onLookSaved }: TryOnScreenProps) {
   const [phase, setPhase] = useState<"idle" | "generating" | "result" | "preview">("idle");
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [interested, setInterested] = useState(false);
+  const [lookState, setLookState] = useState<"idle" | "saving" | "saved">("idle");
   const [overlay, setOverlay] = useState({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
   const stageRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ rect: DOMRect } | null>(null);
@@ -355,6 +506,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     setSelected(garment);
     setNotice("");
     setResultImage(null);
+    setLookState("idle");
     setPhase("generating");
     setOverlay({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
     try {
@@ -449,6 +601,20 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
               <button className="ph-btn" onClick={() => setInterested(true)}
                 style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "10px 18px", fontSize: 14, borderRadius: 22, boxShadow: "0 4px 14px rgba(196,37,97,.35)" }}>
                 🙋 I want this
+              </button>
+              <button className="ph-btn" disabled={lookState !== "idle"}
+                onClick={async () => {
+                  if (!resultImage) return;
+                  setLookState("saving");
+                  const saved = await saveLook({
+                    garmentId: selected.id, garmentName: selected.name,
+                    price: selected.price, shopName: shop.name, imageUrl: resultImage,
+                  });
+                  if (saved) { setLookState("saved"); onLookSaved(); }
+                  else setLookState("idle");
+                }}
+                style={{ background: lookState === "saved" ? "rgba(255,255,255,.12)" : "rgba(255,255,255,.14)", color: lookState === "saved" ? "var(--marigold)" : "#fff", padding: "10px 18px", fontSize: 14, borderRadius: 22 }}>
+                {lookState === "saved" ? "♥ Saved" : lookState === "saving" ? "Saving…" : "♡ Save look"}
               </button>
               <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>✨ AI try-on · ask staff to see it in person</span>
             </div>
