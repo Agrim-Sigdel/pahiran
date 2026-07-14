@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 import QRCode from "qrcode";
 import { CATEGORIES, SIZES, npr } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
-import type { Garment, Shop, TryOnStat } from "@/lib/types";
+import Activity from "@/components/Analytics";
+import type { ErrorLog, Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 interface DashboardProps {
   shop: Shop;
@@ -15,7 +16,10 @@ interface DashboardProps {
   editGarment: (g: Garment) => void;
   removeGarment: (id: string) => void;
   toggleStock: (id: string) => void;
-  stats: TryOnStat[];
+  events: TryOnEvent[];
+  leads: Lead[];
+  errors: ErrorLog[];
+  onLeadHandled: (id: string, handled: boolean) => void;
   loading: boolean;
   launchKiosk: () => void;
   signOut: (() => void) | null;
@@ -23,7 +27,7 @@ interface DashboardProps {
 
 export default function Dashboard({
   shop, updateShop, changeSlug, catalog, addGarment, editGarment, removeGarment,
-  toggleStock, stats, loading, launchKiosk, signOut,
+  toggleStock, events, leads, errors, onLeadHandled, loading, launchKiosk, signOut,
 }: DashboardProps) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Garment | null>(null);
@@ -89,8 +93,10 @@ export default function Dashboard({
         {shop.slug && <KioskLink url={kioskUrl} slug={shop.slug} changeSlug={changeSlug} />}
       </div>
 
-      {/* try-on analytics */}
-      {stats.length > 0 && <MostTried stats={stats} catalog={catalog} />}
+      {/* activity: stats, chart, leads, history, errors */}
+      {!loading && (
+        <Activity events={events} catalog={catalog} leads={leads} errors={errors} onLeadHandled={onLeadHandled} />
+      )}
 
       {/* catalog header row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "26px 0 16px", flexWrap: "wrap", gap: 12 }}>
@@ -252,35 +258,6 @@ function KioskLink({ url, slug, changeSlug }: {
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function MostTried({ stats, catalog }: { stats: TryOnStat[]; catalog: Garment[] }) {
-  const byId = useMemo(() => new Map(catalog.map((g) => [g.id, g])), [catalog]);
-  const rows = stats.map((s) => ({ ...s, garment: byId.get(s.garmentId) })).filter((r) => r.garment).slice(0, 5);
-  if (rows.length === 0) return null;
-  const max = rows[0].count;
-  return (
-    <div style={{ margin: "26px 0 0", padding: "18px 20px", background: "#fff", border: "1px solid var(--line)", borderRadius: 16 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
-        <span className="ph-display" style={{ fontSize: 19 }}>Most-tried items</span>
-        <span style={{ fontSize: 12, color: "var(--mut)" }}>what shoppers try on at the kiosk</span>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {rows.map((r) => (
-          <div key={r.garmentId} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img src={r.garment!.image} alt="" style={{ width: 34, height: 44, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.garment!.name}</div>
-              <div style={{ height: 6, borderRadius: 4, background: "var(--cream)", marginTop: 4, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: Math.max(6, (r.count / max) * 100) + "%", borderRadius: 4, background: "linear-gradient(90deg, var(--rani), var(--marigold))" }} />
-              </div>
-            </div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--rani)", flexShrink: 0 }}>{r.count}×</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

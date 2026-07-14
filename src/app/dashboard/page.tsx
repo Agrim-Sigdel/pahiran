@@ -7,16 +7,19 @@ import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import {
   loadShop, saveShop, loadCatalog, addGarment as persistGarment,
   updateGarment as persistGarmentUpdate, removeGarment as unpersistGarment,
-  setGarmentStock, getTryOnStats, updateShopSlug,
+  setGarmentStock, getTryOnEvents, getLeads, setLeadHandled, getErrorLogs,
+  updateShopSlug,
 } from "@/lib/storage";
 import { reportError } from "@/lib/logging";
-import type { Garment, Shop, TryOnStat } from "@/lib/types";
+import type { ErrorLog, Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
   const [shop, setShop] = useState<Shop>({ id: null, slug: null, name: "", area: "" });
   const [catalog, setCatalog] = useState<Garment[]>([]);
-  const [stats, setStats] = useState<TryOnStat[]>([]);
+  const [events, setEvents] = useState<TryOnEvent[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [errors, setErrors] = useState<ErrorLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,16 +32,18 @@ export default function DashboardPage() {
         }
       }
       const s = await loadShop();
-      if (s) {
-        setShop(s);
-        const [c, st] = await Promise.all([loadCatalog(s.id), getTryOnStats(s.id)]);
-        setCatalog(c);
-        setStats(st);
-      } else {
-        const [c, st] = await Promise.all([loadCatalog(null), getTryOnStats(null)]);
-        setCatalog(c);
-        setStats(st);
-      }
+      if (s) setShop(s);
+      const shopId = s?.id ?? null;
+      const [c, ev, ld, er] = await Promise.all([
+        loadCatalog(shopId),
+        getTryOnEvents(shopId),
+        getLeads(shopId),
+        getErrorLogs(shopId),
+      ]);
+      setCatalog(c);
+      setEvents(ev);
+      setLeads(ld);
+      setErrors(er);
       setLoading(false);
     })();
   }, [router]);
@@ -93,6 +98,11 @@ export default function DashboardPage() {
 
   const updateShop = useCallback((s: Shop) => { setShop(s); saveShop(s); }, []);
 
+  const handleLead = async (id: string, handled: boolean) => {
+    setLeads((ls) => ls.map((l) => (l.id === id ? { ...l, handled } : l)));
+    try { await setLeadHandled(id, handled); } catch {}
+  };
+
   const signOut = isSupabaseConfigured()
     ? async () => { await supabase().auth.signOut(); router.replace("/login"); }
     : null;
@@ -102,7 +112,8 @@ export default function DashboardPage() {
       shop={shop} updateShop={updateShop} changeSlug={shop.slug ? changeSlug : null}
       catalog={catalog} addGarment={addGarment} editGarment={editGarment}
       removeGarment={removeGarment}
-      toggleStock={toggleStock} stats={stats} loading={loading}
+      toggleStock={toggleStock} loading={loading}
+      events={events} leads={leads} errors={errors} onLeadHandled={handleLead}
       launchKiosk={() => router.push(shop.slug ? "/k/" + shop.slug : "/kiosk")}
       signOut={signOut}
     />

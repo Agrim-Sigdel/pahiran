@@ -38,6 +38,12 @@ _Last updated: 2026-07-14 · Companion to [PRODUCT_PLAN.md](./PRODUCT_PLAN.md)_
   tables when the service role key is set — survives restarts, works across serverless
   instances (in-memory fallback otherwise)
 - Consent screen + "photo never saved" policy in the kiosk UI
+- Garment editing (name/category/price/sizes/photo), custom kiosk slug, error
+  monitoring (`error_logs` + `/api/log`, failures logged with context)
+- **Phase B vendor analytics**: activity dashboard (stat tiles, 30-day daily
+  chart, per-garment history table, CSV export), anonymous per-session ids on
+  try-on events, **leads inbox** ("I want this" button on the kiosk result →
+  name/phone/size land in the vendor dashboard), error-log viewer
 
 ## ❌ What we don't have
 

@@ -1,3 +1,19 @@
+/* Anonymous per-kiosk-session id: distinguishes 12 shoppers from one shopper
+   trying 12 pieces. Rotates when the tab/session ends; carries no identity. */
+export function getKioskSessionId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    let id = sessionStorage.getItem("pahiran:session");
+    if (!id) {
+      id = crypto.randomUUID();
+      sessionStorage.setItem("pahiran:session", id);
+    }
+    return id;
+  } catch {
+    return null;
+  }
+}
+
 /* Client → our own /api/tryon proxy. The fal key never reaches the browser.
    shopId/garmentId ride along so the server can cache + log analytics. */
 export async function runTryOn(
@@ -15,6 +31,7 @@ export async function runTryOn(
       category,
       shopId: ids?.shopId || null,
       garmentId: ids?.garmentId || null,
+      sessionId: getKioskSessionId(),
     }),
   });
   const data = await res.json().catch(() => ({}));

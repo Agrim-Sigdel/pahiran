@@ -20,9 +20,28 @@ export interface Garment {
   stitchedToOrder: boolean;
 }
 
-export interface TryOnStat {
-  garmentId: string;
-  count: number;
+export interface TryOnEvent {
+  garmentId: string | null;
+  cached: boolean;
+  sessionId: string | null;
+  createdAt: string; // ISO timestamp
+}
+
+export interface Lead {
+  id: string;
+  garmentId: string | null;
+  name: string;
+  phone: string;
+  size: string;
+  handled: boolean;
+  createdAt: string;
+}
+
+export interface ErrorLog {
+  id: string;
+  source: string;
+  message: string;
+  createdAt: string;
 }
 
 /* Raw Supabase rows */

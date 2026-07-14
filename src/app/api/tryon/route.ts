@@ -97,10 +97,13 @@ async function logEvent(
   sb: SupabaseClient | null,
   shopId: string | null,
   garmentId: string | null,
-  cached: boolean
+  cached: boolean,
+  sessionId: string | null
 ): Promise<void> {
   if (!sb || !garmentId) return;
-  await sb.from("tryon_events").insert({ shop_id: shopId, garment_id: garmentId, cached });
+  await sb
+    .from("tryon_events")
+    .insert({ shop_id: shopId, garment_id: garmentId, cached, session_id: sessionId });
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -130,6 +133,8 @@ export async function POST(req: Request): Promise<Response> {
   const { personImage, garmentImage, category } = body || {};
   const shopId: string | null = typeof body?.shopId === "string" ? body.shopId : null;
   const garmentId: string | null = typeof body?.garmentId === "string" ? body.garmentId : null;
+  const sessionId: string | null =
+    typeof body?.sessionId === "string" ? body.sessionId.slice(0, 64) : null;
   const garmentIsUrl = typeof garmentImage === "string" && /^https:\/\//.test(garmentImage);
   if (
     !personImage?.startsWith("data:image/") ||
@@ -148,7 +153,7 @@ export async function POST(req: Request): Promise<Response> {
 
   const cachedUrl = await cacheGet(sb, key);
   if (cachedUrl) {
-    await logEvent(sb, shopId, garmentId, true);
+    await logEvent(sb, shopId, garmentId, true, sessionId);
     return Response.json({ url: cachedUrl, cached: true });
   }
 
@@ -195,6 +200,6 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   await cachePut(sb, key, url, shopId, garmentId);
-  await logEvent(sb, shopId, garmentId, false);
+  await logEvent(sb, shopId, garmentId, false, sessionId);
   return Response.json({ url, cached: false });
 }

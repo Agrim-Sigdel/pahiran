@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { npr } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
-import { runTryOn } from "@/lib/tryon";
-import { logLocalTryOn } from "@/lib/storage";
+import { runTryOn, getKioskSessionId } from "@/lib/tryon";
+import { logLocalTryOn, submitLead } from "@/lib/storage";
 import { reportError } from "@/lib/logging";
 import type { Garment, Shop } from "@/lib/types";
 
@@ -242,6 +242,89 @@ function GeneratingOverlay({ garment }: { garment: Garment | null }) {
   );
 }
 
+/* ---------- "I want this" → vendor leads inbox ---------- */
+function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garment; onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [size, setSize] = useState(garment.sizes[0] || "");
+  const [state, setState] = useState<"form" | "sending" | "done" | "error">("form");
+
+  const send = async () => {
+    setState("sending");
+    try {
+      await submitLead(shop, garment, { name: name.trim(), phone: phone.trim(), size });
+      setState("done");
+    } catch {
+      setState("error");
+    }
+  };
+
+  const input: React.CSSProperties = {
+    padding: "12px 13px", borderRadius: 10, border: "1px solid rgba(255,255,255,.2)",
+    background: "rgba(255,255,255,.08)", color: "#fff", fontSize: 15, width: "100%",
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(20,16,24,.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="fade-up"
+        style={{ background: "var(--plum)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 20, width: 380, maxWidth: "100%", padding: 24, textAlign: "center", color: "#fff" }}>
+        {state === "done" ? (
+          <>
+            <div style={{ fontSize: 34, marginBottom: 10 }}>🎉</div>
+            <div className="ph-display" style={{ fontSize: 22, marginBottom: 8 }}>The shop knows!</div>
+            <p style={{ color: "rgba(255,255,255,.65)", fontSize: 14, margin: "0 0 20px" }}>
+              {garment.name}{size ? " · size " + size : ""} is saved to the shop's list.
+              Show this screen to staff or keep browsing.
+            </p>
+            <button className="ph-btn" onClick={onClose}
+              style={{ background: "var(--rani)", color: "#fff", padding: "13px 30px", fontSize: 15, borderRadius: 26 }}>
+              Keep browsing
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="ph-display" style={{ fontSize: 22, marginBottom: 4 }}>Tell the shop</div>
+            <p style={{ color: "rgba(255,255,255,.6)", fontSize: 13, margin: "0 0 16px" }}>
+              {garment.name} · {npr(garment.price)} — name and number are optional.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, textAlign: "left" }}>
+              {garment.sizes.length > 0 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {garment.sizes.map((s) => (
+                    <button key={s} className="ph-btn" onClick={() => setSize(s)}
+                      style={{ padding: "8px 14px", fontSize: 13, borderRadius: 18, background: size === s ? "var(--marigold)" : "rgba(255,255,255,.1)", color: size === s ? "var(--ink)" : "rgba(255,255,255,.8)" }}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input style={input} placeholder="Your name (optional)" value={name} maxLength={80}
+                onChange={(e) => setName(e.target.value)} />
+              <input style={input} placeholder="Phone (optional)" value={phone} maxLength={30} inputMode="tel"
+                onChange={(e) => setPhone(e.target.value)} />
+            </div>
+            {state === "error" && (
+              <div style={{ fontSize: 12, color: "var(--marigold)", marginTop: 10 }}>
+                Could not send — please tell the staff directly.
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+              <button className="ph-btn" onClick={onClose}
+                style={{ flex: 1, background: "rgba(255,255,255,.1)", color: "#fff", padding: "13px", fontSize: 14 }}>
+                Cancel
+              </button>
+              <button className="ph-btn" disabled={state === "sending"} onClick={send}
+                style={{ flex: 2, background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "13px", fontSize: 15, opacity: state === "sending" ? 0.6 : 1 }}>
+                {state === "sending" ? "Sending…" : "🙋 I want this"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- try-on screen: photo stage + garment rail ---------- */
 interface TryOnScreenProps {
   photo: string;
@@ -260,6 +343,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
   const [phase, setPhase] = useState<"idle" | "generating" | "result" | "preview">("idle");
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [interested, setInterested] = useState(false);
   const [overlay, setOverlay] = useState({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
   const stageRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ rect: DOMRect } | null>(null);
@@ -278,7 +362,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
         shopId: shop.id, garmentId: garment.id,
       });
       if (seq !== requestSeq.current) return;
-      logLocalTryOn(garment.id); // no-op in Supabase mode (server logs it)
+      logLocalTryOn(garment.id, getKioskSessionId()); // no-op in Supabase mode (server logs it)
       setResultImage(url);
       setPhase("result");
     } catch (e) {
@@ -362,8 +446,16 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
                   </span>
                 )}
               </div>
+              <button className="ph-btn" onClick={() => setInterested(true)}
+                style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "10px 18px", fontSize: 14, borderRadius: 22, boxShadow: "0 4px 14px rgba(196,37,97,.35)" }}>
+                🙋 I want this
+              </button>
               <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>✨ AI try-on · ask staff to see it in person</span>
             </div>
+          )}
+
+          {interested && selected && (
+            <InterestedModal shop={shop} garment={selected} onClose={() => setInterested(false)} />
           )}
 
           {notice && phase === "preview" && (

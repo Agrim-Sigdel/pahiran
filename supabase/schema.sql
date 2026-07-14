@@ -41,6 +41,19 @@ create table tryon_events (
   shop_id uuid references shops (id) on delete cascade,
   garment_id uuid references garments (id) on delete cascade,
   cached boolean not null default false,
+  session_id text,                    -- anonymous per-kiosk-session id
+  created_at timestamptz not null default now()
+);
+
+-- "I'm interested" leads from the kiosk result screen
+create table leads (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references shops (id) on delete cascade,
+  garment_id uuid references garments (id) on delete set null,
+  name text,
+  phone text,
+  size text,
+  handled boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -64,13 +77,15 @@ create table error_logs (
 create index garments_shop_idx on garments (shop_id);
 create index tryon_results_garment_idx on tryon_results (garment_id);
 create index tryon_events_shop_idx on tryon_events (shop_id, garment_id);
+create index leads_shop_idx on leads (shop_id, handled, created_at desc);
 
 alter table shops enable row level security;
 alter table garments enable row level security;
 alter table tryon_results enable row level security;
 alter table tryon_events enable row level security;
 alter table rate_limits enable row level security; -- no policies: service role only
-alter table error_logs enable row level security;  -- no policies: service role only
+alter table error_logs enable row level security;  -- written by service role only
+alter table leads enable row level security;       -- written by service role only
 
 -- Vendors manage their own shop + catalog
 create policy "own shop" on shops
@@ -89,6 +104,17 @@ create policy "public garments read" on garments for select using (true);
 create policy "own tryon cache" on tryon_results
   for select using (shop_id in (select id from shops where owner = auth.uid()));
 create policy "own tryon analytics" on tryon_events
+  for select using (shop_id in (select id from shops where owner = auth.uid()));
+
+-- Leads: written by the server; vendors read + mark handled
+create policy "own leads read" on leads
+  for select using (shop_id in (select id from shops where owner = auth.uid()));
+create policy "own leads update" on leads
+  for update using (shop_id in (select id from shops where owner = auth.uid()))
+  with check (shop_id in (select id from shops where owner = auth.uid()));
+
+-- Vendors can read their own error logs in the dashboard
+create policy "own errors read" on error_logs
   for select using (shop_id in (select id from shops where owner = auth.uid()));
 
 -- Garment photo storage: public-read bucket, vendors write under their shop id

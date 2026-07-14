@@ -9,7 +9,9 @@ import { dataURLToBlob } from "@/lib/images";
 import {
   type Garment,
   type Shop,
-  type TryOnStat,
+  type TryOnEvent,
+  type Lead,
+  type ErrorLog,
   type GarmentRow,
   type ShopRow,
   rowToGarment,
@@ -239,25 +241,28 @@ export async function setGarmentStock(garment: Garment, inStock: boolean): Promi
   await supabase().from("garments").update({ in_stock: inStock }).eq("id", garment.id);
 }
 
-/* ---------- try-on analytics ("most-tried items") ---------- */
+/* ---------- try-on history & analytics ---------- */
 
 /** Local-mode only: server logs events itself when Supabase is configured. */
-export function logLocalTryOn(garmentId: string): void {
+export function logLocalTryOn(garmentId: string, sessionId: string | null): void {
   if (isSupabaseConfigured()) return;
   try {
-    const stats = JSON.parse(lsGet("stats:tryons") || "{}");
-    stats[garmentId] = (stats[garmentId] || 0) + 1;
-    lsSet("stats:tryons", JSON.stringify(stats));
+    const events = JSON.parse(lsGet("events:tryons") || "[]");
+    events.push({ garmentId, sessionId, cached: false, createdAt: new Date().toISOString() });
+    lsSet("events:tryons", JSON.stringify(events.slice(-5000)));
   } catch {}
 }
 
-export async function getTryOnStats(shopId?: string | null): Promise<TryOnStat[]> {
+/** Try-on events for the vendor's history/analytics view, newest last. */
+export async function getTryOnEvents(
+  shopId: string | null,
+  sinceDays = 90
+): Promise<TryOnEvent[]> {
+  const since = new Date(Date.now() - sinceDays * 24 * 3600 * 1000).toISOString();
   if (!isSupabaseConfigured()) {
     try {
-      const stats: Record<string, number> = JSON.parse(lsGet("stats:tryons") || "{}");
-      return Object.entries(stats)
-        .map(([garmentId, count]) => ({ garmentId, count }))
-        .sort((a, b) => b.count - a.count);
+      const events: TryOnEvent[] = JSON.parse(lsGet("events:tryons") || "[]");
+      return events.filter((e) => e.createdAt >= since);
     } catch {
       return [];
     }
@@ -265,14 +270,103 @@ export async function getTryOnStats(shopId?: string | null): Promise<TryOnStat[]
   if (!shopId) return [];
   const { data } = await supabase()
     .from("tryon_events")
-    .select("garment_id")
+    .select("garment_id, cached, session_id, created_at")
     .eq("shop_id", shopId)
+    .gte("created_at", since)
+    .order("created_at", { ascending: true })
     .limit(10000);
-  const counts = new Map<string, number>();
-  for (const row of (data as { garment_id: string | null }[]) || []) {
-    if (row.garment_id) counts.set(row.garment_id, (counts.get(row.garment_id) || 0) + 1);
+  return (
+    (data as { garment_id: string | null; cached: boolean; session_id: string | null; created_at: string }[]) || []
+  ).map((r) => ({
+    garmentId: r.garment_id,
+    cached: r.cached,
+    sessionId: r.session_id,
+    createdAt: r.created_at,
+  }));
+}
+
+/* ---------- leads ("I'm interested") ---------- */
+
+/** Called from the kiosk (shopper side). Supabase mode goes through /api/lead
+    (service role insert); local mode writes to this browser's storage. */
+export async function submitLead(
+  shop: Shop,
+  garment: Garment,
+  info: { name: string; phone: string; size: string }
+): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    const leads = JSON.parse(lsGet("leads") || "[]");
+    leads.unshift({
+      id: Date.now().toString(36),
+      garmentId: garment.id,
+      name: info.name,
+      phone: info.phone,
+      size: info.size,
+      handled: false,
+      createdAt: new Date().toISOString(),
+    });
+    lsSet("leads", JSON.stringify(leads.slice(0, 500)));
+    return;
   }
-  return Array.from(counts, ([garmentId, count]) => ({ garmentId, count })).sort(
-    (a, b) => b.count - a.count
-  );
+  const res = await fetch("/api/lead", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ shopId: shop.id, garmentId: garment.id, ...info }),
+  });
+  if (!res.ok) throw new Error("Could not send — please tell the staff directly.");
+}
+
+export async function getLeads(shopId: string | null): Promise<Lead[]> {
+  if (!isSupabaseConfigured()) {
+    try {
+      return JSON.parse(lsGet("leads") || "[]");
+    } catch {
+      return [];
+    }
+  }
+  if (!shopId) return [];
+  const { data } = await supabase()
+    .from("leads")
+    .select("id, garment_id, name, phone, size, handled, created_at")
+    .eq("shop_id", shopId)
+    .order("created_at", { ascending: false })
+    .limit(500);
+  return ((data as any[]) || []).map((r) => ({
+    id: r.id,
+    garmentId: r.garment_id,
+    name: r.name || "",
+    phone: r.phone || "",
+    size: r.size || "",
+    handled: r.handled,
+    createdAt: r.created_at,
+  }));
+}
+
+export async function setLeadHandled(leadId: string, handled: boolean): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    try {
+      const leads: Lead[] = JSON.parse(lsGet("leads") || "[]");
+      lsSet("leads", JSON.stringify(leads.map((l) => (l.id === leadId ? { ...l, handled } : l))));
+    } catch {}
+    return;
+  }
+  await supabase().from("leads").update({ handled }).eq("id", leadId);
+}
+
+/* ---------- error logs (vendor debugging view) ---------- */
+
+export async function getErrorLogs(shopId: string | null): Promise<ErrorLog[]> {
+  if (!isSupabaseConfigured() || !shopId) return [];
+  const { data } = await supabase()
+    .from("error_logs")
+    .select("id, source, message, created_at")
+    .eq("shop_id", shopId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  return ((data as any[]) || []).map((r) => ({
+    id: r.id,
+    source: r.source,
+    message: r.message,
+    createdAt: r.created_at,
+  }));
 }
