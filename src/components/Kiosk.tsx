@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { npr } from "@/lib/constants";
+import { npr, waLink } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
 import { runTryOn, getKioskSessionId } from "@/lib/tryon";
 import { logLocalTryOn, submitLead } from "@/lib/storage";
@@ -12,13 +12,12 @@ import {
   lookImageURL, shareLook, type SavedLook,
 } from "@/lib/looks";
 import { LangContext, STRINGS, useLangState, useT } from "@/lib/i18n";
-import { waLink } from "@/lib/constants";
 import type { Garment, Shop } from "@/lib/types";
 
-/* Kiosk — full-screen, dark, touch-first shopper flow:
-   attract → consent → capture (camera or upload) → try on (AI via /api/tryon,
-   manual positioning preview as fallback). Also serves /k/[slug] on shoppers'
-   own phones; ?g=<garmentId> (from a hanger QR) jumps straight to that piece. */
+/* Kiosk — light, touch-first shopper flow:
+   attract (saved-photo fast path) → capture (consent inline) → try on.
+   Serves /k/[slug] on shoppers' phones; ?g=<garmentId> (hanger QR /
+   storefront "Try on") jumps straight to that piece. */
 
 interface KioskProps {
   shop: Shop;
@@ -27,8 +26,14 @@ interface KioskProps {
   initialGarmentId?: string | null;
 }
 
+const barBtn: React.CSSProperties = {
+  padding: "8px 13px", fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase",
+  fontWeight: 500, color: "var(--forest-deep)", border: "1px solid var(--line)",
+  borderRadius: "var(--radius-btn)", background: "var(--cream)",
+};
+
 export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskProps) {
-  const [step, setStep] = useState<"attract" | "consent" | "capture" | "tryon">("attract");
+  const [step, setStep] = useState<"attract" | "capture" | "tryon">("attract");
   const [photo, setPhoto] = useState<string | null>(null);
   const [selected, setSelected] = useState<Garment | null>(null);
   const [catFilter, setCatFilter] = useState("All");
@@ -56,31 +61,29 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
 
   return (
     <LangContext.Provider value={lang}>
-    <div style={{ position: "fixed", inset: 0, background: "radial-gradient(120% 100% at 50% 0%, #3A2140 0%, var(--ink) 55%)", color: "#fff", display: "flex", flexDirection: "column", zIndex: 40 }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--sage)", color: "var(--ink)", display: "flex", flexDirection: "column", zIndex: 40 }}>
       {/* top bar */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", gap: 8, flexWrap: "wrap", background: "var(--cream)", borderBottom: "1px solid var(--line)" }}>
         <div>
-          <span className="ph-display" style={{ fontSize: 20 }}>{shop.name || "Pahiran"}</span>
-          {shop.area && <span style={{ color: "rgba(255,255,255,.45)", fontSize: 13, marginLeft: 10 }}>{shop.area}</span>}
+          <span className="ph-display" style={{ fontSize: 19, color: "var(--forest-deep)" }}>{shop.name || "EasyFitCheck"}</span>
+          {shop.area && <span style={{ color: "var(--mut)", fontSize: 12, marginLeft: 8 }}>{shop.area}</span>}
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <button className="ph-btn" onClick={toggleLang}
-            style={{ background: "rgba(255,255,255,.1)", color: "#fff", padding: "9px 16px", fontSize: 13 }}>
-            {t.switchLang}
-          </button>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <button className="ph-btn" onClick={toggleLang} style={barBtn}>{t.switchLang}</button>
           {looksCount > 0 && (
             <button className="ph-btn" onClick={() => setShowLooks(true)}
-              style={{ background: "rgba(255,255,255,.1)", color: "var(--marigold)", padding: "9px 16px", fontSize: 13 }}>
+              style={{ ...barBtn, color: "var(--camel)", borderColor: "var(--camel)" }}>
               {t.myLooksBtn(looksCount)}
             </button>
           )}
           {step !== "attract" && (
-            <button className="ph-btn" onClick={reset} style={{ background: "rgba(255,255,255,.1)", color: "#fff", padding: "9px 16px", fontSize: 13 }}>
+            <button className="ph-btn" onClick={reset} style={{ ...barBtn, border: "none", color: "var(--mut)" }}>
               {t.startOver}
             </button>
           )}
-          <button className="ph-btn" onClick={exit} style={{ background: "transparent", color: "rgba(255,255,255,.4)", padding: "9px 12px", fontSize: 13 }}>
-            {t.exitKiosk}
+          <button className="ph-btn" onClick={exit} aria-label={t.exitKiosk}
+            style={{ ...barBtn, border: "none", color: "var(--mut)" }}>
+            ✕
           </button>
         </div>
       </div>
@@ -88,10 +91,8 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
       {showLooks && <LooksGallery onClose={() => setShowLooks(false)} onCountChange={setLooksCount} />}
 
       {step === "attract" && (
-        <AttractScreen count={catalog.length} highlight={initialGarment} start={() => setStep("consent")} />
-      )}
-      {step === "consent" && (
-        <ConsentScreen agree={() => setStep("capture")} back={reset}
+        <AttractScreen count={catalog.length} highlight={initialGarment}
+          start={() => setStep("capture")}
           savedPhoto={savedPhoto}
           useSaved={() => { setPhoto(savedPhoto); setStep("tryon"); }}
           forgetSaved={() => { forgetPhoto(); setSavedPhoto(null); }} />
@@ -108,80 +109,52 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
   );
 }
 
-function AttractScreen({ count, highlight, start }: { count: number; highlight: Garment | null; start: () => void }) {
-  const t = useT();
-  return (
-    <div className="fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 24 }}>
-      <div style={{ fontSize: 13, letterSpacing: ".28em", textTransform: "uppercase", color: "var(--marigold)", marginBottom: 18 }}>
-        {t.virtualTrialRoom}
-      </div>
-      <div className="ph-display" style={{ fontSize: "clamp(34px, 6vw, 58px)", lineHeight: 1.15, maxWidth: 640 }}>
-        {t.headline1}<br />{t.headline2}
-      </div>
-      {highlight ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "20px 0 30px", background: "rgba(255,255,255,.08)", borderRadius: 16, padding: "10px 18px 10px 10px" }}>
-          <img src={highlight.image} alt={highlight.name} style={{ width: 52, height: 68, objectFit: "cover", borderRadius: 10 }} />
-          <div style={{ textAlign: "left" }}>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>{highlight.name}</div>
-            <div style={{ color: "var(--marigold)", fontWeight: 700, fontSize: 14 }}>{npr(highlight.price)}</div>
-          </div>
-        </div>
-      ) : (
-        <p style={{ color: "rgba(255,255,255,.55)", fontSize: 17, maxWidth: 440, margin: "18px 0 34px" }}>
-          {t.attractSub(count)}
-        </p>
-      )}
-      <button className="ph-btn" onClick={start}
-        style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "20px 46px", fontSize: 20, borderRadius: 40, boxShadow: "0 10px 34px rgba(196,37,97,.45)" }}>
-        {highlight ? t.seeItOnYou : t.tapToBegin}
-      </button>
-    </div>
-  );
-}
-
-/* ---------- consent: shown once before any photo is taken ---------- */
-function ConsentScreen({ agree, back, savedPhoto, useSaved, forgetSaved }: {
-  agree: () => void; back: () => void;
+function AttractScreen({ count, highlight, start, savedPhoto, useSaved, forgetSaved }: {
+  count: number; highlight: Garment | null; start: () => void;
   savedPhoto: string | null; useSaved: () => void; forgetSaved: () => void;
 }) {
   const t = useT();
   return (
-    <div className="fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", overflowY: "auto" }}>
-      <div style={{ fontSize: 30, marginBottom: 14 }}>🔒</div>
-      <div className="ph-display" style={{ fontSize: "clamp(22px, 4vw, 30px)", marginBottom: 16 }}>{t.consentTitle}</div>
-      <div style={{ maxWidth: 460, display: "flex", flexDirection: "column", gap: 10, textAlign: "left", background: "rgba(255,255,255,.06)", borderRadius: 18, padding: "18px 22px", fontSize: 14.5, color: "rgba(255,255,255,.75)", lineHeight: 1.55 }}>
-        <div>• {t.consentB1}</div>
-        <div>• {t.consentB2}</div>
-        <div>• {t.consentB3}</div>
-        <div>• {t.consentB4}</div>
+    <div className="fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "28px 24px", overflowY: "auto" }}>
+      <div className="kicker" style={{ marginBottom: 16 }}>{t.virtualTrialRoom}</div>
+      <div className="ph-display" style={{ fontWeight: 400, fontSize: "clamp(28px, 6vw, 40px)", lineHeight: 1.18, color: "var(--forest-deep)", textTransform: "uppercase", letterSpacing: ".08em" }}>
+        {t.headline1}<br />{t.headline2}
       </div>
-      <div style={{ display: "flex", gap: 12, marginTop: 26, flexWrap: "wrap", justifyContent: "center" }}>
-        <button className="ph-btn" onClick={back} style={{ background: "rgba(255,255,255,.1)", color: "#fff", padding: "15px 24px", fontSize: 15, borderRadius: 30 }}>
-          {t.notNow}
-        </button>
-        {savedPhoto && (
-          <button className="ph-btn" onClick={useSaved}
-            style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(255,255,255,.12)", color: "#fff", padding: "10px 22px 10px 10px", fontSize: 15, borderRadius: 30 }}>
-            <img src={savedPhoto} alt="" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover" }} />
-            {t.useLastPhoto}
-          </button>
-        )}
-        <button className="ph-btn" onClick={agree}
-          style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "15px 34px", fontSize: 16, borderRadius: 30, boxShadow: "0 8px 26px rgba(196,37,97,.4)" }}>
-          {t.agreeTakePhoto}
-        </button>
-      </div>
+      {highlight ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "18px 0 26px", background: "var(--cream)", border: "1px solid var(--line)", borderRadius: 8, padding: "10px 18px 10px 10px" }}>
+          <img src={highlight.image} alt={highlight.name} style={{ width: 50, height: 66, objectFit: "cover", borderRadius: 4 }} />
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontWeight: 500, fontSize: 14 }}>{highlight.name}</div>
+            <div style={{ color: "var(--camel)", fontWeight: 500, fontSize: 14 }}>{npr(highlight.price)}</div>
+          </div>
+        </div>
+      ) : (
+        <p style={{ color: "var(--mut)", fontSize: 15, fontWeight: 300, maxWidth: 400, margin: "16px 0 28px", lineHeight: 1.7 }}>
+          {t.attractSub(count)}
+        </p>
+      )}
+      <button className="ph-btn btn-solid" onClick={start} style={{ padding: "17px 40px", fontSize: 14 }}>
+        {highlight ? t.seeItOnYou : t.tapToBegin}
+      </button>
       {savedPhoto && (
-        <button className="ph-btn" onClick={forgetSaved}
-          style={{ background: "transparent", color: "rgba(255,255,255,.4)", fontSize: 12, marginTop: 14, padding: "4px 8px" }}>
-          {t.forgetSavedPhoto}
-        </button>
+        <>
+          <div style={{ height: 14 }} />
+          <button className="ph-btn" onClick={useSaved}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 20px 10px 10px", fontSize: 14, border: "1px solid var(--line)", borderRadius: 30, background: "var(--cream)", color: "var(--forest-deep)", fontWeight: 500 }}>
+            <img src={savedPhoto} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover" }} />
+            {t.continueSaved}
+          </button>
+          <button className="ph-btn" onClick={forgetSaved}
+            style={{ color: "var(--mut)", fontSize: 12, marginTop: 14, textDecoration: "underline", textUnderlineOffset: 3 }}>
+            {t.forgetSavedPhoto}
+          </button>
+        </>
       )}
     </div>
   );
 }
 
-/* ---------- photo capture: camera with upload fallback ---------- */
+/* ---------- capture: consent lives here, above the shutter ---------- */
 function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boolean) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -195,13 +168,13 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boole
     (async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1280 } } });
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+        if (cancelled) { stream.getTracks().forEach((tr) => tr.stop()); return; }
         streamRef.current = stream;
         if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
         setCamState("live");
       } catch { if (!cancelled) setCamState("denied"); }
     })();
-    return () => { cancelled = true; streamRef.current?.getTracks().forEach((t) => t.stop()); };
+    return () => { cancelled = true; streamRef.current?.getTracks().forEach((tr) => tr.stop()); };
   }, []);
 
   const snap = () => {
@@ -212,7 +185,7 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boole
     const ctx = c.getContext("2d")!;
     ctx.translate(c.width, 0); ctx.scale(-1, 1); // un-mirror
     ctx.drawImage(v, 0, 0);
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current?.getTracks().forEach((tr) => tr.stop());
     onPhoto(c.toDataURL("image/jpeg", 0.85), remember);
   };
 
@@ -223,54 +196,57 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boole
   };
 
   return (
-    <div className="fade-up" style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: "6px 20px 30px", gap: 18 }}>
-      <div className="ph-display" style={{ fontSize: "clamp(19px, 3vw, 26px)", textAlign: "center" }}>{t.standBack}</div>
+    <div className="fade-up" style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: "14px 20px 30px" }}>
+      <div className="ph-display" style={{ fontWeight: 400, fontSize: "clamp(19px, 3vw, 24px)", textAlign: "center", color: "var(--forest-deep)", textTransform: "uppercase", letterSpacing: ".08em" }}>
+        {t.standBack}
+      </div>
 
       <div
         onClick={camState === "denied" ? () => fileRef.current?.click() : undefined}
-        style={{ height: "min(50vh, 520px)", maxWidth: "92vw", aspectRatio: "3/4", borderRadius: 24, overflow: "hidden", background: "#141018", border: "1px solid rgba(255,255,255,.12)", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: camState === "denied" ? "pointer" : "default" }}>
+        style={{ height: "min(44vh, 420px)", maxWidth: "88vw", aspectRatio: "3/4", borderRadius: 8, overflow: "hidden", background: "var(--forest-deep)", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, margin: "14px 0 16px", cursor: camState === "denied" ? "pointer" : "default" }}>
         {camState !== "denied" ? (
           <video ref={videoRef} playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" }} />
         ) : (
-          <div style={{ textAlign: "center", color: "rgba(255,255,255,.55)", padding: 24, fontSize: 15 }}>
-            <div style={{ fontSize: 30, marginBottom: 10 }}>📷</div>
+          <div style={{ textAlign: "center", color: "rgba(255,255,255,.65)", padding: 24, fontSize: 14, lineHeight: 1.6 }}>
             {t.cameraUnavailable}<br />
-            <span style={{ color: "var(--marigold)", fontWeight: 600 }}>{t.tapAnywhere}</span><br />{t.uploadInstead}
+            <span style={{ color: "var(--camel)", fontWeight: 600 }}>{t.tapAnywhere}</span><br />{t.uploadInstead}
           </div>
         )}
         {camState === "starting" && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.5)", fontSize: 14 }}>
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.55)", fontSize: 13, letterSpacing: ".08em" }}>
             {t.startingCamera}
           </div>
         )}
       </div>
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+      <div style={{ maxWidth: 340, textAlign: "left", background: "var(--cream)", border: "1px solid var(--line)", borderRadius: 8, padding: "14px 16px", fontSize: 13, lineHeight: 1.6 }}>
+        <b style={{ color: "var(--forest-deep)" }}>{t.consentTitle}</b> {t.consentBody}
+      </div>
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", margin: "16px 0 12px" }}>
         {camState === "live" && (
-          <button className="ph-btn" onClick={snap}
-            style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "17px 38px", fontSize: 18, borderRadius: 34, boxShadow: "0 8px 26px rgba(196,37,97,.4)" }}>
-            {t.takePhoto}
+          <button className="ph-btn btn-solid" onClick={snap} style={{ padding: "15px 32px", fontSize: 13 }}>
+            {t.agreeTakePhoto}
           </button>
         )}
-        <button className="ph-btn" onClick={() => fileRef.current?.click()}
-          style={{ background: "rgba(255,255,255,.12)", color: "#fff", padding: "17px 28px", fontSize: 16, borderRadius: 34 }}>
-          {t.uploadPhoto}
+        <button className="ph-btn btn-outline" onClick={() => fileRef.current?.click()} style={{ padding: "14px 22px", fontSize: 12 }}>
+          {t.agreeUpload}
         </button>
         <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleUpload(e.target.files?.[0])} />
       </div>
-      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "rgba(255,255,255,.65)", cursor: "pointer" }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--mut)", cursor: "pointer" }}>
         <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}
-          style={{ accentColor: "var(--rani)", width: 16, height: 16 }} />
+          style={{ accentColor: "var(--forest)", width: 16, height: 16 }} />
         {t.rememberPhoto}
       </label>
-      <div style={{ color: "rgba(255,255,255,.35)", fontSize: 12 }}>
+      <div style={{ color: "var(--mut)", fontSize: 12, marginTop: 8 }}>
         {remember ? t.rememberedNote : t.notSavedNote}
       </div>
     </div>
   );
 }
 
-/* ---------- generating overlay: AI scanner sweep ---------- */
+/* ---------- generating overlay: AI scanner sweep (sits on the photo) ---------- */
 const SPARKLES = [
   { top: "14%", left: "18%", size: 16, delay: 0 },
   { top: "26%", left: "74%", size: 12, delay: 0.7 },
@@ -291,22 +267,22 @@ function GeneratingOverlay({ garment }: { garment: Garment | null }) {
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
       {/* scan line — default top hides it when animations are disabled */}
-      <div style={{ position: "absolute", top: "-12%", left: "-6%", width: "112%", height: 3, borderRadius: 3, background: "linear-gradient(90deg, transparent, var(--marigold) 30%, #FFE3AE 50%, var(--marigold) 70%, transparent)", boxShadow: "0 0 18px 4px rgba(242,169,59,.55), 0 0 60px 18px rgba(242,169,59,.25)", animation: "scan 2.8s ease-in-out infinite alternate" }} />
+      <div style={{ position: "absolute", top: "-12%", left: "-6%", width: "112%", height: 3, borderRadius: 3, background: "linear-gradient(90deg, transparent, var(--camel) 30%, #E5D3BC 50%, var(--camel) 70%, transparent)", boxShadow: "0 0 18px 4px rgba(176,137,104,.55), 0 0 60px 18px rgba(176,137,104,.25)", animation: "scan 2.8s ease-in-out infinite alternate" }} />
       {SPARKLES.map((s, i) => (
         <span key={i} style={{ position: "absolute", top: s.top, left: s.left, fontSize: s.size, opacity: 0, animation: `twinkle 2.2s ease-in-out ${s.delay}s infinite` }}>✨</span>
       ))}
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "40px 18px 16px", background: "linear-gradient(transparent, rgba(20,16,24,.9) 55%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "40px 18px 16px", background: "linear-gradient(transparent, rgba(42,61,47,.9) 55%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
         {garment && (
-          <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.1)", borderRadius: 30, padding: "5px 14px 5px 5px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.14)", borderRadius: 30, padding: "5px 14px 5px 5px" }}>
             <img src={garment.image} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", display: "block" }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.85)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{garment.name}</span>
+            <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,.9)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{garment.name}</span>
           </div>
         )}
         <div key={msg} className="fade-up ph-display" style={{ fontSize: 18, color: "#fff" }}>{t.genMessages[msg % t.genMessages.length]}</div>
-        <div style={{ width: "72%", maxWidth: 300, height: 4, borderRadius: 4, background: "rgba(255,255,255,.15)", overflow: "hidden" }}>
-          <div style={{ height: "100%", minWidth: "8%", borderRadius: 4, background: "linear-gradient(90deg, var(--rani), var(--marigold))", animation: "fillUp 28s cubic-bezier(.16,.8,.35,1) forwards" }} />
+        <div style={{ width: "72%", maxWidth: 300, height: 4, borderRadius: 4, background: "rgba(255,255,255,.2)", overflow: "hidden" }}>
+          <div style={{ height: "100%", minWidth: "8%", borderRadius: 4, background: "linear-gradient(90deg, var(--forest), var(--camel))", animation: "fillUp 28s cubic-bezier(.16,.8,.35,1) forwards" }} />
         </div>
-        <div style={{ color: "rgba(255,255,255,.4)", fontSize: 12 }}>{t.genFooter}</div>
+        <div style={{ color: "rgba(255,255,255,.5)", fontSize: 12 }}>{t.genFooter}</div>
       </div>
     </div>
   );
@@ -338,15 +314,13 @@ function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCount
   const sorted = looks ? [...looks].sort((a, b) => Number(b.favorite) - Number(a.favorite)) : [];
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(20,16,24,.96)", zIndex: 55, display: "flex", flexDirection: "column", color: "#fff" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px", flexWrap: "wrap", gap: 10 }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--sage)", zIndex: 55, display: "flex", flexDirection: "column", color: "var(--ink)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", flexWrap: "wrap", gap: 10, background: "var(--cream)", borderBottom: "1px solid var(--line)" }}>
         <div>
-          <span className="ph-display" style={{ fontSize: 22 }}>{t.myLooksTitle}</span>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,.45)", marginLeft: 10 }}>
-            {t.myLooksSub}
-          </span>
+          <span className="ph-display" style={{ fontSize: 20, color: "var(--forest-deep)" }}>{t.myLooksTitle}</span>
+          <span style={{ fontSize: 12, color: "var(--mut)", marginLeft: 10 }}>{t.myLooksSub}</span>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 8 }}>
           {looks && looks.length > 0 && (
             <button className="ph-btn"
               onClick={async () => {
@@ -355,44 +329,44 @@ function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCount
                   refresh();
                 }
               }}
-              style={{ background: "transparent", color: "rgba(255,255,255,.4)", fontSize: 13, padding: "9px 12px" }}>
+              style={{ color: "var(--mut)", fontSize: 12, padding: "9px 12px" }}>
               {t.deleteAll}
             </button>
           )}
-          <button className="ph-btn" onClick={onClose} style={{ background: "rgba(255,255,255,.12)", color: "#fff", padding: "9px 18px", fontSize: 14 }}>
+          <button className="ph-btn" onClick={onClose} style={barBtn}>
             {t.close}
           </button>
         </div>
       </div>
 
       {looks && looks.length === 0 ? (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.5)", padding: 24, textAlign: "center" }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--mut)", padding: 24, textAlign: "center" }}>
           {t.nothingSaved}
         </div>
       ) : (
-        <div style={{ flex: 1, overflowY: "auto", padding: "4px 22px 30px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14, alignContent: "start" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 26px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 14, alignContent: "start" }}>
           {sorted.map((l) => (
-            <div key={l.id} className="fade-up" style={{ background: "rgba(255,255,255,.06)", borderRadius: 16, overflow: "hidden", border: l.favorite ? "2px solid var(--marigold)" : "2px solid transparent" }}>
-              <div style={{ aspectRatio: "3/4", position: "relative", background: "#141018" }}>
+            <div key={l.id} className="fade-up" style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid " + (l.favorite ? "var(--camel)" : "var(--line)") }}>
+              <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--sage-mist)" }}>
                 <img src={imgSrc(l)} alt={"You wearing " + l.garmentName} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                 <button className="ph-btn"
                   onClick={async () => { await setLookFavorite(l.id, !l.favorite); refresh(); }}
-                  style={{ position: "absolute", top: 8, right: 8, background: "rgba(20,16,24,.65)", color: l.favorite ? "var(--marigold)" : "#fff", fontSize: 16, padding: "6px 10px", borderRadius: 18 }}>
+                  style={{ position: "absolute", top: 8, right: 8, background: "var(--cream)", color: l.favorite ? "var(--camel)" : "var(--mut)", fontSize: 15, padding: "5px 9px", borderRadius: 14 }}>
                   {l.favorite ? "♥" : "♡"}
                 </button>
               </div>
-              <div style={{ padding: "9px 11px 11px" }}>
-                <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.garmentName}</div>
-                <div style={{ fontSize: 12, color: "var(--marigold)", fontWeight: 700 }}>{npr(l.price)}</div>
-                {l.shopName && <div style={{ fontSize: 10.5, color: "rgba(255,255,255,.4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.shopName}</div>}
+              <div style={{ padding: "10px 11px 11px", fontSize: 12 }}>
+                <b>{l.garmentName}</b>
+                <div style={{ color: "var(--camel)", fontWeight: 500 }}>{npr(l.price)}</div>
+                {l.shopName && <div style={{ fontSize: 10.5, color: "var(--mut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.shopName}</div>}
                 <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                   <button className="ph-btn" onClick={() => shareLook(l).catch(() => {})}
-                    style={{ flex: 1, background: "rgba(255,255,255,.12)", color: "#fff", fontSize: 12, padding: "7px 0" }}>
+                    style={{ flex: 1, border: "1px solid var(--forest)", color: "var(--forest)", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", padding: "7px 0", fontWeight: 500 }}>
                     {t.share}
                   </button>
                   <button className="ph-btn"
                     onClick={async () => { await deleteLook(l.id); refresh(); }}
-                    style={{ background: "transparent", color: "rgba(255,255,255,.4)", fontSize: 12, padding: "7px 10px" }}>
+                    style={{ color: "var(--mut)", fontSize: 11, padding: "7px 8px" }}>
                     {t.del}
                   </button>
                 </div>
@@ -414,7 +388,7 @@ function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garm
   const [state, setState] = useState<"form" | "sending" | "done" | "error">("form");
   const wa = waLink(
     shop.whatsapp,
-    `Namaste! I tried on "${garment.name}"${size ? " (size " + size + ")" : ""} at ${shop.name || "your shop"} and I want it.`
+    `Namaste! I tried on "${garment.name}"${size ? " (size " + size + ")" : ""} at ${shop.name || "your shop"} with EasyFitCheck and I want it.`
   );
 
   const send = async () => {
@@ -428,46 +402,47 @@ function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garm
   };
 
   const input: React.CSSProperties = {
-    padding: "12px 13px", borderRadius: 10, border: "1px solid rgba(255,255,255,.2)",
-    background: "rgba(255,255,255,.08)", color: "#fff", fontSize: 15, width: "100%",
+    width: "100%", padding: "12px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)",
+    background: "#fff", color: "var(--ink)", fontSize: 15,
   };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(20,16,24,.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(42,61,47,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--plum)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 20, width: 380, maxWidth: "100%", padding: 24, textAlign: "center", color: "#fff" }}>
+        style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-modal)", width: 360, maxWidth: "100%", padding: "26px 24px", textAlign: "center" }}>
         {state === "done" ? (
           <>
-            <div style={{ fontSize: 34, marginBottom: 10 }}>🎉</div>
-            <div className="ph-display" style={{ fontSize: 22, marginBottom: 8 }}>{t.shopKnows}</div>
-            <p style={{ color: "rgba(255,255,255,.65)", fontSize: 14, margin: "0 0 20px" }}>
+            <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 4 }}>{t.shopKnows}</div>
+            <p style={{ color: "var(--mut)", fontSize: 13, margin: "0 0 16px", lineHeight: 1.5 }}>
               {t.shopKnowsDesc(garment.name, size)}
             </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {wa && (
-                <a href={wa} target="_blank" rel="noopener noreferrer" className="ph-btn"
-                  style={{ background: "#25D366", color: "#fff", padding: "13px", fontSize: 15, borderRadius: 26, textDecoration: "none" }}>
-                  {t.chatWhatsApp}
-                </a>
-              )}
-              <button className="ph-btn" onClick={onClose}
-                style={{ background: "var(--rani)", color: "#fff", padding: "13px 30px", fontSize: 15, borderRadius: 26 }}>
-                {t.keepBrowsing}
-              </button>
-            </div>
+            {wa && (
+              <a href={wa} target="_blank" rel="noopener noreferrer" className="ph-btn btn-wa"
+                style={{ display: "block", marginBottom: 10 }}>
+                {t.chatWhatsApp}
+              </a>
+            )}
+            <button className="ph-btn btn-outline" onClick={onClose} style={{ width: "100%" }}>
+              {t.keepBrowsing}
+            </button>
           </>
         ) : (
           <>
-            <div className="ph-display" style={{ fontSize: 22, marginBottom: 4 }}>{t.tellShop}</div>
-            <p style={{ color: "rgba(255,255,255,.6)", fontSize: 13, margin: "0 0 16px" }}>
+            <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 4 }}>{t.tellShop}</div>
+            <p style={{ color: "var(--mut)", fontSize: 13, margin: "0 0 16px", lineHeight: 1.5 }}>
               {t.optionalNote(garment.name, npr(garment.price))}
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10, textAlign: "left" }}>
               {garment.sizes.length > 0 && (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
                   {garment.sizes.map((s) => (
                     <button key={s} className="ph-btn" onClick={() => setSize(s)}
-                      style={{ padding: "8px 14px", fontSize: 13, borderRadius: 18, background: size === s ? "var(--marigold)" : "rgba(255,255,255,.1)", color: size === s ? "var(--ink)" : "rgba(255,255,255,.8)" }}>
+                      style={{
+                        padding: "8px 14px", fontSize: 12, borderRadius: "var(--radius-btn)", fontWeight: 500,
+                        background: size === s ? "var(--forest)" : "var(--sage)",
+                        color: size === s ? "var(--cream)" : "var(--mut)",
+                        border: "1px solid " + (size === s ? "var(--forest)" : "var(--line)"),
+                      }}>
                       {s}
                     </button>
                   ))}
@@ -479,18 +454,18 @@ function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garm
                 onChange={(e) => setPhone(e.target.value)} />
             </div>
             {state === "error" && (
-              <div style={{ fontSize: 12, color: "var(--marigold)", marginTop: 10 }}>
+              <div style={{ fontSize: 12, color: "var(--camel)", marginTop: 10 }}>
                 {t.sendFailed}
               </div>
             )}
             <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
               <button className="ph-btn" onClick={onClose}
-                style={{ flex: 1, background: "rgba(255,255,255,.1)", color: "#fff", padding: "13px", fontSize: 14 }}>
+                style={{ flex: 1, border: "1px solid var(--line)", color: "var(--forest-deep)", padding: 13, fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
                 {t.cancel}
               </button>
               <button className="ph-btn" disabled={state === "sending"} onClick={send}
-                style={{ flex: 2, background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "13px", fontSize: 15, opacity: state === "sending" ? 0.6 : 1 }}>
-                {state === "sending" ? t.sending : t.iWantThis}
+                style={{ flex: 2, background: "var(--forest)", color: "var(--cream)", padding: 13, fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", borderRadius: "var(--radius-btn)", fontWeight: 500, opacity: state === "sending" ? 0.6 : 1 }}>
+                {state === "sending" ? t.sending : t.sendToShop}
               </button>
             </div>
           </>
@@ -521,12 +496,12 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
   const [notice, setNotice] = useState("");
   const [interested, setInterested] = useState(false);
   const [lookState, setLookState] = useState<"idle" | "saving" | "saved">("idle");
-  const t = useT();
   const [overlay, setOverlay] = useState({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
   const stageRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ rect: DOMRect } | null>(null);
   const requestSeq = useRef(0); // ignore stale responses if shopper taps another garment mid-generation
   const autoStarted = useRef(false);
+  const t = useT();
 
   const startTryOn = useCallback(async (garment: Garment) => {
     const seq = ++requestSeq.current;
@@ -555,7 +530,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     }
   }, [setSelected, photo, shop.id, t.previewNotice]);
 
-  /* hanger QR deep link: start the scanned garment as soon as we have a photo */
+  /* hanger QR / storefront deep link: start as soon as we have a photo */
   useEffect(() => {
     if (initialGarment && !autoStarted.current) {
       autoStarted.current = true;
@@ -563,7 +538,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     }
   }, [initialGarment, startTryOn]);
 
-  /* drag the garment overlay */
+  /* drag the garment overlay (manual preview fallback) */
   const onPointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     const rect = stageRef.current!.getBoundingClientRect();
@@ -578,132 +553,126 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
   const onPointerUp = () => { dragRef.current = null; };
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflowY: "auto", padding: "0 16px 14px" }}>
-      <div style={{ flex: 1, display: "flex", gap: 18, minHeight: 0, justifyContent: "center", flexWrap: "wrap", alignContent: "flex-start" }}>
-
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflowY: "auto", padding: "0 0 14px" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "16px 16px 0" }}>
         {/* stage */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
-          <div ref={stageRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
-            style={{ height: "min(52vh, 520px)", maxWidth: "90vw", aspectRatio: "3/4", borderRadius: 22, overflow: "hidden", position: "relative", background: "#141018", border: "1px solid rgba(255,255,255,.12)", touchAction: "none", flexShrink: 0 }}>
-            <img
-              src={phase === "result" && resultImage ? resultImage : photo}
-              alt={phase === "result" ? "You wearing " + (selected?.name || "the garment") : "You"}
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: phase === "generating" ? "brightness(.55)" : "none", transition: "filter .3s" }} />
+        <div ref={stageRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
+          style={{ height: "min(48vh, 480px)", maxWidth: "90vw", aspectRatio: "3/4", borderRadius: 8, overflow: "hidden", position: "relative", background: "var(--sage-mist)", boxShadow: "var(--shadow-soft)", touchAction: "none", flexShrink: 0 }}>
+          <img
+            src={phase === "result" && resultImage ? resultImage : photo}
+            alt={phase === "result" ? "You wearing " + (selected?.name || "the garment") : "You"}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: phase === "generating" ? "brightness(.55)" : "none", transition: "filter .3s" }} />
 
-            {phase === "preview" && selected && (
-              <img src={selected.image} alt={selected.name} onPointerDown={onPointerDown}
-                style={{
-                  position: "absolute",
-                  left: overlay.x * 100 + "%", top: overlay.y * 100 + "%",
-                  transform: "translate(-50%, -50%)",
-                  width: overlay.scale * 100 + "%",
-                  opacity: overlay.opacity,
-                  cursor: "grab", userSelect: "none",
-                  mixBlendMode: "normal",
-                  filter: "drop-shadow(0 6px 18px rgba(0,0,0,.45))",
-                }} draggable={false} />
-            )}
-
-            {phase === "generating" && <GeneratingOverlay garment={selected} />}
-
-            {phase === "idle" && (
-              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 18, background: "linear-gradient(transparent 60%, rgba(20,16,24,.85))" }}>
-                <div style={{ color: "rgba(255,255,255,.8)", fontSize: 15 }}>{t.pickAPiece}</div>
-              </div>
-            )}
-          </div>
-
-          {/* AI result info bar */}
-          {phase === "result" && selected && (
-            <div className="fade-up" style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", justifyContent: "center", background: "rgba(255,255,255,.07)", borderRadius: 14, padding: "10px 16px" }}>
-              <div style={{ fontSize: 14 }}>
-                <span style={{ fontWeight: 600 }}>{selected.name}</span>
-                <span style={{ color: "var(--marigold)", marginLeft: 8, fontWeight: 700 }}>{npr(selected.price)}</span>
-                {selected.sizes.length > 0 && (
-                  <span style={{ color: "rgba(255,255,255,.55)", marginLeft: 8, fontSize: 12 }}>
-                    {t.sizes} {selected.sizes.join(" · ")}
-                  </span>
-                )}
-              </div>
-              <button className="ph-btn" onClick={() => setInterested(true)}
-                style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "10px 18px", fontSize: 14, borderRadius: 22, boxShadow: "0 4px 14px rgba(196,37,97,.35)" }}>
-                {t.iWantThis}
-              </button>
-              <button className="ph-btn" disabled={lookState !== "idle"}
-                onClick={async () => {
-                  if (!resultImage) return;
-                  setLookState("saving");
-                  const saved = await saveLook({
-                    garmentId: selected.id, garmentName: selected.name,
-                    price: selected.price, shopName: shop.name, imageUrl: resultImage,
-                  });
-                  if (saved) { setLookState("saved"); onLookSaved(); }
-                  else setLookState("idle");
-                }}
-                style={{ background: lookState === "saved" ? "rgba(255,255,255,.12)" : "rgba(255,255,255,.14)", color: lookState === "saved" ? "var(--marigold)" : "#fff", padding: "10px 18px", fontSize: 14, borderRadius: 22 }}>
-                {lookState === "saved" ? t.savedLook : lookState === "saving" ? t.savingLook : t.saveLook}
-              </button>
-              <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>{t.aiResultNote}</span>
-            </div>
-          )}
-
-          {interested && selected && (
-            <InterestedModal shop={shop} garment={selected} onClose={() => setInterested(false)} />
-          )}
-
-          {notice && phase === "preview" && (
-            <div style={{ fontSize: 12, color: "var(--marigold)", background: "rgba(242,169,59,.12)", padding: "7px 14px", borderRadius: 10 }}>
-              {notice}
-            </div>
-          )}
-
-          {/* preview controls */}
           {phase === "preview" && selected && (
-            <div className="fade-up" style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", justifyContent: "center", background: "rgba(255,255,255,.07)", borderRadius: 14, padding: "10px 16px" }}>
-              <div style={{ fontSize: 14 }}>
-                <span style={{ fontWeight: 600 }}>{selected.name}</span>
-                <span style={{ color: "var(--marigold)", marginLeft: 8, fontWeight: 700 }}>{npr(selected.price)}</span>
-              </div>
-              <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "rgba(255,255,255,.6)" }}>
-                {t.sizeSlider}
-                <input type="range" min="0.3" max="1.4" step="0.01" value={overlay.scale}
-                  onChange={(e) => setOverlay((o) => ({ ...o, scale: +e.target.value }))} style={{ accentColor: "var(--rani)" }} />
-              </label>
-              <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>{t.dragToPosition}</span>
+            <img src={selected.image} alt={selected.name} onPointerDown={onPointerDown}
+              style={{
+                position: "absolute",
+                left: overlay.x * 100 + "%", top: overlay.y * 100 + "%",
+                transform: "translate(-50%, -50%)",
+                width: overlay.scale * 100 + "%",
+                opacity: overlay.opacity,
+                cursor: "grab", userSelect: "none",
+                filter: "drop-shadow(0 6px 18px rgba(0,0,0,.45))",
+              }} draggable={false} />
+          )}
+
+          {phase === "generating" && <GeneratingOverlay garment={selected} />}
+
+          {phase === "idle" && (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 16, background: "linear-gradient(transparent 60%, rgba(42,61,47,.85))" }}>
+              <div style={{ color: "var(--cream)", fontSize: 14 }}>{t.pickAPiece}</div>
             </div>
           )}
-          <button className="ph-btn" onClick={retakePhoto} style={{ background: "transparent", color: "rgba(255,255,255,.45)", fontSize: 13, padding: "4px 8px" }}>
-            {t.retakePhoto}
-          </button>
         </div>
+
+        {/* AI result info bar */}
+        {phase === "result" && selected && (
+          <div className="fade-up" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "center", background: "var(--cream)", border: "1px solid var(--line)", borderRadius: 8, padding: "12px 16px", fontSize: 14, width: "100%", maxWidth: 390 }}>
+            <span>
+              <b>{selected.name}</b> <span style={{ color: "var(--camel)", fontWeight: 500 }}>{npr(selected.price)}</span>
+              {selected.sizes.length > 0 && (
+                <span style={{ color: "var(--mut)", marginLeft: 8, fontSize: 12 }}>
+                  {t.sizes} {selected.sizes.join(" · ")}
+                </span>
+              )}
+            </span>
+            <button className="ph-btn" onClick={() => setInterested(true)}
+              style={{ background: "var(--forest)", color: "var(--cream)", padding: "11px 20px", fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 500, borderRadius: "var(--radius-btn)" }}>
+              {t.iWantThis}
+            </button>
+            <button className="ph-btn" disabled={lookState !== "idle"}
+              onClick={async () => {
+                if (!resultImage) return;
+                setLookState("saving");
+                const saved = await saveLook({
+                  garmentId: selected.id, garmentName: selected.name,
+                  price: selected.price, shopName: shop.name, imageUrl: resultImage,
+                });
+                if (saved) { setLookState("saved"); onLookSaved(); }
+                else setLookState("idle");
+              }}
+              style={{ border: "1px solid var(--forest)", color: lookState === "saved" ? "var(--camel)" : "var(--forest)", borderColor: lookState === "saved" ? "var(--camel)" : "var(--forest)", padding: "10px 18px", fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 500, borderRadius: "var(--radius-btn)", background: "transparent" }}>
+              {lookState === "saved" ? t.savedLook : lookState === "saving" ? t.savingLook : t.saveLook}
+            </button>
+            <span style={{ fontSize: 11, color: "var(--mut)", width: "100%", textAlign: "center" }}>{t.aiResultNote}</span>
+          </div>
+        )}
+
+        {interested && selected && (
+          <InterestedModal shop={shop} garment={selected} onClose={() => setInterested(false)} />
+        )}
+
+        {notice && phase === "preview" && (
+          <div style={{ fontSize: 12, color: "var(--camel)", background: "var(--cream)", border: "1px solid var(--line)", padding: "7px 14px", borderRadius: 6 }}>
+            {notice}
+          </div>
+        )}
+
+        {/* preview controls */}
+        {phase === "preview" && selected && (
+          <div className="fade-up" style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", justifyContent: "center", background: "var(--cream)", border: "1px solid var(--line)", borderRadius: 8, padding: "10px 16px", fontSize: 14, width: "100%", maxWidth: 390 }}>
+            <span>
+              <b>{selected.name}</b> <span style={{ color: "var(--camel)", fontWeight: 500 }}>{npr(selected.price)}</span>
+            </span>
+            <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--mut)" }}>
+              {t.sizeSlider}
+              <input type="range" min="0.3" max="1.4" step="0.01" value={overlay.scale}
+                onChange={(e) => setOverlay((o) => ({ ...o, scale: +e.target.value }))} style={{ accentColor: "var(--forest)" }} />
+            </label>
+            <span style={{ fontSize: 11, color: "var(--mut)" }}>{t.dragToPosition}</span>
+          </div>
+        )}
+        <button className="ph-btn" onClick={retakePhoto}
+          style={{ color: "var(--mut)", fontSize: 12, padding: "2px 8px", textDecoration: "underline", textUnderlineOffset: 3 }}>
+          {t.retakePhoto}
+        </button>
       </div>
 
       {/* category chips */}
-      <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "10px 2px 8px" }} className="garment-rail">
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "10px 16px 0" }} className="garment-rail">
         {cats.map((c) => (
-          <button key={c} className="ph-btn" onClick={() => setCatFilter(c)}
-            style={{ background: catFilter === c ? "var(--marigold)" : "rgba(255,255,255,.09)", color: catFilter === c ? "var(--ink)" : "rgba(255,255,255,.75)", padding: "8px 16px", fontSize: 13, borderRadius: 20, whiteSpace: "nowrap", flexShrink: 0 }}>
+          <button key={c} className={"efc-chip " + (catFilter === c ? "on" : "off")} onClick={() => setCatFilter(c)}>
             {c}
           </button>
         ))}
       </div>
 
       {/* garment rail — the rack */}
-      <div className="garment-rail" style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 4 }}>
+      <div className="garment-rail" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "14px 16px 6px" }}>
         {rail.map((g) => (
           <button key={g.id} onClick={() => startTryOn(g)} className="ph-btn"
             style={{
-              flexShrink: 0, width: 108, padding: 0, borderRadius: 14, overflow: "hidden", textAlign: "left",
-              background: "#fff", border: selected?.id === g.id ? "3px solid var(--marigold)" : "3px solid transparent",
+              flexShrink: 0, width: 104, padding: 0, borderRadius: "var(--radius-card)", overflow: "hidden", textAlign: "left",
+              background: "var(--cream)", border: "2px solid " + (selected?.id === g.id ? "var(--camel)" : "var(--line)"),
             }}>
-            <div style={{ aspectRatio: "3/4", background: "var(--plum)" }}>
+            <div style={{ aspectRatio: "3/4", background: "var(--sage-mist)" }}>
               <img src={g.image} alt={g.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
             </div>
-            <div style={{ padding: "6px 8px 8px" }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</div>
-              <div style={{ fontSize: 11, color: "var(--rani)", fontWeight: 700 }}>{npr(g.price)}</div>
+            <div style={{ padding: "7px 8px 8px" }}>
+              <div style={{ fontSize: 9.5, fontWeight: 500, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</div>
+              <div style={{ fontSize: 11, color: "var(--camel)", fontWeight: 500, marginTop: 2 }}>{npr(g.price)}</div>
               {g.sizes.length > 0 && (
-                <div style={{ fontSize: 9.5, color: "var(--mut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.sizes.join(" ")}</div>
+                <div style={{ fontSize: 9, color: "var(--mut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.sizes.join(" ")}</div>
               )}
             </div>
           </button>

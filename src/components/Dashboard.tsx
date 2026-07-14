@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import QRCode from "qrcode";
 import { CATEGORIES, SIZES, npr } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
-import Activity from "@/components/Analytics";
+import { OverviewTab, LeadsTab, garmentTryCounts } from "@/components/Analytics";
 import type { ErrorLog, Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
+
+type Tab = "overview" | "leads" | "catalog" | "settings";
 
 interface DashboardProps {
   shop: Shop;
@@ -29,153 +31,176 @@ export default function Dashboard({
   shop, updateShop, changeSlug, catalog, addGarment, editGarment, removeGarment,
   toggleStock, events, leads, errors, onLeadHandled, loading, launchKiosk, signOut,
 }: DashboardProps) {
+  const [tab, setTab] = useState<Tab>("overview");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Garment | null>(null);
   const [filter, setFilter] = useState("All");
   const [qrGarment, setQrGarment] = useState<Garment | null>(null);
+
+  const openLeads = leads.filter((l) => !l.handled).length;
+  const tryCounts = useMemo(() => garmentTryCounts(events), [events]);
   const filtered = filter === "All" ? catalog : catalog.filter((g) => g.category === filter);
 
   const kioskPath = shop.slug ? "/k/" + shop.slug : "/kiosk";
-  const kioskUrl = typeof window === "undefined" ? kioskPath : window.location.origin + kioskPath;
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+
+  const TABS: { key: Tab; label: string; badge?: number }[] = [
+    { key: "overview", label: "Overview" },
+    { key: "leads", label: "Leads", badge: openLeads || undefined },
+    { key: "catalog", label: "Catalog" },
+    { key: "settings", label: "Settings" },
+  ];
 
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto", padding: "0 20px 80px" }}>
+    <div style={{ maxWidth: 1080, margin: "0 auto", padding: "0 26px 50px" }}>
       {/* header */}
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "26px 0 10px", flexWrap: "wrap", gap: 12 }}>
+      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22px 0 16px", flexWrap: "wrap", gap: 12 }}>
         <div>
-          <div className="ph-display" style={{ fontSize: 30, lineHeight: 1 }}>
-            Pahiran<span style={{ color: "var(--rani)" }}>.</span>
-          </div>
-          <div style={{ fontSize: 13, color: "var(--mut)", marginTop: 4, letterSpacing: ".06em", textTransform: "uppercase" }}>
-            Virtual try-on · vendor dashboard
+          <div className="wordmark" style={{ fontSize: 22 }}>EasyFitCheck</div>
+          <div style={{ fontSize: 12, color: "var(--mut)", letterSpacing: ".12em", textTransform: "uppercase", marginTop: 3 }}>
+            {[shop.name, shop.area].filter(Boolean).join(" · ") || "Vendor dashboard"}
           </div>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-end" }}>
-            {signOut && (
-              <button className="ph-btn" onClick={signOut}
-                style={{ background: "transparent", color: "var(--mut)", padding: "10px 12px", fontSize: 13 }}>
-                Sign out
-              </button>
-            )}
-            <button
-              className="ph-btn"
-              onClick={() => {
-                if (catalog.length === 0) {
-                  alert("Add at least one garment to your catalog first — the kiosk needs something on the rack to show shoppers.");
-                  return;
-                }
-                launchKiosk();
-              }}
-              style={{
-                background: catalog.length === 0 ? "var(--line)" : "linear-gradient(120deg, var(--rani), var(--rani-soft))",
-                color: catalog.length === 0 ? "var(--mut)" : "#fff",
-                padding: "14px 26px", fontSize: 16,
-                boxShadow: catalog.length === 0 ? "none" : "0 8px 22px rgba(196,37,97,.32)",
-              }}>
-              ▸ Launch kiosk mode
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          {signOut && (
+            <button className="ph-btn" onClick={signOut}
+              style={{ color: "var(--mut)", fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase" }}>
+              Sign out
             </button>
-          </div>
-          {catalog.length === 0 && (
-            <div style={{ fontSize: 12, color: "var(--mut)", marginTop: 6 }}>
-              Add a garment below to unlock the kiosk
-            </div>
           )}
+          <button
+            className="ph-btn btn-solid"
+            onClick={() => {
+              if (catalog.length === 0) {
+                alert("Add at least one garment to your catalog first — the kiosk needs something on the rack to show shoppers.");
+                setTab("catalog");
+                return;
+              }
+              launchKiosk();
+            }}>
+            Launch kiosk
+          </button>
         </div>
       </header>
 
-      {/* shop identity strip */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", padding: "14px 0 26px", borderBottom: "1px solid var(--line)" }}>
-        <LabeledInput label="Shop name" value={shop.name} placeholder="e.g. Juju Fashion House"
-          onChange={(v) => updateShop({ ...shop, name: v })} width={260} />
-        <LabeledInput label="Area / city" value={shop.area} placeholder="e.g. New Road, Kathmandu"
-          onChange={(v) => updateShop({ ...shop, area: v })} width={260} />
-        <LabeledInput label="WhatsApp (orders)" value={shop.whatsapp} placeholder="e.g. 9779841000000"
-          onChange={(v) => updateShop({ ...shop, whatsapp: v.replace(/[^0-9+ ]/g, "") })} width={200} />
-        {shop.slug && <KioskLink url={kioskUrl} slug={shop.slug} changeSlug={changeSlug} />}
-        {shop.slug && typeof window !== "undefined" && (
-          <StorefrontLink url={window.location.origin + "/s/" + shop.slug} />
-        )}
-      </div>
-
-      {/* activity: stats, chart, leads, history, errors */}
-      {!loading && (
-        <Activity events={events} catalog={catalog} leads={leads} errors={errors} onLeadHandled={onLeadHandled} />
-      )}
-
-      {/* catalog header row */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "26px 0 16px", flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <span className="ph-display" style={{ fontSize: 22 }}>Catalog</span>
-          <span style={{ color: "var(--mut)", marginLeft: 10, fontSize: 14 }}>{catalog.length} item{catalog.length !== 1 ? "s" : ""}</span>
-        </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}
-            style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid var(--line)", background: "#fff", fontSize: 14 }}>
-            <option>All</option>
-            {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-          </select>
-          <button className="ph-btn" onClick={() => setShowForm(true)}
-            style={{ background: "var(--ink)", color: "#fff", padding: "11px 20px", fontSize: 14 }}>
-            + Add garment
+      {/* tabs */}
+      <div className="tabs">
+        {TABS.map((t) => (
+          <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
+            {t.label}
+            {t.badge ? <span className="badge">{t.badge}</span> : null}
           </button>
-        </div>
+        ))}
       </div>
 
-      {/* catalog grid */}
       {loading ? (
-        <div style={{ color: "var(--mut)", padding: 40, textAlign: "center" }}>Loading your catalog…</div>
-      ) : filtered.length === 0 ? (
-        <EmptyState onAdd={() => setShowForm(true)} anyItems={catalog.length > 0} />
+        <div style={{ color: "var(--mut)", padding: 40, textAlign: "center" }}>Loading your shop…</div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 18 }}>
-          {filtered.map((g) => (
-            <div key={g.id} className="fade-up" style={{ background: "#fff", borderRadius: 16, overflow: "hidden", border: "1px solid var(--line)", opacity: g.inStock ? 1 : 0.65 }}>
-              <div style={{ aspectRatio: "3/4", background: "var(--plum)", position: "relative" }}>
-                <img src={g.image} alt={g.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: g.inStock ? "none" : "grayscale(.7)" }} />
-                <span style={{ position: "absolute", top: 10, left: 10, background: "rgba(33,20,35,.78)", color: "var(--marigold)", fontSize: 11, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", padding: "4px 9px", borderRadius: 20 }}>
-                  {g.category}
-                </span>
-                {!g.inStock && (
-                  <span style={{ position: "absolute", bottom: 10, left: 10, background: "rgba(33,20,35,.85)", color: "#fff", fontSize: 11, fontWeight: 600, padding: "4px 9px", borderRadius: 20 }}>
-                    Out of stock
-                  </span>
-                )}
-              </div>
-              <div style={{ padding: "12px 14px 14px" }}>
-                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{g.name}</div>
-                {g.sizes.length > 0 && (
-                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", margin: "4px 0 6px" }}>
-                    {g.sizes.map((s) => (
-                      <span key={s} style={{ fontSize: 10, fontWeight: 600, color: "var(--mut)", border: "1px solid var(--line)", borderRadius: 6, padding: "2px 6px" }}>{s}</span>
-                    ))}
-                  </div>
-                )}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ color: "var(--rani)", fontWeight: 700, fontSize: 15 }}>{npr(g.price)}</span>
-                  <div style={{ display: "flex", gap: 2 }}>
-                    <button className="ph-btn" onClick={() => setEditing(g)}
-                      style={{ background: "transparent", color: "var(--ink)", fontSize: 12, padding: "4px 6px", fontWeight: 500 }}>
-                      Edit
-                    </button>
-                    <button className="ph-btn" title="QR code for this garment" onClick={() => setQrGarment(g)}
-                      style={{ background: "transparent", color: "var(--ink)", fontSize: 12, padding: "4px 6px", fontWeight: 500 }}>
-                      QR
-                    </button>
-                    <button className="ph-btn" onClick={() => toggleStock(g.id)}
-                      style={{ background: "transparent", color: g.inStock ? "var(--mut)" : "var(--rani)", fontSize: 12, padding: "4px 6px", fontWeight: 500 }}>
-                      {g.inStock ? "In stock" : "Restock"}
-                    </button>
-                    <button className="ph-btn" onClick={() => removeGarment(g.id)}
-                      style={{ background: "transparent", color: "var(--mut)", fontSize: 12, padding: "4px 6px", fontWeight: 500 }}>
-                      Remove
-                    </button>
-                  </div>
+        <>
+          {tab === "overview" && (
+            <div className="fade-up">
+              {openLeads > 0 && (
+                <button className="ph-btn" onClick={() => setTab("leads")}
+                  style={{ width: "100%", textAlign: "left", background: "var(--cream)", border: "1px solid var(--camel)", borderRadius: "var(--radius-card)", padding: "12px 16px", marginBottom: 14, fontSize: 13, color: "var(--forest-deep)" }}>
+                  <b style={{ color: "var(--camel)" }}>{openLeads} open lead{openLeads !== 1 ? "s" : ""}</b> — tap to view
+                </button>
+              )}
+              <OverviewTab events={events} catalog={catalog} errors={errors} />
+            </div>
+          )}
+
+          {tab === "leads" && (
+            <div className="fade-up">
+              <LeadsTab leads={leads} catalog={catalog} onLeadHandled={onLeadHandled} shopName={shop.name} />
+            </div>
+          )}
+
+          {tab === "catalog" && (
+            <div className="fade-up">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+                <div>
+                  <span className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>Catalog</span>
+                  <span style={{ color: "var(--mut)", marginLeft: 10, fontSize: 13 }}>{catalog.length} item{catalog.length !== 1 ? "s" : ""}</span>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <select value={filter} onChange={(e) => setFilter(e.target.value)}
+                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 13 }}>
+                    <option>All</option>
+                    {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                  </select>
+                  <button className="ph-btn btn-solid" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => setShowForm(true)}>
+                    + Add garment
+                  </button>
                 </div>
               </div>
+
+              {filtered.length === 0 ? (
+                <EmptyState onAdd={() => setShowForm(true)} anyItems={catalog.length > 0} />
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 18 }}>
+                  {filtered.map((g) => {
+                    const tries = tryCounts.get(g.id) || 0;
+                    return (
+                      <div key={g.id} className="fade-up" style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)", opacity: g.inStock ? 1 : 0.6 }}>
+                        <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--sage-mist)" }}>
+                          <img src={g.image} alt={g.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: g.inStock ? "none" : "grayscale(.7)" }} />
+                          <span style={{ position: "absolute", top: 10, left: 10, background: "var(--cream)", color: "var(--forest-deep)", fontSize: 10, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", padding: "4px 10px", borderRadius: 2 }}>
+                            {g.category}
+                          </span>
+                          {tries > 0 && (
+                            <span style={{ position: "absolute", top: 10, right: 10, background: "rgba(42,61,47,.8)", color: "var(--cream)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
+                              {tries} tr{tries === 1 ? "y" : "ies"}
+                            </span>
+                          )}
+                          {!g.inStock && (
+                            <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--forest-deep)", color: "var(--cream)", fontSize: 10, fontWeight: 500, letterSpacing: ".08em", textTransform: "uppercase", padding: "4px 9px", borderRadius: 2 }}>
+                              Out of stock
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ padding: "13px 14px 14px" }}>
+                          <div style={{ fontWeight: 500, fontSize: 11.5, letterSpacing: ".12em", textTransform: "uppercase", marginBottom: 4 }}>{g.name}</div>
+                          {g.sizes.length > 0 && (
+                            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", margin: "4px 0 6px" }}>
+                              {g.sizes.map((s) => (
+                                <span key={s} style={{ fontSize: 10, fontWeight: 500, color: "var(--mut)", border: "1px solid var(--line)", borderRadius: 3, padding: "2px 6px" }}>{s}</span>
+                              ))}
+                            </div>
+                          )}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                            <span style={{ color: "var(--camel)", fontWeight: 500, fontSize: 14 }}>{npr(g.price)}</span>
+                            <span style={{ display: "flex", gap: 2 }}>
+                              <button className="ph-btn" onClick={() => setEditing(g)}
+                                style={{ color: "var(--forest-deep)", fontSize: 11, padding: "4px 5px", fontWeight: 500 }}>
+                                Edit
+                              </button>
+                              <button className="ph-btn" title="QR code for this garment" onClick={() => setQrGarment(g)}
+                                style={{ color: "var(--forest-deep)", fontSize: 11, padding: "4px 5px", fontWeight: 500 }}>
+                                QR
+                              </button>
+                              <button className="ph-btn" onClick={() => toggleStock(g.id)}
+                                style={{ color: g.inStock ? "var(--mut)" : "var(--camel)", fontSize: 11, padding: "4px 5px", fontWeight: 500 }}>
+                                {g.inStock ? "In stock" : "Restock"}
+                              </button>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          ))}
-        </div>
+          )}
+
+          {tab === "settings" && (
+            <div className="fade-up">
+              <SettingsTab shop={shop} updateShop={updateShop} changeSlug={changeSlug}
+                kioskUrl={origin + kioskPath}
+                storeUrl={shop.slug ? origin + "/s/" + shop.slug : null} />
+            </div>
+          )}
+        </>
       )}
 
       {showForm && <GarmentModal onClose={() => setShowForm(false)} onSave={(g) => { addGarment(g); setShowForm(false); }} />}
@@ -184,12 +209,13 @@ export default function Dashboard({
           initial={editing}
           onClose={() => setEditing(null)}
           onSave={(g) => { editGarment({ ...editing, ...g }); setEditing(null); }}
+          onRemove={() => { removeGarment(editing.id); setEditing(null); }}
         />
       )}
       {qrGarment && (
         <QRModal
           garment={qrGarment}
-          url={kioskUrl + "?g=" + encodeURIComponent(qrGarment.id)}
+          url={origin + kioskPath + "?g=" + encodeURIComponent(qrGarment.id)}
           crossDevice={Boolean(shop.slug)}
           onClose={() => setQrGarment(null)}
         />
@@ -198,40 +224,84 @@ export default function Dashboard({
   );
 }
 
-function StorefrontLink({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false);
+/* ── Settings tab: draft state + explicit save ── */
+function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
+  shop: Shop;
+  updateShop: (s: Shop) => void;
+  changeSlug: ((slug: string) => Promise<string | null>) | null;
+  kioskUrl: string;
+  storeUrl: string | null;
+}) {
+  const [name, setName] = useState(shop.name);
+  const [area, setArea] = useState(shop.area);
+  const [whatsapp, setWhatsapp] = useState(shop.whatsapp);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { setName(shop.name); setArea(shop.area); setWhatsapp(shop.whatsapp); }, [shop]);
+
+  const dirty = name !== shop.name || area !== shop.area || whatsapp !== shop.whatsapp;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, color: "var(--mut)", fontWeight: 600, letterSpacing: ".05em", textTransform: "uppercase" }}>
-      Storefront (browse only)
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <code style={{ padding: "11px 13px", borderRadius: 10, border: "1px solid var(--line)", background: "#fff", fontSize: 13, letterSpacing: 0, textTransform: "none", fontWeight: 400, maxWidth: "58vw", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {url}
-        </code>
-        <button className="ph-btn"
-          onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-          style={{ background: "var(--ink)", color: "#fff", padding: "10px 14px", fontSize: 12 }}>
-          {copied ? "Copied ✓" : "Copy"}
+    <div className="panel">
+      <div className="panel-head"><span className="title">Shop identity</span></div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 560 }}>
+        <label className="field">Shop name
+          <input value={name} placeholder="e.g. Juju Fashion House" onChange={(e) => { setName(e.target.value); setSaved(false); }} />
+        </label>
+        <label className="field">Area / city
+          <input value={area} placeholder="e.g. New Road, Kathmandu" onChange={(e) => { setArea(e.target.value); setSaved(false); }} />
+        </label>
+        <label className="field">WhatsApp number (orders)
+          <input value={whatsapp} placeholder="e.g. 9779841000000" inputMode="tel"
+            onChange={(e) => { setWhatsapp(e.target.value.replace(/[^0-9+ ]/g, "")); setSaved(false); }} />
+        </label>
+        <div className="field">Kiosk link (QR target)
+          <LinkBox url={kioskUrl}>
+            {changeSlug && shop.slug && <SlugEditor slug={shop.slug} changeSlug={changeSlug} />}
+          </LinkBox>
+        </div>
+        {storeUrl && (
+          <div className="field">Storefront link (share anywhere)
+            <LinkBox url={storeUrl} />
+          </div>
+        )}
+        <button className="ph-btn btn-solid" disabled={!dirty}
+          onClick={() => { updateShop({ ...shop, name, area, whatsapp }); setSaved(true); }}
+          style={{ alignSelf: "flex-start", marginTop: 6, opacity: dirty ? 1 : 0.55 }}>
+          {saved && !dirty ? "Saved ✓" : "Save changes"}
         </button>
       </div>
     </div>
   );
 }
 
+function LinkBox({ url, children }: { url: string; children?: React.ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <code style={{ padding: "11px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 13, background: "#fff", color: "var(--ink)", flex: 1, minWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: 0, textTransform: "none", fontWeight: 400 }}>
+        {url}
+      </code>
+      <button className="ph-btn"
+        onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+        style={{ background: "var(--forest-deep)", color: "var(--cream)", padding: "11px 16px", fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase" }}>
+        {copied ? "Copied ✓" : "Copy"}
+      </button>
+      {children}
+    </div>
+  );
+}
+
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-function KioskLink({ url, slug, changeSlug }: {
-  url: string; slug: string; changeSlug: ((slug: string) => Promise<string | null>) | null;
-}) {
-  const [copied, setCopied] = useState(false);
+function SlugEditor({ slug, changeSlug }: { slug: string; changeSlug: (slug: string) => Promise<string | null> }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(slug);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-
   const valid = SLUG_RE.test(draft) && draft.length >= 3 && draft.length <= 40;
 
   const save = async () => {
-    if (!changeSlug || !valid || draft === slug) { setEditing(false); return; }
+    if (!valid || draft === slug) { setEditing(false); return; }
     setBusy(true);
     const err = await changeSlug(draft);
     setBusy(false);
@@ -240,128 +310,57 @@ function KioskLink({ url, slug, changeSlug }: {
     setEditing(false);
   };
 
+  if (!editing) {
+    return (
+      <button className="ph-btn" onClick={() => { setDraft(slug); setEditing(true); setError(""); }}
+        style={{ color: "var(--mut)", padding: "10px 8px", fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase" }}>
+        Edit
+      </button>
+    );
+  }
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, color: "var(--mut)", fontWeight: 600, letterSpacing: ".05em", textTransform: "uppercase" }}>
-      Your kiosk link
-      {editing ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ fontSize: 13, letterSpacing: 0, textTransform: "none", fontWeight: 400 }}>/k/</span>
-            <input value={draft} autoFocus
-              onChange={(e) => { setDraft(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "")); setError(""); }}
-              onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-              style={{ padding: "10px 13px", borderRadius: 10, border: "1px solid " + (valid ? "var(--line)" : "var(--rani)"), fontSize: 14, letterSpacing: 0, textTransform: "none", fontWeight: 400, width: 190 }} />
-            <button className="ph-btn" disabled={!valid || busy} onClick={save}
-              style={{ background: valid ? "var(--ink)" : "var(--line)", color: valid ? "#fff" : "var(--mut)", padding: "10px 14px", fontSize: 12 }}>
-              {busy ? "Saving…" : "Save"}
-            </button>
-            <button className="ph-btn" onClick={() => { setEditing(false); setDraft(slug); setError(""); }}
-              style={{ background: "transparent", color: "var(--mut)", padding: "10px 8px", fontSize: 12 }}>
-              Cancel
-            </button>
-          </div>
-          <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", color: error ? "var(--rani)" : "var(--mut)" }}>
-            {error || "Lowercase letters, numbers and dashes. Changing this breaks QR codes you've already printed."}
-          </span>
-        </div>
-      ) : (
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <code style={{ padding: "11px 13px", borderRadius: 10, border: "1px solid var(--line)", background: "#fff", fontSize: 13, letterSpacing: 0, textTransform: "none", fontWeight: 400, maxWidth: "58vw", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {url}
-          </code>
-          <button className="ph-btn"
-            onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-            style={{ background: "var(--ink)", color: "#fff", padding: "10px 14px", fontSize: 12 }}>
-            {copied ? "Copied ✓" : "Copy"}
-          </button>
-          {changeSlug && (
-            <button className="ph-btn" onClick={() => { setDraft(slug); setEditing(true); }}
-              style={{ background: "transparent", color: "var(--mut)", padding: "10px 8px", fontSize: 12 }}>
-              Edit
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function QRModal({ garment, url, crossDevice, onClose }: { garment: Garment; url: string; crossDevice: boolean; onClose: () => void }) {
-  const [qr, setQr] = useState<string | null>(null);
-  useEffect(() => {
-    QRCode.toDataURL(url, { width: 480, margin: 2, color: { dark: "#211423", light: "#ffffff" } })
-      .then(setQr)
-      .catch(() => setQr(null));
-  }, [url]);
-
-  return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(33,20,35,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "#fff", borderRadius: 20, width: 380, maxWidth: "100%", padding: 24, textAlign: "center" }}>
-        <div className="ph-display" style={{ fontSize: 20, marginBottom: 4 }}>Try-on QR</div>
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{garment.name}</div>
-        <div style={{ fontSize: 12, color: "var(--mut)", marginBottom: 14 }}>
-          Shoppers scan this on the hanger tag and try it on their own phone.
-        </div>
-        {qr ? (
-          <img src={qr} alt={"QR code linking to try-on for " + garment.name} style={{ width: 220, height: 220, display: "block", margin: "0 auto" }} />
-        ) : (
-          <div style={{ width: 220, height: 220, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--mut)", fontSize: 13 }}>
-            Generating…
-          </div>
-        )}
-        <code style={{ display: "block", fontSize: 11, color: "var(--mut)", margin: "12px 0", wordBreak: "break-all" }}>{url}</code>
-        {!crossDevice && (
-          <div style={{ fontSize: 12, color: "var(--marigold)", background: "rgba(242,169,59,.14)", borderRadius: 10, padding: "8px 12px", marginBottom: 12 }}>
-            Local mode: this link only works on this device until you connect Supabase and deploy.
-          </div>
-        )}
-        <div style={{ display: "flex", gap: 10 }}>
-          <button className="ph-btn" onClick={onClose} style={{ flex: 1, background: "var(--cream)", color: "var(--ink)", padding: "12px", fontSize: 14, border: "1px solid var(--line)" }}>Close</button>
-          {qr && (
-            <a className="ph-btn" href={qr} download={"pahiran-qr-" + garment.id + ".png"}
-              style={{ flex: 1, background: "var(--ink)", color: "#fff", padding: "12px", fontSize: 14, textDecoration: "none" }}>
-              Download PNG
-            </a>
-          )}
-        </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, letterSpacing: 0, textTransform: "none", fontWeight: 400 }}>/k/</span>
+        <input value={draft} autoFocus
+          onChange={(e) => { setDraft(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "")); setError(""); }}
+          onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+          style={{ padding: "10px 13px", borderRadius: "var(--radius-btn)", border: "1px solid " + (valid ? "var(--line)" : "var(--camel)"), fontSize: 14, letterSpacing: 0, textTransform: "none", fontWeight: 400, width: 180, background: "#fff" }} />
+        <button className="ph-btn" disabled={!valid || busy} onClick={save}
+          style={{ background: valid ? "var(--forest)" : "var(--line)", color: valid ? "var(--cream)" : "var(--mut)", padding: "10px 14px", fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase" }}>
+          {busy ? "Saving…" : "Save"}
+        </button>
+        <button className="ph-btn" onClick={() => { setEditing(false); setDraft(slug); setError(""); }}
+          style={{ color: "var(--mut)", padding: "10px 8px", fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase" }}>
+          Cancel
+        </button>
       </div>
+      <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: error ? "var(--camel)" : "var(--mut)" }}>
+        {error || "Lowercase letters, numbers and dashes. Changing this breaks QR codes you've already printed."}
+      </span>
     </div>
-  );
-}
-
-function LabeledInput({ label, value, onChange, placeholder, width }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder?: string; width?: number;
-}) {
-  return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, color: "var(--mut)", fontWeight: 600, letterSpacing: ".05em", textTransform: "uppercase" }}>
-      {label}
-      <input value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)}
-        style={{ width, maxWidth: "80vw", padding: "11px 13px", borderRadius: 10, border: "1px solid var(--line)", fontSize: 15, background: "#fff", color: "var(--ink)", fontWeight: 400, letterSpacing: 0, textTransform: "none" }} />
-    </label>
   );
 }
 
 function EmptyState({ onAdd, anyItems }: { onAdd: () => void; anyItems: boolean }) {
   return (
-    <div style={{ border: "2px dashed var(--line)", borderRadius: 20, padding: "60px 24px", textAlign: "center" }}>
-      <div className="ph-display" style={{ fontSize: 22, marginBottom: 8 }}>
+    <div style={{ border: "1.5px dashed var(--line)", borderRadius: "var(--radius-modal)", padding: "60px 24px", textAlign: "center", background: "var(--cream)" }}>
+      <div className="ph-display" style={{ fontSize: 22, marginBottom: 8, color: "var(--forest-deep)" }}>
         {anyItems ? "Nothing in this category yet" : "Your rack is empty"}
       </div>
-      <p style={{ color: "var(--mut)", maxWidth: 420, margin: "0 auto 20px", fontSize: 15 }}>
+      <p style={{ color: "var(--mut)", maxWidth: 420, margin: "0 auto 20px", fontSize: 14, lineHeight: 1.6 }}>
         Photograph each garment flat or on a mannequin against a plain wall, then add it here. Clean photos give the best try-on results.
       </p>
-      <button className="ph-btn" onClick={onAdd} style={{ background: "var(--rani)", color: "#fff", padding: "13px 26px", fontSize: 15 }}>
-        + Add your first garment
-      </button>
+      <button className="ph-btn btn-solid" onClick={onAdd}>+ Add your first garment</button>
     </div>
   );
 }
 
-function GarmentModal({ initial, onClose, onSave }: {
+function GarmentModal({ initial, onClose, onSave, onRemove }: {
   initial?: Garment;
   onClose: () => void;
   onSave: (g: Omit<Garment, "id">) => void;
+  onRemove?: () => void;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [category, setCategory] = useState<string>(initial?.category ?? CATEGORIES[0]);
@@ -383,49 +382,43 @@ function GarmentModal({ initial, onClose, onSave }: {
     setSizes((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
 
   const canSave = Boolean(name.trim() && image && !busy);
+  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 15, background: "#fff" };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(33,20,35,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(42,61,47,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "#fff", borderRadius: 20, width: 440, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: 24 }}>
-        <div className="ph-display" style={{ fontSize: 22, marginBottom: 18 }}>
+        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 400, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: "28px 26px" }}>
+        <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 18 }}>
           {initial ? "Edit garment" : "Add a garment"}
         </div>
 
         <div onClick={() => fileRef.current?.click()}
-          style={{ border: "2px dashed " + (image ? "var(--rani)" : "var(--line)"), borderRadius: 14, height: 210, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--cream)" }}>
-          {busy ? <span style={{ color: "var(--mut)" }}>Processing photo…</span>
+          style={{ border: "1.5px dashed " + (image ? "var(--forest)" : "var(--line)"), borderRadius: 6, height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--sage)", color: "var(--mut)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
+          {busy ? <span>Processing photo…</span>
             : image ? <img src={image} alt="Garment preview" style={{ height: "100%", objectFit: "contain" }} />
-            : <div style={{ textAlign: "center", color: "var(--mut)", fontSize: 14, padding: 12 }}>
-                <div style={{ fontSize: 28, marginBottom: 6 }}>📷</div>
-                Tap to upload a garment photo<br /><span style={{ fontSize: 12 }}>Flat-lay or mannequin, plain background</span>
-              </div>}
+            : <div style={{ padding: 12 }}>Tap to upload a garment photo<br /><span style={{ fontSize: 12 }}>Flat-lay or mannequin, plain background</span></div>}
         </div>
         <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Garment name (e.g. Banarasi silk sari — red)"
-            style={{ padding: "12px 13px", borderRadius: 10, border: "1px solid var(--line)", fontSize: 15 }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Garment name (e.g. Red Banarasi Silk Sari)" />
           <div style={{ display: "flex", gap: 10 }}>
             <select value={category} onChange={(e) => setCategory(e.target.value)}
-              style={{ flex: 1, padding: "12px 13px", borderRadius: 10, border: "1px solid var(--line)", fontSize: 15, background: "#fff" }}>
+              style={{ ...input, flex: 1 }}>
               {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
             </select>
-            <input value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, ""))} placeholder="Price (NPR)" inputMode="numeric"
-              style={{ flex: 1, padding: "12px 13px", borderRadius: 10, border: "1px solid var(--line)", fontSize: 15 }} />
+            <input style={{ ...input, flex: 1 }} value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, ""))} placeholder="Price (NPR)" inputMode="numeric" />
           </div>
           <div>
-            <div style={{ fontSize: 12, color: "var(--mut)", fontWeight: 600, letterSpacing: ".05em", textTransform: "uppercase", marginBottom: 7 }}>
-              Available sizes <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span>
-            </div>
+            <div className="field" style={{ marginBottom: 7 }}>Available sizes (optional)</div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {SIZES.map((s) => (
                 <button key={s} type="button" className="ph-btn" onClick={() => toggleSize(s)}
                   style={{
-                    padding: "7px 12px", fontSize: 13, borderRadius: 18,
-                    background: sizes.includes(s) ? "var(--ink)" : "var(--cream)",
-                    color: sizes.includes(s) ? "#fff" : "var(--mut)",
-                    border: "1px solid " + (sizes.includes(s) ? "var(--ink)" : "var(--line)"),
+                    padding: "7px 13px", fontSize: 12, borderRadius: "var(--radius-btn)", fontWeight: 500,
+                    background: sizes.includes(s) ? "var(--forest)" : "var(--sage)",
+                    color: sizes.includes(s) ? "var(--cream)" : "var(--mut)",
+                    border: "1px solid " + (sizes.includes(s) ? "var(--forest)" : "var(--line)"),
                   }}>
                   {s}
                 </button>
@@ -434,8 +427,11 @@ function GarmentModal({ initial, onClose, onSave }: {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-          <button className="ph-btn" onClick={onClose} style={{ flex: 1, background: "var(--cream)", color: "var(--ink)", padding: "13px", fontSize: 15, border: "1px solid var(--line)" }}>Cancel</button>
+        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+          <button className="ph-btn" onClick={onClose}
+            style={{ flex: 1, color: "var(--forest-deep)", padding: 13, fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
+            Cancel
+          </button>
           <button className="ph-btn" disabled={!canSave}
             onClick={() => onSave({
               name: name.trim(), category, price: Number(price || 0), image: image!,
@@ -444,9 +440,63 @@ function GarmentModal({ initial, onClose, onSave }: {
               tryonEnabled: initial?.tryonEnabled ?? true,
               stitchedToOrder: initial?.stitchedToOrder ?? false,
             })}
-            style={{ flex: 2, background: canSave ? "var(--rani)" : "var(--line)", color: canSave ? "#fff" : "var(--mut)", padding: "13px", fontSize: 15 }}>
+            style={{ flex: 2, background: canSave ? "var(--forest)" : "var(--line)", color: canSave ? "var(--cream)" : "var(--mut)", padding: 13, fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
             {initial ? "Save changes" : "Save to catalog"}
           </button>
+        </div>
+        {initial && onRemove && (
+          <button className="ph-btn"
+            onClick={() => { if (confirm("Remove \"" + initial.name + "\" from the catalog?")) onRemove(); }}
+            style={{ width: "100%", marginTop: 12, color: "var(--mut)", fontSize: 12, textDecoration: "underline", textUnderlineOffset: 3 }}>
+            Remove from catalog
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function QRModal({ garment, url, crossDevice, onClose }: { garment: Garment; url: string; crossDevice: boolean; onClose: () => void }) {
+  const [qr, setQr] = useState<string | null>(null);
+  useEffect(() => {
+    QRCode.toDataURL(url, { width: 480, margin: 2, color: { dark: "#2A3D2F", light: "#ffffff" } })
+      .then(setQr)
+      .catch(() => setQr(null));
+  }, [url]);
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(42,61,47,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="fade-up"
+        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 380, maxWidth: "100%", padding: "28px 26px", textAlign: "center" }}>
+        <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 4 }}>Try-on QR</div>
+        <div style={{ fontSize: 14, fontWeight: 500 }}>{garment.name}</div>
+        <div style={{ fontSize: 12, color: "var(--mut)", marginBottom: 4 }}>
+          Shoppers scan this on the hanger tag and try it on their own phone.
+        </div>
+        {qr ? (
+          <img src={qr} alt={"QR code linking to try-on for " + garment.name} style={{ width: 200, height: 200, display: "block", margin: "14px auto" }} />
+        ) : (
+          <div style={{ width: 200, height: 200, margin: "14px auto", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--mut)", fontSize: 13 }}>
+            Generating…
+          </div>
+        )}
+        <code style={{ display: "block", fontSize: 11, color: "var(--mut)", margin: "12px 0", wordBreak: "break-all" }}>{url}</code>
+        {!crossDevice && (
+          <div style={{ fontSize: 12, color: "var(--camel)", background: "var(--sage)", borderRadius: 6, padding: "8px 12px", marginBottom: 12 }}>
+            Local mode: this link only works on this device until you connect Supabase and deploy.
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="ph-btn" onClick={onClose}
+            style={{ flex: 1, color: "var(--forest-deep)", padding: 13, fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
+            Close
+          </button>
+          {qr && (
+            <a className="ph-btn" href={qr} download={"easyfitcheck-qr-" + garment.id + ".png"}
+              style={{ flex: 2, background: "var(--forest)", color: "var(--cream)", padding: 13, fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", textDecoration: "none", borderRadius: "var(--radius-btn)", fontWeight: 500, textAlign: "center" }}>
+              Download PNG
+            </a>
+          )}
         </div>
       </div>
     </div>

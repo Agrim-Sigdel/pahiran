@@ -1,41 +1,83 @@
-@import url('https://fonts.googleapis.com/css2?family=Marcellus&family=Outfit:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap');
 
+/* ── EasyFitCheck design tokens — sage edition ─────────────────────────
+   New palette names, plus the legacy variable names aliased to the new
+   values so pre-existing inline styles pick up the theme automatically. */
 :root {
-  --ink: #211423;
-  --plum: #2E1B33;
-  --rani: #C42561;
-  --rani-soft: #E85D8A;
-  --marigold: #F2A93B;
-  --cream: #FBF7F2;
-  --line: #E8DFE4;
-  --mut: #8A7A85;
+  --forest: #3A5240;       /* primary — deep sage green */
+  --forest-deep: #2A3D2F;  /* headings, dark surfaces */
+  --sage: #EDEFE0;         /* page background */
+  --sage-mist: #E2E6D0;    /* alternate section background */
+  --cream: #FDFCF6;        /* card / surface */
+  --camel: #B08968;        /* warm accent — prices, highlights */
+  --ink: #26332A;          /* body text */
+  --mut: #8A9184;          /* muted text */
+  --line: #D9DDC8;         /* borders */
+  --whatsapp: #25D366;
+
+  /* legacy aliases (older inline styles) */
+  --plum: #2A3D2F;
+  --rani: #3A5240;
+  --rani-soft: #4E6B54;
+  --marigold: #B08968;
+
+  --radius-card: 4px;
+  --radius-btn: 3px;
+  --radius-modal: 8px;
+  --shadow-soft: 0 12px 34px rgba(42, 61, 47, .10);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 body {
   margin: 0;
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Jost', sans-serif;
   color: var(--ink);
-  background: var(--cream);
+  background: var(--sage);
   min-height: 100vh;
 }
 
-.ph-display { font-family: 'Marcellus', serif; letter-spacing: .01em; }
+.ph-display { font-family: 'Cormorant Garamond', serif; font-weight: 500; letter-spacing: .02em; }
 
 .ph-btn {
   border: none;
   cursor: pointer;
-  font-family: 'Outfit', sans-serif;
-  font-weight: 600;
-  border-radius: 14px;
-  transition: transform .12s ease, box-shadow .12s ease;
+  font-family: 'Jost', sans-serif;
+  font-weight: 500;
+  border-radius: var(--radius-btn);
+  transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+  background: none;
 }
 .ph-btn:active { transform: scale(.97); }
-.ph-btn:focus-visible { outline: 3px solid var(--marigold); outline-offset: 2px; }
+.ph-btn:focus-visible { outline: 3px solid var(--camel); outline-offset: 2px; }
 
-input, select { font-family: 'Outfit', sans-serif; }
-input:focus-visible, select:focus-visible { outline: 2px solid var(--rani); outline-offset: 1px; }
+input, select { font-family: 'Jost', sans-serif; }
+input:focus-visible, select:focus-visible { outline: 2px solid var(--forest); outline-offset: 1px; }
+
+/* ── shared building blocks (mirrors design/pahiran-ui.html v2) ── */
+.btn-solid { background: var(--forest); color: var(--cream); padding: 14px 30px; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; font-weight: 500; border-radius: var(--radius-btn); text-decoration: none; display: inline-block; text-align: center; }
+.btn-outline { border: 1px solid var(--forest); color: var(--forest); padding: 13px 28px; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; font-weight: 500; border-radius: var(--radius-btn); background: transparent; text-decoration: none; display: inline-block; text-align: center; }
+.btn-wa { background: var(--whatsapp); color: #fff; padding: 14px 28px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; font-weight: 500; border-radius: var(--radius-btn); text-decoration: none; display: inline-block; text-align: center; }
+.linklike { text-decoration: underline; text-underline-offset: 4px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 500; color: var(--forest-deep); padding: 0; background: none; border: none; cursor: pointer; }
+.kicker { font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: var(--camel); font-weight: 500; }
+.wordmark { font-family: 'Cormorant Garamond', serif; letter-spacing: .3em; text-transform: uppercase; color: var(--forest-deep); }
+
+.efc-chip { padding: 8px 18px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; border-radius: 20px; white-space: nowrap; font-weight: 500; border: none; cursor: pointer; font-family: 'Jost', sans-serif; flex-shrink: 0; }
+.efc-chip.on { background: var(--forest); color: var(--cream); }
+.efc-chip.off { background: transparent; color: var(--mut); border: 1px solid var(--line); }
+
+.panel { background: var(--cream); border: 1px solid var(--line); border-radius: var(--radius-card); padding: 20px 22px; margin-top: 16px; }
+.panel-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.panel-head .title { font-family: 'Cormorant Garamond', serif; font-size: 21px; color: var(--forest-deep); }
+.panel-head .sub { font-size: 12px; color: var(--mut); }
+
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--mut); font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
+.field input { padding: 12px 13px; border-radius: var(--radius-btn); border: 1px solid var(--line); font-size: 15px; background: #fff; color: var(--ink); font-weight: 400; letter-spacing: 0; text-transform: none; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 22px; overflow-x: auto; }
+.tabs button { padding: 12px 20px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 500; color: var(--mut); border: none; border-bottom: 2px solid transparent; white-space: nowrap; background: none; cursor: pointer; font-family: 'Jost', sans-serif; }
+.tabs button.on { color: var(--forest-deep); border-bottom-color: var(--forest); }
+.tabs .badge { background: var(--camel); color: #fff; font-size: 10px; border-radius: 10px; padding: 1px 7px; margin-left: 6px; }
 
 .garment-rail::-webkit-scrollbar { height: 0; }
 

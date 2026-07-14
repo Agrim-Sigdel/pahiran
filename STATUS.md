@@ -1,4 +1,4 @@
-# Pahiran — Project Status
+# EasyFitCheck (formerly Pahiran) — Project Status
 
 _Last updated: 2026-07-14 · Companion to [PRODUCT_PLAN.md](./PRODUCT_PLAN.md)_
 

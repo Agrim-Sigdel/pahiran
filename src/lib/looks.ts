@@ -153,15 +153,15 @@ export function lookImageURL(look: SavedLook): string {
 export async function shareLook(look: SavedLook): Promise<void> {
   const blob =
     look.image instanceof Blob ? look.image : await (await fetch(look.image)).blob();
-  const file = new File([blob], "pahiran-look.jpg", { type: blob.type || "image/jpeg" });
-  const text = look.garmentName + " at " + (look.shopName || "the shop") + " — tried on with Pahiran";
+  const file = new File([blob], "easyfitcheck-look.jpg", { type: blob.type || "image/jpeg" });
+  const text = look.garmentName + " at " + (look.shopName || "the shop") + " — tried on with EasyFitCheck";
   if (navigator.canShare?.({ files: [file] })) {
     await navigator.share({ files: [file], text }).catch(() => {});
     return;
   }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "pahiran-look.jpg";
+  a.download = "easyfitcheck-look.jpg";
   a.click();
   URL.revokeObjectURL(a.href);
 }

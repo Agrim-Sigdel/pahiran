@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Pahiran — Virtual Try-On",
+  title: "EasyFitCheck — Virtual Try-On",
   description:
-    "Try it on — without trying it on. Virtual try-on for clothing shops, influencer stores, and shoppers in Nepal.",
+    "Try it on, without trying it on. Virtual try-on for clothing shops and shoppers in Nepal.",
 };
 
 export const viewport: Viewport = {
@@ -12,7 +12,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#211423",
+  themeColor: "#2A3D2F",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
