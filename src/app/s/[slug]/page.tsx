@@ -63,30 +63,28 @@ export default function StorefrontPage() {
       </div>
 
       {/* nav */}
-      <nav style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", padding: "16px 24px", background: "var(--cream)", borderBottom: "1px solid var(--line)", gap: 12 }}>
-        <div className="garment-rail" style={{ display: "flex", gap: 18, fontSize: 12, letterSpacing: ".14em", textTransform: "uppercase", fontWeight: 500, overflowX: "auto" }}>
+      <nav className="efc-nav">
+        <div className="nav-links garment-rail">
           {cats.slice(0, 4).map((c) => (
-            <a key={c} href="#collection" onClick={() => setFilter(c)} style={{ color: "inherit", textDecoration: "none", whiteSpace: "nowrap", cursor: "pointer" }}>{c}</a>
+            <a key={c} href="#collection" onClick={() => setFilter(c)}>{c}</a>
           ))}
         </div>
-        <div style={{ textAlign: "center" }}>
-          <div className="ph-display" style={{ fontSize: 20, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--forest-deep)" }}>
+        <div className="nav-logo">
+          <div className="ph-display" style={{ fontSize: "clamp(16px, 4vw, 20px)", letterSpacing: ".18em", textTransform: "uppercase", color: "var(--forest-deep)" }}>
             {shop.name || "The shop"}
           </div>
           {shop.area && (
             <div style={{ fontSize: 10, letterSpacing: ".2em", textTransform: "uppercase", color: "var(--mut)", marginTop: 2 }}>{shop.area}</div>
           )}
         </div>
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <Link href={tryonHref} style={{ color: "var(--camel)", textDecoration: "none", fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 500, whiteSpace: "nowrap" }}>
-            ♥ My looks
-          </Link>
+        <div className="nav-tools">
+          <Link href={tryonHref} style={{ color: "var(--camel)" }}>♥ My looks</Link>
         </div>
       </nav>
 
       {/* hero */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", minHeight: 360 }}>
-        <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "44px 24px 44px min(52px, 6vw)", gap: 18 }}>
+      <div className="hero-grid">
+        <div className="hero-copy">
           <div className="kicker">Virtual try-on</div>
           <h1 className="ph-display" style={{ fontWeight: 400, fontSize: "clamp(30px, 4.6vw, 48px)", lineHeight: 1.14, color: "var(--forest-deep)", textTransform: "uppercase", letterSpacing: ".08em", margin: 0 }}>
             Elegance in<br />every thread
@@ -100,7 +98,7 @@ export default function StorefrontPage() {
           </div>
         </div>
         {featured[0] && (
-          <div style={{ margin: "32px 32px 32px 8px", borderRadius: 4, boxShadow: "var(--shadow-soft)", minHeight: 280, overflow: "hidden", background: "var(--sage-mist)" }}>
+          <div className="hero-visual" style={{ background: "var(--sage-mist)" }}>
             <img src={featured[0].image} alt={featured[0].name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           </div>
         )}
@@ -108,12 +106,12 @@ export default function StorefrontPage() {
 
       {/* featured */}
       {featured.length > 0 && (
-        <section style={{ padding: "44px min(32px, 5vw)" }}>
+        <section className="section-pad">
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 22, flexWrap: "wrap", gap: 10 }}>
-            <h2 className="ph-display" style={{ fontWeight: 400, fontSize: 24, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--forest-deep)", margin: 0 }}>Featured pieces</h2>
+            <h2 className="ph-display" style={{ fontWeight: 400, fontSize: "clamp(19px, 3vw, 24px)", letterSpacing: ".14em", textTransform: "uppercase", color: "var(--forest-deep)", margin: 0 }}>Featured pieces</h2>
             <a className="linklike" href="#collection">View all →</a>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 18 }}>
+          <div className="shop-grid">
             {featured.map((g) => (
               <ShopCard key={g.id} g={g} tryonHref={tryonHref} onOpen={() => setDetail(g)} />
             ))}
@@ -122,7 +120,7 @@ export default function StorefrontPage() {
       )}
 
       {/* try-on promo */}
-      <section style={{ padding: "44px min(32px, 5vw)", background: "var(--sage-mist)" }}>
+      <section className="section-pad" style={{ background: "var(--sage-mist)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
           <div style={{ padding: "40px 36px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 14 }}>
             <div className="kicker">The trial room, reinvented</div>
@@ -143,9 +141,9 @@ export default function StorefrontPage() {
       </section>
 
       {/* full collection */}
-      <section id="collection" style={{ padding: "44px min(32px, 5vw)" }}>
+      <section id="collection" className="section-pad">
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
-          <h2 className="ph-display" style={{ fontWeight: 400, fontSize: 24, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--forest-deep)", margin: 0 }}>The collection</h2>
+          <h2 className="ph-display" style={{ fontWeight: 400, fontSize: "clamp(19px, 3vw, 24px)", letterSpacing: ".14em", textTransform: "uppercase", color: "var(--forest-deep)", margin: 0 }}>The collection</h2>
           <span style={{ color: "var(--mut)", fontSize: 13 }}>{catalog.length} piece{catalog.length !== 1 ? "s" : ""}</span>
         </div>
         {cats.length > 1 && (
@@ -161,7 +159,7 @@ export default function StorefrontPage() {
             Nothing on the rack{filter !== "All" ? " in this category" : ""} right now — check back soon.
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 18 }}>
+          <div className="shop-grid">
             {shown.map((g) => (
               <ShopCard key={g.id} g={g} tryonHref={tryonHref} onOpen={() => setDetail(g)} />
             ))}
@@ -170,7 +168,7 @@ export default function StorefrontPage() {
       </section>
 
       {/* footer */}
-      <footer style={{ background: "var(--forest-deep)", color: "var(--sage)", padding: "44px min(32px, 5vw) 30px" }}>
+      <footer className="section-pad" style={{ background: "var(--forest-deep)", color: "var(--sage)", paddingBottom: 30 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 28, maxWidth: 900, margin: "0 auto" }}>
           <div>
             <h4 className="ph-display" style={{ fontSize: 19, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12, color: "var(--cream)", fontWeight: 500 }}>

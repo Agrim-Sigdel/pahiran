@@ -52,7 +52,7 @@ export default function Dashboard({
   ];
 
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto", padding: "0 26px 50px" }}>
+    <div style={{ maxWidth: 1080, margin: "0 auto", padding: "0 min(26px, 4vw) 50px" }}>
       {/* header */}
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22px 0 16px", flexWrap: "wrap", gap: 12 }}>
         <div>
@@ -137,7 +137,7 @@ export default function Dashboard({
               {filtered.length === 0 ? (
                 <EmptyState onAdd={() => setShowForm(true)} anyItems={catalog.length > 0} />
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 18 }}>
+                <div className="card-grid">
                   {filtered.map((g) => {
                     const tries = tryCounts.get(g.id) || 0;
                     return (
