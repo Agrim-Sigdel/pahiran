@@ -79,6 +79,20 @@ async function cachePut(
   );
 }
 
+async function logError(
+  sb: SupabaseClient | null,
+  message: string,
+  detail: Record<string, unknown>,
+  shopId: string | null
+): Promise<void> {
+  console.error("[tryon-api]", message, detail);
+  if (!sb) return;
+  await sb
+    .from("error_logs")
+    .insert({ source: "tryon-api", message: message.slice(0, 500), detail, shop_id: shopId })
+    .then(() => {}, () => {});
+}
+
 async function logEvent(
   sb: SupabaseClient | null,
   shopId: string | null,
@@ -138,24 +152,35 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ url: cachedUrl, cached: true });
   }
 
-  const res = await fetch(FAL_ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: "Key " + process.env.FAL_KEY,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model_image: personImage,
-      garment_image: garmentImage,
-      category: mapCategory(category),
-      mode: "balanced",
-      output_format: "jpeg",
-    }),
-  });
+  let res: globalThis.Response;
+  try {
+    res = await fetch(FAL_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: "Key " + process.env.FAL_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model_image: personImage,
+        garment_image: garmentImage,
+        category: mapCategory(category),
+        mode: "balanced",
+        output_format: "jpeg",
+      }),
+    });
+  } catch (e: any) {
+    await logError(sb, "fal.ai unreachable: " + (e?.message || e), { garmentId, category }, shopId);
+    return Response.json({ error: "Try-on service unreachable" }, { status: 502 });
+  }
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    console.error("fal.ai error", res.status, txt.slice(0, 300));
+    await logError(
+      sb,
+      "fal.ai error " + res.status,
+      { status: res.status, response: txt.slice(0, 300), garmentId, category },
+      shopId
+    );
     return Response.json(
       { error: "Try-on service error (" + res.status + ")" },
       { status: 502 }
@@ -165,6 +190,7 @@ export async function POST(req: Request): Promise<Response> {
   const data = await res.json();
   const url: string | undefined = data?.images?.[0]?.url;
   if (!url) {
+    await logError(sb, "fal.ai returned no image", { garmentId, category }, shopId);
     return Response.json({ error: "Try-on service returned no image" }, { status: 502 });
   }
 

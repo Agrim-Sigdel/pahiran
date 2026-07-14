@@ -6,8 +6,10 @@ import Dashboard from "@/components/Dashboard";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import {
   loadShop, saveShop, loadCatalog, addGarment as persistGarment,
-  removeGarment as unpersistGarment, setGarmentStock, getTryOnStats,
+  updateGarment as persistGarmentUpdate, removeGarment as unpersistGarment,
+  setGarmentStock, getTryOnStats, updateShopSlug,
 } from "@/lib/storage";
+import { reportError } from "@/lib/logging";
 import type { Garment, Shop, TryOnStat } from "@/lib/types";
 
 export default function DashboardPage() {
@@ -46,7 +48,30 @@ export default function DashboardPage() {
       const saved = await persistGarment(shop, g, catalog.map((x) => x.id));
       setCatalog((c) => [saved, ...c]);
     } catch (e: any) {
+      reportError("dashboard", "add garment failed: " + (e?.message || e), { shopId: shop.id });
       alert("Could not save garment: " + (e?.message || "image may be too large — try a smaller photo."));
+    }
+  };
+
+  const editGarment = async (updated: Garment) => {
+    const existing = catalog.find((g) => g.id === updated.id);
+    if (!existing) return;
+    try {
+      const saved = await persistGarmentUpdate(shop, updated, existing.image);
+      setCatalog((c) => c.map((g) => (g.id === saved.id ? saved : g)));
+    } catch (e: any) {
+      reportError("dashboard", "edit garment failed: " + (e?.message || e), { shopId: shop.id });
+      alert("Could not save changes: " + (e?.message || "please try again."));
+    }
+  };
+
+  const changeSlug = async (slug: string): Promise<string | null> => {
+    try {
+      const updated = await updateShopSlug(shop, slug);
+      setShop(updated);
+      return null;
+    } catch (e: any) {
+      return e?.message || "Could not update the link — try again.";
     }
   };
 
@@ -74,8 +99,9 @@ export default function DashboardPage() {
 
   return (
     <Dashboard
-      shop={shop} updateShop={updateShop}
-      catalog={catalog} addGarment={addGarment} removeGarment={removeGarment}
+      shop={shop} updateShop={updateShop} changeSlug={shop.slug ? changeSlug : null}
+      catalog={catalog} addGarment={addGarment} editGarment={editGarment}
+      removeGarment={removeGarment}
       toggleStock={toggleStock} stats={stats} loading={loading}
       launchKiosk={() => router.push(shop.slug ? "/k/" + shop.slug : "/kiosk")}
       signOut={signOut}

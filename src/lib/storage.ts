@@ -72,6 +72,25 @@ export async function saveShop(profile: Shop): Promise<void> {
     .eq("id", profile.id);
 }
 
+/** Change the shop's public /k/{slug} link. Supabase mode only. */
+export async function updateShopSlug(shop: Shop, slug: string): Promise<Shop> {
+  if (!isSupabaseConfigured() || !shop.id) {
+    throw new Error("Custom links need Supabase mode");
+  }
+  const { data, error } = await supabase()
+    .from("shops")
+    .update({ slug })
+    .eq("id", shop.id)
+    .select()
+    .single();
+  if (error) {
+    throw error.code === "23505"
+      ? new Error("That link is already taken — try another.")
+      : error;
+  }
+  return rowToShop(data as ShopRow);
+}
+
 /* ---------- public lookup for /k/[slug] ---------- */
 
 export async function getShopBySlug(slug: string): Promise<Shop | null> {
@@ -151,6 +170,52 @@ export async function addGarment(
     .select()
     .single();
   if (error) throw error;
+  return rowToGarment(data as GarmentRow);
+}
+
+/** Update an existing garment. garment.image may be a fresh data URL (new
+    photo) or the unchanged stored URL; previousImage is what was stored. */
+export async function updateGarment(
+  shop: Shop | null,
+  garment: Garment,
+  previousImage: string
+): Promise<Garment> {
+  if (!isSupabaseConfigured()) {
+    lsSet("garment:" + garment.id, JSON.stringify(garment));
+    return garment;
+  }
+  if (!shop?.id) throw new Error("No shop — sign in first");
+  const sb = supabase();
+  let imageUrl = garment.image;
+  const photoChanged = garment.image.startsWith("data:");
+  if (photoChanged) {
+    const path = shop.id + "/" + crypto.randomUUID() + ".jpg";
+    const { error: upErr } = await sb.storage
+      .from("garments")
+      .upload(path, dataURLToBlob(garment.image), { contentType: "image/jpeg" });
+    if (upErr) throw upErr;
+    imageUrl = sb.storage.from("garments").getPublicUrl(path).data.publicUrl;
+  }
+  const { data, error } = await sb
+    .from("garments")
+    .update({
+      name: garment.name,
+      category: garment.category,
+      price_npr: garment.price,
+      image_url: imageUrl,
+      sizes: garment.sizes,
+      in_stock: garment.inStock,
+      tryon_enabled: garment.tryonEnabled,
+      stitched_to_order: garment.stitchedToOrder,
+    })
+    .eq("id", garment.id)
+    .select()
+    .single();
+  if (error) throw error;
+  if (photoChanged) {
+    const oldPath = previousImage.split("/garments/")[1];
+    if (oldPath) await sb.storage.from("garments").remove([decodeURIComponent(oldPath)]);
+  }
   return rowToGarment(data as GarmentRow);
 }
 

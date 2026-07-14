@@ -5,6 +5,7 @@ import { npr } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
 import { runTryOn } from "@/lib/tryon";
 import { logLocalTryOn } from "@/lib/storage";
+import { reportError } from "@/lib/logging";
 import type { Garment, Shop } from "@/lib/types";
 
 /* Kiosk — full-screen, dark, touch-first shopper flow:
@@ -283,6 +284,9 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     } catch (e) {
       if (seq !== requestSeq.current) return;
       console.error("Try-on failed, falling back to manual preview:", e);
+      reportError("kiosk", "try-on fell back to manual preview: " + ((e as Error)?.message || e), {
+        shopId: shop.id, garmentId: garment.id,
+      });
       setNotice("AI try-on unavailable here — showing a positioning preview instead.");
       setPhase("preview");
     }

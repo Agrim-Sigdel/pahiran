@@ -51,6 +51,16 @@ create table rate_limits (
   reset_at timestamptz not null
 );
 
+-- Error monitoring: server + client failures land here (see /api/log)
+create table error_logs (
+  id uuid primary key default gen_random_uuid(),
+  source text not null,               -- 'tryon-api' | 'kiosk' | 'dashboard' | ...
+  message text not null,
+  detail jsonb,
+  shop_id uuid,
+  created_at timestamptz not null default now()
+);
+
 create index garments_shop_idx on garments (shop_id);
 create index tryon_results_garment_idx on tryon_results (garment_id);
 create index tryon_events_shop_idx on tryon_events (shop_id, garment_id);
@@ -60,6 +70,7 @@ alter table garments enable row level security;
 alter table tryon_results enable row level security;
 alter table tryon_events enable row level security;
 alter table rate_limits enable row level security; -- no policies: service role only
+alter table error_logs enable row level security;  -- no policies: service role only
 
 -- Vendors manage their own shop + catalog
 create policy "own shop" on shops

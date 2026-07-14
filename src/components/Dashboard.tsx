@@ -9,8 +9,10 @@ import type { Garment, Shop, TryOnStat } from "@/lib/types";
 interface DashboardProps {
   shop: Shop;
   updateShop: (s: Shop) => void;
+  changeSlug: ((slug: string) => Promise<string | null>) | null;
   catalog: Garment[];
   addGarment: (g: Omit<Garment, "id">) => void;
+  editGarment: (g: Garment) => void;
   removeGarment: (id: string) => void;
   toggleStock: (id: string) => void;
   stats: TryOnStat[];
@@ -20,10 +22,11 @@ interface DashboardProps {
 }
 
 export default function Dashboard({
-  shop, updateShop, catalog, addGarment, removeGarment, toggleStock,
-  stats, loading, launchKiosk, signOut,
+  shop, updateShop, changeSlug, catalog, addGarment, editGarment, removeGarment,
+  toggleStock, stats, loading, launchKiosk, signOut,
 }: DashboardProps) {
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Garment | null>(null);
   const [filter, setFilter] = useState("All");
   const [qrGarment, setQrGarment] = useState<Garment | null>(null);
   const filtered = filter === "All" ? catalog : catalog.filter((g) => g.category === filter);
@@ -83,7 +86,7 @@ export default function Dashboard({
           onChange={(v) => updateShop({ ...shop, name: v })} width={260} />
         <LabeledInput label="Area / city" value={shop.area} placeholder="e.g. New Road, Kathmandu"
           onChange={(v) => updateShop({ ...shop, area: v })} width={260} />
-        {shop.slug && <KioskLink url={kioskUrl} />}
+        {shop.slug && <KioskLink url={kioskUrl} slug={shop.slug} changeSlug={changeSlug} />}
       </div>
 
       {/* try-on analytics */}
@@ -140,6 +143,10 @@ export default function Dashboard({
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ color: "var(--rani)", fontWeight: 700, fontSize: 15 }}>{npr(g.price)}</span>
                   <div style={{ display: "flex", gap: 2 }}>
+                    <button className="ph-btn" onClick={() => setEditing(g)}
+                      style={{ background: "transparent", color: "var(--ink)", fontSize: 12, padding: "4px 6px", fontWeight: 500 }}>
+                      Edit
+                    </button>
                     <button className="ph-btn" title="QR code for this garment" onClick={() => setQrGarment(g)}
                       style={{ background: "transparent", color: "var(--ink)", fontSize: 12, padding: "4px 6px", fontWeight: 500 }}>
                       QR
@@ -160,7 +167,14 @@ export default function Dashboard({
         </div>
       )}
 
-      {showForm && <AddGarmentModal onClose={() => setShowForm(false)} onSave={(g) => { addGarment(g); setShowForm(false); }} />}
+      {showForm && <GarmentModal onClose={() => setShowForm(false)} onSave={(g) => { addGarment(g); setShowForm(false); }} />}
+      {editing && (
+        <GarmentModal
+          initial={editing}
+          onClose={() => setEditing(null)}
+          onSave={(g) => { editGarment({ ...editing, ...g }); setEditing(null); }}
+        />
+      )}
       {qrGarment && (
         <QRModal
           garment={qrGarment}
@@ -173,21 +187,71 @@ export default function Dashboard({
   );
 }
 
-function KioskLink({ url }: { url: string }) {
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function KioskLink({ url, slug, changeSlug }: {
+  url: string; slug: string; changeSlug: ((slug: string) => Promise<string | null>) | null;
+}) {
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(slug);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const valid = SLUG_RE.test(draft) && draft.length >= 3 && draft.length <= 40;
+
+  const save = async () => {
+    if (!changeSlug || !valid || draft === slug) { setEditing(false); return; }
+    setBusy(true);
+    const err = await changeSlug(draft);
+    setBusy(false);
+    if (err) { setError(err); return; }
+    setError("");
+    setEditing(false);
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, color: "var(--mut)", fontWeight: 600, letterSpacing: ".05em", textTransform: "uppercase" }}>
       Your kiosk link
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <code style={{ padding: "11px 13px", borderRadius: 10, border: "1px solid var(--line)", background: "#fff", fontSize: 13, letterSpacing: 0, textTransform: "none", fontWeight: 400, maxWidth: "58vw", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {url}
-        </code>
-        <button className="ph-btn"
-          onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-          style={{ background: "var(--ink)", color: "#fff", padding: "10px 14px", fontSize: 12 }}>
-          {copied ? "Copied ✓" : "Copy"}
-        </button>
-      </div>
+      {editing ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, letterSpacing: 0, textTransform: "none", fontWeight: 400 }}>/k/</span>
+            <input value={draft} autoFocus
+              onChange={(e) => { setDraft(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "")); setError(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+              style={{ padding: "10px 13px", borderRadius: 10, border: "1px solid " + (valid ? "var(--line)" : "var(--rani)"), fontSize: 14, letterSpacing: 0, textTransform: "none", fontWeight: 400, width: 190 }} />
+            <button className="ph-btn" disabled={!valid || busy} onClick={save}
+              style={{ background: valid ? "var(--ink)" : "var(--line)", color: valid ? "#fff" : "var(--mut)", padding: "10px 14px", fontSize: 12 }}>
+              {busy ? "Saving…" : "Save"}
+            </button>
+            <button className="ph-btn" onClick={() => { setEditing(false); setDraft(slug); setError(""); }}
+              style={{ background: "transparent", color: "var(--mut)", padding: "10px 8px", fontSize: 12 }}>
+              Cancel
+            </button>
+          </div>
+          <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", color: error ? "var(--rani)" : "var(--mut)" }}>
+            {error || "Lowercase letters, numbers and dashes. Changing this breaks QR codes you've already printed."}
+          </span>
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <code style={{ padding: "11px 13px", borderRadius: 10, border: "1px solid var(--line)", background: "#fff", fontSize: 13, letterSpacing: 0, textTransform: "none", fontWeight: 400, maxWidth: "58vw", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {url}
+          </code>
+          <button className="ph-btn"
+            onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+            style={{ background: "var(--ink)", color: "#fff", padding: "10px 14px", fontSize: 12 }}>
+            {copied ? "Copied ✓" : "Copy"}
+          </button>
+          {changeSlug && (
+            <button className="ph-btn" onClick={() => { setDraft(slug); setEditing(true); }}
+              style={{ background: "transparent", color: "var(--mut)", padding: "10px 8px", fontSize: 12 }}>
+              Edit
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -293,12 +357,16 @@ function EmptyState({ onAdd, anyItems }: { onAdd: () => void; anyItems: boolean 
   );
 }
 
-function AddGarmentModal({ onClose, onSave }: { onClose: () => void; onSave: (g: Omit<Garment, "id">) => void }) {
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState<string>(CATEGORIES[0]);
-  const [price, setPrice] = useState("");
-  const [image, setImage] = useState<string | null>(null);
-  const [sizes, setSizes] = useState<string[]>([]);
+function GarmentModal({ initial, onClose, onSave }: {
+  initial?: Garment;
+  onClose: () => void;
+  onSave: (g: Omit<Garment, "id">) => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [category, setCategory] = useState<string>(initial?.category ?? CATEGORIES[0]);
+  const [price, setPrice] = useState(initial ? String(initial.price || "") : "");
+  const [image, setImage] = useState<string | null>(initial?.image ?? null);
+  const [sizes, setSizes] = useState<string[]>(initial?.sizes ?? []);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -319,7 +387,9 @@ function AddGarmentModal({ onClose, onSave }: { onClose: () => void; onSave: (g:
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(33,20,35,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} className="fade-up"
         style={{ background: "#fff", borderRadius: 20, width: 440, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: 24 }}>
-        <div className="ph-display" style={{ fontSize: 22, marginBottom: 18 }}>Add a garment</div>
+        <div className="ph-display" style={{ fontSize: 22, marginBottom: 18 }}>
+          {initial ? "Edit garment" : "Add a garment"}
+        </div>
 
         <div onClick={() => fileRef.current?.click()}
           style={{ border: "2px dashed " + (image ? "var(--rani)" : "var(--line)"), borderRadius: 14, height: 210, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--cream)" }}>
@@ -368,10 +438,13 @@ function AddGarmentModal({ onClose, onSave }: { onClose: () => void; onSave: (g:
           <button className="ph-btn" disabled={!canSave}
             onClick={() => onSave({
               name: name.trim(), category, price: Number(price || 0), image: image!,
-              sizes, inStock: true, tryonEnabled: true, stitchedToOrder: false,
+              sizes,
+              inStock: initial?.inStock ?? true,
+              tryonEnabled: initial?.tryonEnabled ?? true,
+              stitchedToOrder: initial?.stitchedToOrder ?? false,
             })}
             style={{ flex: 2, background: canSave ? "var(--rani)" : "var(--line)", color: canSave ? "#fff" : "var(--mut)", padding: "13px", fontSize: 15 }}>
-            Save to catalog
+            {initial ? "Save changes" : "Save to catalog"}
           </button>
         </div>
       </div>
