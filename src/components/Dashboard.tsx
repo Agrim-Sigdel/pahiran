@@ -90,7 +90,12 @@ export default function Dashboard({
           onChange={(v) => updateShop({ ...shop, name: v })} width={260} />
         <LabeledInput label="Area / city" value={shop.area} placeholder="e.g. New Road, Kathmandu"
           onChange={(v) => updateShop({ ...shop, area: v })} width={260} />
+        <LabeledInput label="WhatsApp (orders)" value={shop.whatsapp} placeholder="e.g. 9779841000000"
+          onChange={(v) => updateShop({ ...shop, whatsapp: v.replace(/[^0-9+ ]/g, "") })} width={200} />
         {shop.slug && <KioskLink url={kioskUrl} slug={shop.slug} changeSlug={changeSlug} />}
+        {shop.slug && typeof window !== "undefined" && (
+          <StorefrontLink url={window.location.origin + "/s/" + shop.slug} />
+        )}
       </div>
 
       {/* activity: stats, chart, leads, history, errors */}
@@ -189,6 +194,25 @@ export default function Dashboard({
           onClose={() => setQrGarment(null)}
         />
       )}
+    </div>
+  );
+}
+
+function StorefrontLink({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, color: "var(--mut)", fontWeight: 600, letterSpacing: ".05em", textTransform: "uppercase" }}>
+      Storefront (browse only)
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <code style={{ padding: "11px 13px", borderRadius: 10, border: "1px solid var(--line)", background: "#fff", fontSize: 13, letterSpacing: 0, textTransform: "none", fontWeight: 400, maxWidth: "58vw", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {url}
+        </code>
+        <button className="ph-btn"
+          onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+          style={{ background: "var(--ink)", color: "#fff", padding: "10px 14px", fontSize: 12 }}>
+          {copied ? "Copied ✓" : "Copy"}
+        </button>
+      </div>
     </div>
   );
 }

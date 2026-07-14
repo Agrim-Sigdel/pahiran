@@ -60,7 +60,7 @@ function PublicKiosk() {
   }
 
   return (
-    <Kiosk shop={shop} catalog={catalog} exit={() => router.push("/")}
+    <Kiosk shop={shop} catalog={catalog} exit={() => router.push("/s/" + slug)}
       initialGarmentId={params.get("g")} />
   );
 }

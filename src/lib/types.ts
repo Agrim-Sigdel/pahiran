@@ -6,6 +6,7 @@ export interface Shop {
   slug: string | null; // pahiran.app/k/{slug}; null in localStorage mode
   name: string;
   area: string;
+  whatsapp: string; // digits for wa.me links; "" = no order button
 }
 
 export interface Garment {
@@ -51,6 +52,7 @@ export interface ShopRow {
   slug: string;
   name: string;
   area: string | null;
+  whatsapp: string | null;
 }
 
 export interface GarmentRow {

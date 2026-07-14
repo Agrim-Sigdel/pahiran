@@ -20,3 +20,10 @@ export function mapCategory(cat: string): string {
 
 export const npr = (n: number | string | null | undefined): string =>
   "रू " + Number(n || 0).toLocaleString("en-IN");
+
+/** wa.me deep link, or null if the number is too short to be real. */
+export function waLink(number: string, message: string): string | null {
+  const digits = (number || "").replace(/\D/g, "");
+  if (digits.length < 8) return null;
+  return "https://wa.me/" + digits + "?text=" + encodeURIComponent(message);
+}

@@ -48,6 +48,10 @@ _Last updated: 2026-07-14 · Companion to [PRODUCT_PLAN.md](./PRODUCT_PLAN.md)_
   store shopper photos): remember-my-photo (opt-in, 7-day expiry, forgettable),
   save-look gallery with favourites, share/download, per-look delete and a
   delete-everything button; consent copy updated to match
+- **Phase D polish**: public storefront `/s/[shop]` (browse catalog, garment
+  sheet → try-on deep link or WhatsApp order), shop WhatsApp number, Nepali ⇄
+  English toggle across the whole kiosk, PWA manifest (installable on a shop
+  tablet), public kiosk exits to the storefront
 
 ## ❌ What we don't have
 
@@ -61,7 +65,7 @@ _Last updated: 2026-07-14 · Companion to [PRODUCT_PLAN.md](./PRODUCT_PLAN.md)_
       once deployed)
 
 ### Phase 2+ — three-sided platform (plan only, no code)
-- [ ] Public storefronts (`/s/[shop]`), shopper accounts with saved photo
+- [ ] Shopper accounts with saved photo (cross-device; Phase C of the plan)
 - [ ] Influencer stores (`/i/[name]`), attribution, commissions
 - [ ] Fabric → styled-render pipeline (style template gallery)
 - [ ] Search, checkout (eSewa/Khalti/COD), delivery, reviews

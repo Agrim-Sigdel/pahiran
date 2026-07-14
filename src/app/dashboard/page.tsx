@@ -15,7 +15,7 @@ import type { ErrorLog, Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [shop, setShop] = useState<Shop>({ id: null, slug: null, name: "", area: "" });
+  const [shop, setShop] = useState<Shop>({ id: null, slug: null, name: "", area: "", whatsapp: "" });
   const [catalog, setCatalog] = useState<Garment[]>([]);
   const [events, setEvents] = useState<TryOnEvent[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);

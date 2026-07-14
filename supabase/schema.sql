@@ -8,6 +8,7 @@ create table shops (
   slug text unique not null,          -- pahiran.app/k/{slug}, /s/{slug}
   name text not null,
   area text,
+  whatsapp text,                      -- order-link number shown on storefront/kiosk
   created_at timestamptz not null default now()
 );
 

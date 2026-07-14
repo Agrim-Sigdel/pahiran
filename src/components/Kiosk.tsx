@@ -11,6 +11,8 @@ import {
   saveLook, listLooks, setLookFavorite, deleteLook, clearAllLooks,
   lookImageURL, shareLook, type SavedLook,
 } from "@/lib/looks";
+import { LangContext, STRINGS, useLangState, useT } from "@/lib/i18n";
+import { waLink } from "@/lib/constants";
 import type { Garment, Shop } from "@/lib/types";
 
 /* Kiosk — full-screen, dark, touch-first shopper flow:
@@ -33,6 +35,8 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
   const [savedPhoto, setSavedPhoto] = useState<string | null>(null);
   const [looksCount, setLooksCount] = useState(0);
   const [showLooks, setShowLooks] = useState(false);
+  const [lang, toggleLang] = useLangState();
+  const t = STRINGS[lang];
   const cats = ["All", ...Array.from(new Set(catalog.map((g) => g.category)))];
   const rail = catFilter === "All" ? catalog : catalog.filter((g) => g.category === catFilter);
   const initialGarment = initialGarmentId ? catalog.find((g) => g.id === initialGarmentId) ?? null : null;
@@ -51,6 +55,7 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
   };
 
   return (
+    <LangContext.Provider value={lang}>
     <div style={{ position: "fixed", inset: 0, background: "radial-gradient(120% 100% at 50% 0%, #3A2140 0%, var(--ink) 55%)", color: "#fff", display: "flex", flexDirection: "column", zIndex: 40 }}>
       {/* top bar */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px" }}>
@@ -58,20 +63,24 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
           <span className="ph-display" style={{ fontSize: 20 }}>{shop.name || "Pahiran"}</span>
           {shop.area && <span style={{ color: "rgba(255,255,255,.45)", fontSize: 13, marginLeft: 10 }}>{shop.area}</span>}
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <button className="ph-btn" onClick={toggleLang}
+            style={{ background: "rgba(255,255,255,.1)", color: "#fff", padding: "9px 16px", fontSize: 13 }}>
+            {t.switchLang}
+          </button>
           {looksCount > 0 && (
             <button className="ph-btn" onClick={() => setShowLooks(true)}
               style={{ background: "rgba(255,255,255,.1)", color: "var(--marigold)", padding: "9px 16px", fontSize: 13 }}>
-              ♥ My looks ({looksCount})
+              {t.myLooksBtn(looksCount)}
             </button>
           )}
           {step !== "attract" && (
             <button className="ph-btn" onClick={reset} style={{ background: "rgba(255,255,255,.1)", color: "#fff", padding: "9px 16px", fontSize: 13 }}>
-              ↺ Start over
+              {t.startOver}
             </button>
           )}
           <button className="ph-btn" onClick={exit} style={{ background: "transparent", color: "rgba(255,255,255,.4)", padding: "9px 12px", fontSize: 13 }}>
-            Exit kiosk
+            {t.exitKiosk}
           </button>
         </div>
       </div>
@@ -95,17 +104,19 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
           onLookSaved={() => setLooksCount((n) => n + 1)} />
       )}
     </div>
+    </LangContext.Provider>
   );
 }
 
 function AttractScreen({ count, highlight, start }: { count: number; highlight: Garment | null; start: () => void }) {
+  const t = useT();
   return (
     <div className="fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 24 }}>
       <div style={{ fontSize: 13, letterSpacing: ".28em", textTransform: "uppercase", color: "var(--marigold)", marginBottom: 18 }}>
-        Virtual trial room
+        {t.virtualTrialRoom}
       </div>
       <div className="ph-display" style={{ fontSize: "clamp(34px, 6vw, 58px)", lineHeight: 1.15, maxWidth: 640 }}>
-        Try it on —<br />without trying it on.
+        {t.headline1}<br />{t.headline2}
       </div>
       {highlight ? (
         <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "20px 0 30px", background: "rgba(255,255,255,.08)", borderRadius: 16, padding: "10px 18px 10px 10px" }}>
@@ -117,12 +128,12 @@ function AttractScreen({ count, highlight, start }: { count: number; highlight: 
         </div>
       ) : (
         <p style={{ color: "rgba(255,255,255,.55)", fontSize: 17, maxWidth: 440, margin: "18px 0 34px" }}>
-          Take one photo, then browse {count} piece{count !== 1 ? "s" : ""} from this shop and see them on you.
+          {t.attractSub(count)}
         </p>
       )}
       <button className="ph-btn" onClick={start}
         style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "20px 46px", fontSize: 20, borderRadius: 40, boxShadow: "0 10px 34px rgba(196,37,97,.45)" }}>
-        {highlight ? "See it on you" : "Tap to begin"}
+        {highlight ? t.seeItOnYou : t.tapToBegin}
       </button>
     </div>
   );
@@ -133,36 +144,37 @@ function ConsentScreen({ agree, back, savedPhoto, useSaved, forgetSaved }: {
   agree: () => void; back: () => void;
   savedPhoto: string | null; useSaved: () => void; forgetSaved: () => void;
 }) {
+  const t = useT();
   return (
     <div className="fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", overflowY: "auto" }}>
       <div style={{ fontSize: 30, marginBottom: 14 }}>🔒</div>
-      <div className="ph-display" style={{ fontSize: "clamp(22px, 4vw, 30px)", marginBottom: 16 }}>Your photo, your call</div>
+      <div className="ph-display" style={{ fontSize: "clamp(22px, 4vw, 30px)", marginBottom: 16 }}>{t.consentTitle}</div>
       <div style={{ maxWidth: 460, display: "flex", flexDirection: "column", gap: 10, textAlign: "left", background: "rgba(255,255,255,.06)", borderRadius: 18, padding: "18px 22px", fontSize: 14.5, color: "rgba(255,255,255,.75)", lineHeight: 1.55 }}>
-        <div>• Your photo is used <strong style={{ color: "#fff" }}>only</strong> to show these clothes on you.</div>
-        <div>• It is sent securely to our AI try-on service and processed there — the shop never keeps a copy.</div>
-        <div>• Nothing is stored unless <strong style={{ color: "#fff" }}>you</strong> choose "Save look" or "Remember my photo" — and that stays on this device only, deletable anytime.</div>
-        <div>• No account, no name, no phone number needed.</div>
+        <div>• {t.consentB1}</div>
+        <div>• {t.consentB2}</div>
+        <div>• {t.consentB3}</div>
+        <div>• {t.consentB4}</div>
       </div>
       <div style={{ display: "flex", gap: 12, marginTop: 26, flexWrap: "wrap", justifyContent: "center" }}>
         <button className="ph-btn" onClick={back} style={{ background: "rgba(255,255,255,.1)", color: "#fff", padding: "15px 24px", fontSize: 15, borderRadius: 30 }}>
-          Not now
+          {t.notNow}
         </button>
         {savedPhoto && (
           <button className="ph-btn" onClick={useSaved}
             style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(255,255,255,.12)", color: "#fff", padding: "10px 22px 10px 10px", fontSize: 15, borderRadius: 30 }}>
-            <img src={savedPhoto} alt="Your saved photo" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover" }} />
-            Use my last photo
+            <img src={savedPhoto} alt="" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover" }} />
+            {t.useLastPhoto}
           </button>
         )}
         <button className="ph-btn" onClick={agree}
           style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "15px 34px", fontSize: 16, borderRadius: 30, boxShadow: "0 8px 26px rgba(196,37,97,.4)" }}>
-          I agree — take my photo
+          {t.agreeTakePhoto}
         </button>
       </div>
       {savedPhoto && (
         <button className="ph-btn" onClick={forgetSaved}
           style={{ background: "transparent", color: "rgba(255,255,255,.4)", fontSize: 12, marginTop: 14, padding: "4px 8px" }}>
-          Forget my saved photo
+          {t.forgetSavedPhoto}
         </button>
       )}
     </div>
@@ -176,6 +188,7 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boole
   const fileRef = useRef<HTMLInputElement>(null);
   const [camState, setCamState] = useState<"starting" | "live" | "denied">("starting");
   const [remember, setRemember] = useState(false);
+  const t = useT();
 
   useEffect(() => {
     let cancelled = false;
@@ -206,12 +219,12 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boole
   const handleUpload = async (file: File | undefined) => {
     if (!file) return;
     try { onPhoto(await fileToCompressedDataURL(file, 1000, 0.85), remember); }
-    catch { alert("Could not read that photo."); }
+    catch { alert(t.couldNotReadPhoto); }
   };
 
   return (
     <div className="fade-up" style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: "6px 20px 30px", gap: 18 }}>
-      <div className="ph-display" style={{ fontSize: "clamp(19px, 3vw, 26px)", textAlign: "center" }}>Stand back so we can see you fully</div>
+      <div className="ph-display" style={{ fontSize: "clamp(19px, 3vw, 26px)", textAlign: "center" }}>{t.standBack}</div>
 
       <div
         onClick={camState === "denied" ? () => fileRef.current?.click() : undefined}
@@ -221,13 +234,13 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boole
         ) : (
           <div style={{ textAlign: "center", color: "rgba(255,255,255,.55)", padding: 24, fontSize: 15 }}>
             <div style={{ fontSize: 30, marginBottom: 10 }}>📷</div>
-            Camera isn't available here.<br />
-            <span style={{ color: "var(--marigold)", fontWeight: 600 }}>Tap anywhere in this box</span><br />to upload a full-body photo instead.
+            {t.cameraUnavailable}<br />
+            <span style={{ color: "var(--marigold)", fontWeight: 600 }}>{t.tapAnywhere}</span><br />{t.uploadInstead}
           </div>
         )}
         {camState === "starting" && (
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.5)", fontSize: 14 }}>
-            Starting camera…
+            {t.startingCamera}
           </div>
         )}
       </div>
@@ -236,29 +249,28 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boole
         {camState === "live" && (
           <button className="ph-btn" onClick={snap}
             style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "17px 38px", fontSize: 18, borderRadius: 34, boxShadow: "0 8px 26px rgba(196,37,97,.4)" }}>
-            📸 Take photo
+            {t.takePhoto}
           </button>
         )}
         <button className="ph-btn" onClick={() => fileRef.current?.click()}
           style={{ background: "rgba(255,255,255,.12)", color: "#fff", padding: "17px 28px", fontSize: 16, borderRadius: 34 }}>
-          Upload a photo
+          {t.uploadPhoto}
         </button>
         <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleUpload(e.target.files?.[0])} />
       </div>
       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "rgba(255,255,255,.65)", cursor: "pointer" }}>
         <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}
           style={{ accentColor: "var(--rani)", width: 16, height: 16 }} />
-        Remember my photo on this device for 7 days
+        {t.rememberPhoto}
       </label>
       <div style={{ color: "rgba(255,255,255,.35)", fontSize: 12 }}>
-        {remember ? "Saved only on this device — delete it anytime from the consent screen." : "Your photo stays on this screen — it is never saved."}
+        {remember ? t.rememberedNote : t.notSavedNote}
       </div>
     </div>
   );
 }
 
 /* ---------- generating overlay: AI scanner sweep ---------- */
-const GEN_MESSAGES = ["Reading your pose…", "Draping the fabric…", "Matching the light…", "Stitching the details…", "Final touches…"];
 const SPARKLES = [
   { top: "14%", left: "18%", size: 16, delay: 0 },
   { top: "26%", left: "74%", size: 12, delay: 0.7 },
@@ -269,11 +281,12 @@ const SPARKLES = [
 ];
 
 function GeneratingOverlay({ garment }: { garment: Garment | null }) {
+  const t = useT();
   const [msg, setMsg] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setMsg((m) => (m + 1) % GEN_MESSAGES.length), 3200);
-    return () => clearInterval(t);
-  }, []);
+    const timer = setInterval(() => setMsg((m) => (m + 1) % t.genMessages.length), 3200);
+    return () => clearInterval(timer);
+  }, [t.genMessages.length]);
 
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
@@ -289,11 +302,11 @@ function GeneratingOverlay({ garment }: { garment: Garment | null }) {
             <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.85)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{garment.name}</span>
           </div>
         )}
-        <div key={msg} className="fade-up ph-display" style={{ fontSize: 18, color: "#fff" }}>{GEN_MESSAGES[msg]}</div>
+        <div key={msg} className="fade-up ph-display" style={{ fontSize: 18, color: "#fff" }}>{t.genMessages[msg % t.genMessages.length]}</div>
         <div style={{ width: "72%", maxWidth: 300, height: 4, borderRadius: 4, background: "rgba(255,255,255,.15)", overflow: "hidden" }}>
           <div style={{ height: "100%", minWidth: "8%", borderRadius: 4, background: "linear-gradient(90deg, var(--rani), var(--marigold))", animation: "fillUp 28s cubic-bezier(.16,.8,.35,1) forwards" }} />
         </div>
-        <div style={{ color: "rgba(255,255,255,.4)", fontSize: 12 }}>AI try-on · usually 15–30 seconds</div>
+        <div style={{ color: "rgba(255,255,255,.4)", fontSize: 12 }}>{t.genFooter}</div>
       </div>
     </div>
   );
@@ -301,6 +314,7 @@ function GeneratingOverlay({ garment }: { garment: Garment | null }) {
 
 /* ---------- "My looks": on-device gallery of saved try-ons ---------- */
 function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCountChange: (n: number) => void }) {
+  const t = useT();
   const [looks, setLooks] = useState<SavedLook[] | null>(null);
   const urls = useRef<Map<string, string>>(new Map());
 
@@ -327,33 +341,33 @@ function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCount
     <div style={{ position: "fixed", inset: 0, background: "rgba(20,16,24,.96)", zIndex: 55, display: "flex", flexDirection: "column", color: "#fff" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px", flexWrap: "wrap", gap: 10 }}>
         <div>
-          <span className="ph-display" style={{ fontSize: 22 }}>My looks</span>
+          <span className="ph-display" style={{ fontSize: 22 }}>{t.myLooksTitle}</span>
           <span style={{ fontSize: 12, color: "rgba(255,255,255,.45)", marginLeft: 10 }}>
-            saved only on this device · show staff your ♥ favourites
+            {t.myLooksSub}
           </span>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           {looks && looks.length > 0 && (
             <button className="ph-btn"
               onClick={async () => {
-                if (confirm("Delete all saved looks and your remembered photo from this device?")) {
+                if (confirm(t.confirmDeleteAll)) {
                   await clearAllLooks();
                   refresh();
                 }
               }}
               style={{ background: "transparent", color: "rgba(255,255,255,.4)", fontSize: 13, padding: "9px 12px" }}>
-              Delete all
+              {t.deleteAll}
             </button>
           )}
           <button className="ph-btn" onClick={onClose} style={{ background: "rgba(255,255,255,.12)", color: "#fff", padding: "9px 18px", fontSize: 14 }}>
-            ✕ Close
+            {t.close}
           </button>
         </div>
       </div>
 
       {looks && looks.length === 0 ? (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.5)", padding: 24, textAlign: "center" }}>
-          Nothing saved yet — tap "♡ Save look" after a try-on to keep it here.
+          {t.nothingSaved}
         </div>
       ) : (
         <div style={{ flex: 1, overflowY: "auto", padding: "4px 22px 30px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14, alignContent: "start" }}>
@@ -374,12 +388,12 @@ function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCount
                 <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                   <button className="ph-btn" onClick={() => shareLook(l).catch(() => {})}
                     style={{ flex: 1, background: "rgba(255,255,255,.12)", color: "#fff", fontSize: 12, padding: "7px 0" }}>
-                    Share
+                    {t.share}
                   </button>
                   <button className="ph-btn"
                     onClick={async () => { await deleteLook(l.id); refresh(); }}
                     style={{ background: "transparent", color: "rgba(255,255,255,.4)", fontSize: 12, padding: "7px 10px" }}>
-                    Delete
+                    {t.del}
                   </button>
                 </div>
               </div>
@@ -393,10 +407,15 @@ function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCount
 
 /* ---------- "I want this" → vendor leads inbox ---------- */
 function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garment; onClose: () => void }) {
+  const t = useT();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [size, setSize] = useState(garment.sizes[0] || "");
   const [state, setState] = useState<"form" | "sending" | "done" | "error">("form");
+  const wa = waLink(
+    shop.whatsapp,
+    `Namaste! I tried on "${garment.name}"${size ? " (size " + size + ")" : ""} at ${shop.name || "your shop"} and I want it.`
+  );
 
   const send = async () => {
     setState("sending");
@@ -420,21 +439,28 @@ function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garm
         {state === "done" ? (
           <>
             <div style={{ fontSize: 34, marginBottom: 10 }}>🎉</div>
-            <div className="ph-display" style={{ fontSize: 22, marginBottom: 8 }}>The shop knows!</div>
+            <div className="ph-display" style={{ fontSize: 22, marginBottom: 8 }}>{t.shopKnows}</div>
             <p style={{ color: "rgba(255,255,255,.65)", fontSize: 14, margin: "0 0 20px" }}>
-              {garment.name}{size ? " · size " + size : ""} is saved to the shop's list.
-              Show this screen to staff or keep browsing.
+              {t.shopKnowsDesc(garment.name, size)}
             </p>
-            <button className="ph-btn" onClick={onClose}
-              style={{ background: "var(--rani)", color: "#fff", padding: "13px 30px", fontSize: 15, borderRadius: 26 }}>
-              Keep browsing
-            </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {wa && (
+                <a href={wa} target="_blank" rel="noopener noreferrer" className="ph-btn"
+                  style={{ background: "#25D366", color: "#fff", padding: "13px", fontSize: 15, borderRadius: 26, textDecoration: "none" }}>
+                  {t.chatWhatsApp}
+                </a>
+              )}
+              <button className="ph-btn" onClick={onClose}
+                style={{ background: "var(--rani)", color: "#fff", padding: "13px 30px", fontSize: 15, borderRadius: 26 }}>
+                {t.keepBrowsing}
+              </button>
+            </div>
           </>
         ) : (
           <>
-            <div className="ph-display" style={{ fontSize: 22, marginBottom: 4 }}>Tell the shop</div>
+            <div className="ph-display" style={{ fontSize: 22, marginBottom: 4 }}>{t.tellShop}</div>
             <p style={{ color: "rgba(255,255,255,.6)", fontSize: 13, margin: "0 0 16px" }}>
-              {garment.name} · {npr(garment.price)} — name and number are optional.
+              {t.optionalNote(garment.name, npr(garment.price))}
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10, textAlign: "left" }}>
               {garment.sizes.length > 0 && (
@@ -447,24 +473,24 @@ function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garm
                   ))}
                 </div>
               )}
-              <input style={input} placeholder="Your name (optional)" value={name} maxLength={80}
+              <input style={input} placeholder={t.yourName} value={name} maxLength={80}
                 onChange={(e) => setName(e.target.value)} />
-              <input style={input} placeholder="Phone (optional)" value={phone} maxLength={30} inputMode="tel"
+              <input style={input} placeholder={t.phoneOptional} value={phone} maxLength={30} inputMode="tel"
                 onChange={(e) => setPhone(e.target.value)} />
             </div>
             {state === "error" && (
               <div style={{ fontSize: 12, color: "var(--marigold)", marginTop: 10 }}>
-                Could not send — please tell the staff directly.
+                {t.sendFailed}
               </div>
             )}
             <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
               <button className="ph-btn" onClick={onClose}
                 style={{ flex: 1, background: "rgba(255,255,255,.1)", color: "#fff", padding: "13px", fontSize: 14 }}>
-                Cancel
+                {t.cancel}
               </button>
               <button className="ph-btn" disabled={state === "sending"} onClick={send}
                 style={{ flex: 2, background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "13px", fontSize: 15, opacity: state === "sending" ? 0.6 : 1 }}>
-                {state === "sending" ? "Sending…" : "🙋 I want this"}
+                {state === "sending" ? t.sending : t.iWantThis}
               </button>
             </div>
           </>
@@ -495,6 +521,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
   const [notice, setNotice] = useState("");
   const [interested, setInterested] = useState(false);
   const [lookState, setLookState] = useState<"idle" | "saving" | "saved">("idle");
+  const t = useT();
   const [overlay, setOverlay] = useState({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
   const stageRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ rect: DOMRect } | null>(null);
@@ -523,10 +550,10 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
       reportError("kiosk", "try-on fell back to manual preview: " + ((e as Error)?.message || e), {
         shopId: shop.id, garmentId: garment.id,
       });
-      setNotice("AI try-on unavailable here — showing a positioning preview instead.");
+      setNotice(t.previewNotice);
       setPhase("preview");
     }
-  }, [setSelected, photo, shop.id]);
+  }, [setSelected, photo, shop.id, t.previewNotice]);
 
   /* hanger QR deep link: start the scanned garment as soon as we have a photo */
   useEffect(() => {
@@ -581,7 +608,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
 
             {phase === "idle" && (
               <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 18, background: "linear-gradient(transparent 60%, rgba(20,16,24,.85))" }}>
-                <div style={{ color: "rgba(255,255,255,.8)", fontSize: 15 }}>👇 Pick a piece from the rack below</div>
+                <div style={{ color: "rgba(255,255,255,.8)", fontSize: 15 }}>{t.pickAPiece}</div>
               </div>
             )}
           </div>
@@ -594,13 +621,13 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
                 <span style={{ color: "var(--marigold)", marginLeft: 8, fontWeight: 700 }}>{npr(selected.price)}</span>
                 {selected.sizes.length > 0 && (
                   <span style={{ color: "rgba(255,255,255,.55)", marginLeft: 8, fontSize: 12 }}>
-                    Sizes: {selected.sizes.join(" · ")}
+                    {t.sizes} {selected.sizes.join(" · ")}
                   </span>
                 )}
               </div>
               <button className="ph-btn" onClick={() => setInterested(true)}
                 style={{ background: "linear-gradient(120deg, var(--rani), var(--rani-soft))", color: "#fff", padding: "10px 18px", fontSize: 14, borderRadius: 22, boxShadow: "0 4px 14px rgba(196,37,97,.35)" }}>
-                🙋 I want this
+                {t.iWantThis}
               </button>
               <button className="ph-btn" disabled={lookState !== "idle"}
                 onClick={async () => {
@@ -614,9 +641,9 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
                   else setLookState("idle");
                 }}
                 style={{ background: lookState === "saved" ? "rgba(255,255,255,.12)" : "rgba(255,255,255,.14)", color: lookState === "saved" ? "var(--marigold)" : "#fff", padding: "10px 18px", fontSize: 14, borderRadius: 22 }}>
-                {lookState === "saved" ? "♥ Saved" : lookState === "saving" ? "Saving…" : "♡ Save look"}
+                {lookState === "saved" ? t.savedLook : lookState === "saving" ? t.savingLook : t.saveLook}
               </button>
-              <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>✨ AI try-on · ask staff to see it in person</span>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>{t.aiResultNote}</span>
             </div>
           )}
 
@@ -638,15 +665,15 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
                 <span style={{ color: "var(--marigold)", marginLeft: 8, fontWeight: 700 }}>{npr(selected.price)}</span>
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "rgba(255,255,255,.6)" }}>
-                Size
+                {t.sizeSlider}
                 <input type="range" min="0.3" max="1.4" step="0.01" value={overlay.scale}
                   onChange={(e) => setOverlay((o) => ({ ...o, scale: +e.target.value }))} style={{ accentColor: "var(--rani)" }} />
               </label>
-              <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>Drag the garment to position · preview mode</span>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>{t.dragToPosition}</span>
             </div>
           )}
           <button className="ph-btn" onClick={retakePhoto} style={{ background: "transparent", color: "rgba(255,255,255,.45)", fontSize: 13, padding: "4px 8px" }}>
-            Retake my photo
+            {t.retakePhoto}
           </button>
         </div>
       </div>
