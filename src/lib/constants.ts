@@ -3,6 +3,7 @@ export const CATEGORIES = [
   "Lehenga",
   "Kurtha",
   "Daura Suruwal",
+  "Suit",
   "Hoodie",
   "Jacket",
   "Dress",

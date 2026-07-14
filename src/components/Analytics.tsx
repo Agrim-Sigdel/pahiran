@@ -162,7 +162,7 @@ export function OverviewTab({ events, catalog, errors }: {
       {errors.length > 0 && (
         <details className="panel">
           <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--mut)", fontWeight: 500 }}>
-            ⚠ {errors.length} recent error{errors.length !== 1 ? "s" : ""} — tap to view
+            {errors.length} recent error{errors.length !== 1 ? "s" : ""} — tap to view
           </summary>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
             {errors.map((e) => (

@@ -62,27 +62,28 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
   return (
     <LangContext.Provider value={lang}>
     <div style={{ position: "fixed", inset: 0, background: "var(--sage)", color: "var(--ink)", display: "flex", flexDirection: "column", zIndex: 40 }}>
-      {/* top bar */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", gap: 8, flexWrap: "wrap", background: "var(--cream)", borderBottom: "1px solid var(--line)" }}>
-        <div>
-          <span className="ph-display" style={{ fontSize: 19, color: "var(--forest-deep)" }}>{shop.name || "EasyFitCheck"}</span>
-          {shop.area && <span style={{ color: "var(--mut)", fontSize: 12, marginLeft: 8 }}>{shop.area}</span>}
+      {/* top bar — single row; labels collapse to icons on phones */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", gap: 8, background: "var(--cream)", borderBottom: "1px solid var(--line)" }}>
+        <div style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <span className="ph-display" style={{ fontSize: 18, color: "var(--forest-deep)" }}>{shop.name || "EasyFitCheck"}</span>
+          {shop.area && <span className="hide-sm" style={{ color: "var(--mut)", fontSize: 12, marginLeft: 8 }}>{shop.area}</span>}
         </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
           <button className="ph-btn" onClick={toggleLang} style={barBtn}>{t.switchLang}</button>
           {looksCount > 0 && (
-            <button className="ph-btn" onClick={() => setShowLooks(true)}
+            <button className="ph-btn" onClick={() => setShowLooks(true)} aria-label={t.myLooksLabel}
               style={{ ...barBtn, color: "var(--camel)", borderColor: "var(--camel)" }}>
-              {t.myLooksBtn(looksCount)}
+              ♥ <span className="hide-sm">{t.myLooksLabel} </span>({looksCount})
             </button>
           )}
           {step !== "attract" && (
-            <button className="ph-btn" onClick={reset} style={{ ...barBtn, border: "none", color: "var(--mut)" }}>
-              {t.startOver}
+            <button className="ph-btn" onClick={reset} aria-label={t.startOver} title={t.startOver}
+              style={{ ...barBtn, border: "none", color: "var(--mut)" }}>
+              ↺<span className="hide-sm"> {t.startOver}</span>
             </button>
           )}
-          <button className="ph-btn" onClick={exit} aria-label={t.exitKiosk}
-            style={{ ...barBtn, border: "none", color: "var(--mut)" }}>
+          <button className="ph-btn" onClick={exit} aria-label={t.exitKiosk} title={t.exitKiosk}
+            style={{ ...barBtn, border: "none", color: "var(--mut)", padding: "8px 10px" }}>
             ✕
           </button>
         </div>
@@ -203,7 +204,8 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boole
 
       <div
         onClick={camState === "denied" ? () => fileRef.current?.click() : undefined}
-        style={{ height: "min(44vh, 420px)", maxWidth: "88vw", aspectRatio: "3/4", borderRadius: 8, overflow: "hidden", background: "var(--forest-deep)", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, margin: "14px 0 16px", cursor: camState === "denied" ? "pointer" : "default" }}>
+        className="k-cam"
+        style={{ borderRadius: 8, overflow: "hidden", background: "var(--forest-deep)", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, margin: "14px 0 16px", cursor: camState === "denied" ? "pointer" : "default" }}>
         {camState !== "denied" ? (
           <video ref={videoRef} playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" }} />
         ) : (
@@ -247,15 +249,6 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boole
 }
 
 /* ---------- generating overlay: AI scanner sweep (sits on the photo) ---------- */
-const SPARKLES = [
-  { top: "14%", left: "18%", size: 16, delay: 0 },
-  { top: "26%", left: "74%", size: 12, delay: 0.7 },
-  { top: "48%", left: "10%", size: 11, delay: 1.3 },
-  { top: "58%", left: "82%", size: 15, delay: 0.4 },
-  { top: "74%", left: "30%", size: 12, delay: 1.8 },
-  { top: "36%", left: "48%", size: 10, delay: 1.0 },
-];
-
 function GeneratingOverlay({ garment }: { garment: Garment | null }) {
   const t = useT();
   const [msg, setMsg] = useState(0);
@@ -268,9 +261,6 @@ function GeneratingOverlay({ garment }: { garment: Garment | null }) {
     <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
       {/* scan line — default top hides it when animations are disabled */}
       <div style={{ position: "absolute", top: "-12%", left: "-6%", width: "112%", height: 3, borderRadius: 3, background: "linear-gradient(90deg, transparent, var(--camel) 30%, #E5D3BC 50%, var(--camel) 70%, transparent)", boxShadow: "0 0 18px 4px rgba(176,137,104,.55), 0 0 60px 18px rgba(176,137,104,.25)", animation: "scan 2.8s ease-in-out infinite alternate" }} />
-      {SPARKLES.map((s, i) => (
-        <span key={i} style={{ position: "absolute", top: s.top, left: s.left, fontSize: s.size, opacity: 0, animation: `twinkle 2.2s ease-in-out ${s.delay}s infinite` }}>✨</span>
-      ))}
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "40px 18px 16px", background: "linear-gradient(transparent, rgba(42,61,47,.9) 55%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
         {garment && (
           <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.14)", borderRadius: 30, padding: "5px 14px 5px 5px" }}>
@@ -556,8 +546,8 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflowY: "auto", padding: "0 0 14px" }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "16px 16px 0" }}>
         {/* stage */}
-        <div ref={stageRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
-          style={{ height: "min(48vh, 480px)", maxWidth: "90vw", aspectRatio: "3/4", borderRadius: 8, overflow: "hidden", position: "relative", background: "var(--sage-mist)", boxShadow: "var(--shadow-soft)", touchAction: "none", flexShrink: 0 }}>
+        <div ref={stageRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="k-stage"
+          style={{ borderRadius: 8, overflow: "hidden", position: "relative", background: "var(--sage-mist)", boxShadow: "var(--shadow-soft)", touchAction: "none", flexShrink: 0 }}>
           <img
             src={phase === "result" && resultImage ? resultImage : photo}
             alt={phase === "result" ? "You wearing " + (selected?.name || "the garment") : "You"}

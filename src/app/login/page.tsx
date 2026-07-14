@@ -65,8 +65,8 @@ export default function LoginPage() {
       </h1>
       <div style={{ color: "var(--mut)", fontSize: 13, marginBottom: 24 }}>
         {mode === "signin"
-          ? "Manage your catalog and kiosk."
-          : "One account per shop — your catalog, kiosk link and analytics."}
+          ? ""
+          : ""}
       </div>
       <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <input style={input} type="email" required placeholder="you@shop.com" value={email}

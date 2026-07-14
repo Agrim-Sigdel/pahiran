@@ -9,8 +9,8 @@ export type Lang = "en" | "ne";
 
 const en = {
   switchLang: "नेपाली",
-  myLooksBtn: (n: number) => `♥ My looks (${n})`,
-  startOver: "↺ Start over",
+  myLooksLabel: "My looks",
+  startOver: "Start over",
   exitKiosk: "Exit kiosk",
 
   virtualTrialRoom: "Virtual trial room",
@@ -42,10 +42,10 @@ const en = {
   genMessages: ["Reading your pose…", "Draping the fabric…", "Matching the light…", "Stitching the details…", "Final touches…"],
   genFooter: "AI try-on · usually 15–30 seconds",
 
-  pickAPiece: "👇 Pick a piece from the rack below",
+  pickAPiece: "Pick a piece from the rack below",
   sizes: "Sizes:",
-  aiResultNote: "✨ AI try-on · ask staff to see it in person",
-  iWantThis: "🙋 I want this",
+  aiResultNote: "AI try-on · ask staff to see it in person",
+  iWantThis: "I want this",
   saveLook: "♡ Save look",
   savedLook: "♥ Saved",
   savingLook: "Saving…",
@@ -80,8 +80,8 @@ const en = {
 
 const ne: typeof en = {
   switchLang: "English",
-  myLooksBtn: (n: number) => `♥ मेरा लुक (${n})`,
-  startOver: "↺ फेरि सुरु",
+  myLooksLabel: "मेरा लुक",
+  startOver: "फेरि सुरु",
   exitKiosk: "बाहिर निस्कनुहोस्",
 
   virtualTrialRoom: "भर्चुअल ट्रायल रुम",
@@ -113,10 +113,10 @@ const ne: typeof en = {
   genMessages: ["तपाईंको पोज हेर्दै…", "कपडा ओढाउँदै…", "उज्यालो मिलाउँदै…", "बुट्टा सिलाउँदै…", "अन्तिम टच…"],
   genFooter: "AI ट्राई-अन · प्रायः १५–३० सेकेन्ड",
 
-  pickAPiece: "👇 तलको र्‍याकबाट एउटा लुगा छान्नुहोस्",
+  pickAPiece: "तलको र्‍याकबाट एउटा लुगा छान्नुहोस्",
   sizes: "साइज:",
-  aiResultNote: "✨ AI ट्राई-अन · सक्कली हेर्न स्टाफलाई भन्नुहोस्",
-  iWantThis: "🙋 मलाई यो चाहियो",
+  aiResultNote: "AI ट्राई-अन · सक्कली हेर्न स्टाफलाई भन्नुहोस्",
+  iWantThis: "मलाई यो चाहियो",
   saveLook: "♡ लुक सेभ गर्नुहोस्",
   savedLook: "♥ सेभ भयो",
   savingLook: "सेभ हुँदैछ…",
