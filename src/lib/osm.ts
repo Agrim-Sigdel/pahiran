@@ -11,15 +11,14 @@ export const OSM_ATTRIBUTION =
 /** Default map center when a shop has no pin yet. */
 export const KATHMANDU: [number, number] = [27.7172, 85.324];
 
-/** Brand-colored dot marker (avoids Leaflet's bundler-broken default icon). */
+/** Brand shopping-bag marker with the blinking ee (styles in globals.css). */
 export function pinIcon(L: typeof Leaflet): Leaflet.DivIcon {
   return L.divIcon({
     className: "",
-    html:
-      '<div style="width:18px;height:18px;border-radius:50%;background:var(--violet,#7c5cff);border:3px solid #fff;box-shadow:0 1px 6px rgba(26,23,20,.4)"></div>',
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
-    popupAnchor: [0, -10],
+    html: '<div class="peeq-pin"><span>ee</span></div>',
+    iconSize: [36, 32],
+    iconAnchor: [18, 32],
+    popupAnchor: [0, -40],
   });
 }
 
