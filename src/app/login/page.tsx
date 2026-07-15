@@ -15,14 +15,12 @@ export default function LoginPage() {
   if (!isSupabaseConfigured()) {
     return (
       <Shell>
-        <h1 className="ph-display" style={{ fontSize: 26, color: "var(--forest-deep)", margin: "0 0 4px" }}>No sign-in needed</h1>
+        <h1 className="ph-display" style={{ fontSize: 26, color: "var(--forest-deep)", margin: "0 0 4px" }}>no sign-in needed</h1>
         <p style={{ color: "var(--mut)", fontSize: 13, margin: "0 0 24px", lineHeight: 1.6 }}>
           This install runs in local mode (no Supabase configured) — your catalog lives in this
           browser. Head straight to the dashboard.
         </p>
-        <button className="ph-btn btn-solid" style={{ width: "100%" }} onClick={() => router.push("/dashboard")}>
-          Open dashboard
-        </button>
+        <button className="ph-btn btn-solid" style={{ width: "100%" }} onClick={() => router.push("/dashboard")}>open dashboard</button>
       </Shell>
     );
   }
@@ -61,7 +59,7 @@ export default function LoginPage() {
   return (
     <Shell>
       <h1 className="ph-display" style={{ fontSize: 26, color: "var(--forest-deep)", margin: "0 0 4px" }}>
-        {mode === "signin" ? "Vendor sign in" : "Create your shop"}
+        {mode === "signin" ? "vendor sign in" : "create your shop"}
       </h1>
       <div style={{ color: "var(--mut)", fontSize: 13, marginBottom: 24 }}>
         {mode === "signin"
@@ -76,7 +74,7 @@ export default function LoginPage() {
           autoComplete={mode === "signin" ? "current-password" : "new-password"} />
         <button className="ph-btn btn-solid" disabled={busy} type="submit"
           style={{ width: "100%", opacity: busy ? 0.6 : 1 }}>
-          {busy ? "One moment…" : mode === "signin" ? "Sign in" : "Sign up"}
+          {busy ? "one moment…" : mode === "signin" ? "sign in" : "sign up"}
         </button>
       </form>
       {message && (
@@ -94,7 +92,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--sage)" }}>
       <div style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-modal)", padding: "40px 36px", width: 380, maxWidth: "100%", textAlign: "center", boxShadow: "var(--shadow-soft)" }}>
-        <div className="wordmark" style={{ fontSize: 20, marginBottom: 26 }}>EasyFitCheck</div>
+        <div className="wordmark" style={{ fontSize: 20, marginBottom: 26 }}>peeq</div>
         {children}
       </div>
     </main>

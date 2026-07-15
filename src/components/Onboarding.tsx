@@ -44,10 +44,8 @@ export default function Onboarding({ shop, onComplete }: {
   return (
     <div style={{ minHeight: "100vh", background: "var(--sage)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div className="fade-up" style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-modal)", width: 440, maxWidth: "100%", padding: "34px 30px" }}>
-        <div className="wordmark" style={{ fontSize: 18, marginBottom: 18 }}>EasyFitCheck</div>
-        <div className="ph-display" style={{ fontSize: 26, color: "var(--forest-deep)", marginBottom: 6 }}>
-          Set up your shop
-        </div>
+        <div className="wordmark" style={{ fontSize: 18, marginBottom: 18 }}>peeq</div>
+        <div className="ph-display" style={{ fontSize: 26, color: "var(--forest-deep)", marginBottom: 6 }}>set up your shop</div>
         <p style={{ fontSize: 13.5, color: "var(--mut)", lineHeight: 1.6, margin: "0 0 20px" }}>
           Your shop name becomes your kiosk and storefront link.
         </p>
@@ -74,7 +72,7 @@ export default function Onboarding({ shop, onComplete }: {
 
           {shop.id && slug.length >= 3 && (
             <div style={{ background: "var(--sage)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "11px 13px", fontSize: 12.5, color: "var(--forest-deep)", lineHeight: 1.7 }}>
-              <div style={{ fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--mut)", marginBottom: 3 }}>Your links</div>
+              <div style={{ fontSize: 10.5, letterSpacing: ".14em", color: "var(--mut)", marginBottom: 3 }}>Your links</div>
               <div>Kiosk: <code>{host}/k/{slug}</code></div>
               <div>Storefront: <code>{host}/s/{slug}</code></div>
             </div>
@@ -84,7 +82,7 @@ export default function Onboarding({ shop, onComplete }: {
             <input type="checkbox" checked={listed} style={{ marginTop: 3, accentColor: "var(--forest)" }}
               onChange={(e) => setListed(e.target.checked)} />
             <span>
-              Show my shop on the EasyFitCheck landing page
+              Show my shop on the peeq landing page
               <span style={{ display: "block", fontSize: 12, color: "var(--mut)" }}>
                 Shoppers can find and browse your storefront and kiosk.
               </span>
@@ -95,7 +93,7 @@ export default function Onboarding({ shop, onComplete }: {
 
           <button className="ph-btn btn-solid" disabled={!canSave} onClick={submit}
             style={{ marginTop: 4, opacity: canSave ? 1 : 0.55 }}>
-            {busy ? "Setting up…" : "Open my dashboard"}
+            {busy ? "setting up…" : "open my dashboard"}
           </button>
         </div>
       </div>

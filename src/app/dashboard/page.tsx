@@ -8,11 +8,11 @@ import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import {
   loadShop, saveShop, loadCatalog, addGarment as persistGarment,
   updateGarment as persistGarmentUpdate, removeGarment as unpersistGarment,
-  setGarmentStock, getTryOnEvents, getLeads, setLeadHandled, getErrorLogs,
+  setGarmentStock, getTryOnEvents, getLeads, setLeadHandled,
   updateShopSlug,
 } from "@/lib/storage";
 import { reportError } from "@/lib/logging";
-import type { ErrorLog, Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
+import type { Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -20,7 +20,6 @@ export default function DashboardPage() {
   const [catalog, setCatalog] = useState<Garment[]>([]);
   const [events, setEvents] = useState<TryOnEvent[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [errors, setErrors] = useState<ErrorLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,16 +34,14 @@ export default function DashboardPage() {
       const s = await loadShop();
       if (s) setShop(s);
       const shopId = s?.id ?? null;
-      const [c, ev, ld, er] = await Promise.all([
+      const [c, ev, ld] = await Promise.all([
         loadCatalog(shopId),
         getTryOnEvents(shopId),
         getLeads(shopId),
-        getErrorLogs(shopId),
       ]);
       setCatalog(c);
       setEvents(ev);
       setLeads(ld);
-      setErrors(er);
       setLoading(false);
     })();
   }, [router]);
@@ -141,7 +138,7 @@ export default function DashboardPage() {
       catalog={catalog} addGarment={addGarment} editGarment={editGarment}
       removeGarment={removeGarment}
       toggleStock={toggleStock} loading={loading}
-      events={events} leads={leads} errors={errors} onLeadHandled={handleLead}
+      events={events} leads={leads} onLeadHandled={handleLead}
       launchKiosk={() => router.push(shop.slug ? "/k/" + shop.slug : "/kiosk")}
       signOut={signOut}
     />

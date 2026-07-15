@@ -154,15 +154,15 @@ export function lookImageURL(look: SavedLook): string {
    the result bar without saving a look first. */
 export async function shareImage(image: Blob | string, garmentName: string, shopName: string): Promise<void> {
   const blob = image instanceof Blob ? image : await (await fetch(image)).blob();
-  const file = new File([blob], "easyfitcheck-look.jpg", { type: blob.type || "image/jpeg" });
-  const text = garmentName + " at " + (shopName || "the shop") + " — tried on with EasyFitCheck";
+  const file = new File([blob], "peeq-look.jpg", { type: blob.type || "image/jpeg" });
+  const text = garmentName + " at " + (shopName || "the shop") + " — tried on with peeq";
   if (navigator.canShare?.({ files: [file] })) {
     await navigator.share({ files: [file], text }).catch(() => {});
     return;
   }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "easyfitcheck-look.jpg";
+  a.download = "peeq-look.jpg";
   a.click();
   URL.revokeObjectURL(a.href);
 }

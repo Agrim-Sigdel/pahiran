@@ -32,7 +32,7 @@ function PublicKiosk() {
   if (notFound) {
     return (
       <div style={{ position: "fixed", inset: 0, background: "var(--ink)", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, textAlign: "center", padding: 24 }}>
-        <div className="ph-display" style={{ fontSize: 26 }}>Shop not found</div>
+        <div className="ph-display" style={{ fontSize: 26 }}>shop not found</div>
         <p style={{ color: "rgba(255,255,255,.55)", maxWidth: 380, margin: 0 }}>
           This try-on link doesn't match any shop. Double-check the QR code or ask the vendor for a new one.
         </p>
@@ -42,8 +42,10 @@ function PublicKiosk() {
 
   if (!shop || catalog === null) {
     return (
-      <div style={{ position: "fixed", inset: 0, background: "var(--ink)", color: "rgba(255,255,255,.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        Loading…
+      <div style={{ position: "fixed", inset: 0, background: "var(--ink)", color: "rgba(255,255,255,.6)", display: "flex", flexDirection: "column", gap: 12, alignItems: "center", justifyContent: "center" }}>
+        {/* the blink is the loading state — the app is "looking" */}
+        <span className="ee-mark ee-looking" style={{ fontSize: 48, color: "#fff" }}><span>ee</span></span>
+        taking a peeq…
       </div>
     );
   }
@@ -53,7 +55,7 @@ function PublicKiosk() {
       <div style={{ position: "fixed", inset: 0, background: "var(--ink)", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, textAlign: "center", padding: 24 }}>
         <div className="ph-display" style={{ fontSize: 26 }}>{shop.name || "This shop"}</div>
         <p style={{ color: "rgba(255,255,255,.55)", maxWidth: 380, margin: 0 }}>
-          Nothing on the virtual rack right now — check back soon.
+          nothing on the rack right now — check back soon.
         </p>
       </div>
     );

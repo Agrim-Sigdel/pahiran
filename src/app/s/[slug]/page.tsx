@@ -38,13 +38,18 @@ export default function StorefrontPage() {
   if (notFound) {
     return (
       <Centered>
-        <div className="ph-display" style={{ fontSize: 26, color: "var(--forest-deep)" }}>Shop not found</div>
-        <p style={{ color: "var(--mut)", maxWidth: 380 }}>This link doesn't match any shop on EasyFitCheck.</p>
+        <div className="ph-display" style={{ fontSize: 26, color: "var(--ink)" }}>shop not found</div>
+        <p style={{ color: "var(--stone)", maxWidth: 380 }}>This link doesn't match any shop on peeq.</p>
       </Centered>
     );
   }
   if (!shop || catalog === null) {
-    return <Centered><span style={{ color: "var(--mut)" }}>Loading…</span></Centered>;
+    return (
+      <Centered>
+        <span className="ee-mark ee-looking" style={{ fontSize: 44, color: "var(--violet)" }}><span>ee</span></span>
+        <span style={{ color: "var(--stone)" }}>taking a peeq…</span>
+      </Centered>
+    );
   }
 
   const tryonHref = "/k/" + slug;
@@ -52,15 +57,15 @@ export default function StorefrontPage() {
   const featured = inStock.slice(0, 4);
   const shown = filter === "All" ? catalog : catalog.filter((g) => g.category === filter);
   const askWa = shop.whatsapp
-    ? waLink(shop.whatsapp, ask.trim() ? `Namaste! ${ask.trim()} (via ${shop.name || "your"} EasyFitCheck storefront)` : `Namaste! I have a question about your collection.`)
+    ? waLink(shop.whatsapp, ask.trim() ? `Namaste! ${ask.trim()} (via ${shop.name || "your"} peeq storefront)` : `Namaste! I have a question about your collection.`)
     : null;
-  const contactWa = waLink(shop.whatsapp, `Namaste! I have a question about ${shop.name || "your shop"}. (via EasyFitCheck)`);
+  const contactWa = waLink(shop.whatsapp, `Namaste! I have a question about ${shop.name || "your shop"}. (via peeq)`);
 
   return (
     <div style={{ background: "var(--sage)", minHeight: "100vh" }}>
       {/* announce bar */}
-      <div style={{ background: "var(--forest-deep)", color: "var(--sage)", textAlign: "center", fontSize: 11, letterSpacing: ".2em", textTransform: "uppercase", padding: "9px 12px" }}>
-        Every piece below can be <b style={{ color: "var(--camel)" }}>tried on you</b> · one photo, no account
+      <div style={{ background: "var(--butter)", color: "var(--ink)", textAlign: "center", fontSize: 13, fontWeight: 500, padding: "9px 12px" }}>
+        every piece below can be <b>seen on you</b> · one photo, no account
       </div>
 
       {/* nav */}
@@ -71,34 +76,34 @@ export default function StorefrontPage() {
           ))}
         </div>
         <div className="nav-logo">
-          <div className="ph-display" style={{ fontSize: "clamp(16px, 4vw, 20px)", letterSpacing: ".18em", textTransform: "uppercase", color: "var(--forest-deep)" }}>
+          <div className="ph-display" style={{ fontSize: "clamp(17px, 4vw, 21px)", fontWeight: 600, color: "var(--ink)" }}>
             {shop.name || "The shop"}
           </div>
           {shop.area && (
-            <div style={{ fontSize: 10, letterSpacing: ".2em", textTransform: "uppercase", color: "var(--mut)", marginTop: 2 }}>{shop.area}</div>
+            <div style={{ fontSize: 11, letterSpacing: ".08em", color: "var(--stone)", marginTop: 2 }}>{shop.area}</div>
           )}
         </div>
         <div className="nav-tools">
           {contactWa && (
             <a href={contactWa} target="_blank" rel="noopener noreferrer" style={{ color: "var(--whatsapp)" }}>Contact</a>
           )}
-          <Link href={tryonHref} style={{ color: "var(--camel)" }}>♥ My looks</Link>
+          <Link href={tryonHref} style={{ color: "var(--violet)" }}>♥ my looks</Link>
         </div>
       </nav>
 
       {/* hero */}
       <div className="hero-grid">
         <div className="hero-copy">
-          <div className="kicker">Virtual try-on</div>
-          <h1 className="ph-display" style={{ fontWeight: 400, fontSize: "clamp(30px, 4.6vw, 48px)", lineHeight: 1.14, color: "var(--forest-deep)", textTransform: "uppercase", letterSpacing: ".08em", margin: 0 }}>
-            Elegance in<br />every thread
+          <div className="kicker">a little look before you buy</div>
+          <h1 className="ph-display" style={{ fontSize: "clamp(32px, 4.6vw, 50px)", lineHeight: 1.12, color: "var(--ink)", margin: 0 }}>
+            look first,<br />then buy
           </h1>
-          <p style={{ color: "var(--mut)", fontSize: 15, fontWeight: 300, maxWidth: 360, lineHeight: 1.7, margin: 0 }}>
+          <p style={{ color: "var(--stone)", fontSize: 15.5, maxWidth: 360, lineHeight: 1.7, margin: 0 }}>
             Browse the collection below, or take one photo and see any piece on you before you visit the shop.
           </p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <Link href={tryonHref} className="btn-solid">See it on you</Link>
-            <a href="#collection" className="btn-outline">Browse collection</a>
+            <Link href={tryonHref} className="btn-violet">see it on you</Link>
+            <a href="#collection" className="btn-outline">browse the collection</a>
           </div>
         </div>
         {featured[0] && (
@@ -112,8 +117,8 @@ export default function StorefrontPage() {
       {featured.length > 0 && (
         <section className="section-pad">
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 22, flexWrap: "wrap", gap: 10 }}>
-            <h2 className="ph-display" style={{ fontWeight: 400, fontSize: "clamp(19px, 3vw, 24px)", letterSpacing: ".14em", textTransform: "uppercase", color: "var(--forest-deep)", margin: 0 }}>Featured pieces</h2>
-            <a className="linklike" href="#collection">View all →</a>
+            <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(20px, 3vw, 26px)", color: "var(--ink)", margin: 0 }}>featured pieces</h2>
+            <a className="linklike" href="#collection">view all →</a>
           </div>
           <div className="shop-grid">
             {featured.map((g) => (
@@ -127,14 +132,14 @@ export default function StorefrontPage() {
       <section className="section-pad" style={{ background: "var(--sage-mist)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
           <div style={{ padding: "40px 36px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 14 }}>
-            <div className="kicker">The trial room, reinvented</div>
-            <h3 className="ph-display" style={{ fontWeight: 400, fontSize: 28, lineHeight: 1.25, color: "var(--forest-deep)", margin: 0 }}>
-              Your perfect look is one photo away
+            <div className="kicker">the trial room, reinvented</div>
+            <h3 className="ph-display" style={{ fontWeight: 600, fontSize: 28, lineHeight: 1.22, color: "var(--ink)", margin: 0 }}>
+              your perfect look is one photo away
             </h3>
-            <p style={{ color: "var(--mut)", fontSize: 14, fontWeight: 300, lineHeight: 1.7, margin: 0 }}>
+            <p style={{ color: "var(--stone)", fontSize: 14.5, lineHeight: 1.7, margin: 0 }}>
               No queue, no changing room. Take one photo and see the whole collection on you, then tell the shop what you want with a tap.
             </p>
-            <div><Link href={tryonHref} className="btn-solid">Start try-on</Link></div>
+            <div><Link href={tryonHref} className="btn-violet">peeq it</Link></div>
           </div>
           {featured[1] && (
             <div style={{ minHeight: 220, background: "var(--sage-mist)" }}>
@@ -147,8 +152,8 @@ export default function StorefrontPage() {
       {/* full collection */}
       <section id="collection" className="section-pad">
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
-          <h2 className="ph-display" style={{ fontWeight: 400, fontSize: "clamp(19px, 3vw, 24px)", letterSpacing: ".14em", textTransform: "uppercase", color: "var(--forest-deep)", margin: 0 }}>The collection</h2>
-          <span style={{ color: "var(--mut)", fontSize: 13 }}>{catalog.length} piece{catalog.length !== 1 ? "s" : ""}</span>
+          <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(20px, 3vw, 26px)", color: "var(--ink)", margin: 0 }}>the collection</h2>
+          <span style={{ color: "var(--stone)", fontSize: 13 }}>{catalog.length} piece{catalog.length !== 1 ? "s" : ""}</span>
         </div>
         {cats.length > 1 && (
           <div className="garment-rail" style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 20 }}>
@@ -172,36 +177,36 @@ export default function StorefrontPage() {
       </section>
 
       {/* footer */}
-      <footer className="section-pad" style={{ background: "var(--forest-deep)", color: "var(--sage)", paddingBottom: 30 }}>
+      <footer className="section-pad" style={{ background: "var(--ink)", color: "var(--paper)", paddingBottom: 30 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 28, maxWidth: 900, margin: "0 auto" }}>
           <div>
-            <h4 className="ph-display" style={{ fontSize: 19, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12, color: "var(--cream)", fontWeight: 500 }}>
+            <h4 className="ph-display" style={{ fontSize: 19, marginBottom: 12, color: "var(--paper)", fontWeight: 600 }}>
               {shop.name || "The shop"}
             </h4>
-            {shop.area && <p style={{ fontSize: 13, color: "rgba(237,239,224,.65)", lineHeight: 1.8, margin: 0 }}>{shop.area}</p>}
+            {shop.area && <p style={{ fontSize: 13, color: "rgba(250,246,240,.65)", lineHeight: 1.8, margin: 0 }}>{shop.area}</p>}
           </div>
           <div>
-            <h4 className="ph-display" style={{ fontSize: 19, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12, color: "var(--cream)", fontWeight: 500 }}>Visit</h4>
-            <Link href={tryonHref} style={{ fontSize: 13, color: "rgba(237,239,224,.65)", lineHeight: 1.8, textDecoration: "none", display: "block" }}>Try clothes on you</Link>
-            <a href="#collection" style={{ fontSize: 13, color: "rgba(237,239,224,.65)", lineHeight: 1.8, textDecoration: "none", display: "block" }}>Browse collection</a>
+            <h4 className="ph-display" style={{ fontSize: 19, marginBottom: 12, color: "var(--paper)", fontWeight: 600 }}>visit</h4>
+            <Link href={tryonHref} style={{ fontSize: 13, color: "rgba(250,246,240,.65)", lineHeight: 1.8, textDecoration: "none", display: "block" }}>peeq the collection on you</Link>
+            <a href="#collection" style={{ fontSize: 13, color: "rgba(250,246,240,.65)", lineHeight: 1.8, textDecoration: "none", display: "block" }}>browse the collection</a>
           </div>
           {askWa && (
             <div>
-              <h4 className="ph-display" style={{ fontSize: 19, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12, color: "var(--cream)", fontWeight: 500 }}>Order &amp; ask</h4>
-              <p style={{ fontSize: 13, color: "rgba(237,239,224,.65)", margin: "0 0 12px" }}>Fastest reply on WhatsApp:</p>
+              <h4 className="ph-display" style={{ fontSize: 19, marginBottom: 12, color: "var(--paper)", fontWeight: 600 }}>order &amp; ask</h4>
+              <p style={{ fontSize: 13, color: "rgba(250,246,240,.65)", margin: "0 0 12px" }}>Fastest reply on WhatsApp:</p>
               <div style={{ display: "flex", gap: 8 }}>
                 <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="What are you looking for?"
-                  style={{ flex: 1, padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid rgba(237,239,224,.25)", background: "rgba(255,255,255,.06)", color: "var(--cream)", fontSize: 13 }} />
+                  style={{ flex: 1, padding: "11px 15px", borderRadius: 999, border: "1px solid rgba(250,246,240,.25)", background: "rgba(255,255,255,.06)", color: "var(--paper)", fontSize: 13 }} />
                 <a href={askWa} target="_blank" rel="noopener noreferrer" className="ph-btn"
-                  style={{ background: "var(--whatsapp)", color: "#fff", padding: "11px 18px", fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", fontWeight: 500, borderRadius: "var(--radius-btn)", textDecoration: "none", display: "flex", alignItems: "center" }}>
-                  Send
+                  style={{ background: "var(--whatsapp)", color: "#fff", padding: "11px 20px", fontSize: 13, fontWeight: 600, borderRadius: 999, textDecoration: "none", display: "flex", alignItems: "center" }}>
+                  send
                 </a>
               </div>
             </div>
           )}
         </div>
-        <div style={{ textAlign: "center", fontSize: 11, letterSpacing: ".18em", textTransform: "uppercase", color: "rgba(237,239,224,.4)", marginTop: 34 }}>
-          Powered by <b style={{ color: "var(--camel)" }}>EasyFitCheck</b> · try it on, without trying it on
+        <div style={{ textAlign: "center", fontSize: 12.5, color: "rgba(250,246,240,.45)", marginTop: 34 }}>
+          powered by <b className="wordmark" style={{ color: "var(--butter)", fontSize: 13 }}>peeq</b> · a little look before you buy
         </div>
       </footer>
 
@@ -217,23 +222,23 @@ function ShopCard({ g, tryonHref, onOpen }: { g: Garment; tryonHref: string; onO
         <img src={g.image} alt={g.name} loading="lazy"
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: g.inStock ? "none" : "grayscale(.7)" }} />
         {!g.inStock && (
-          <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--forest-deep)", color: "var(--cream)", fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", padding: "4px 9px", borderRadius: 2 }}>
-            Out of stock
+          <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--ink)", color: "var(--paper)", fontSize: 11, fontWeight: 500, padding: "4px 12px", borderRadius: 999 }}>
+            out of stock
           </span>
         )}
       </div>
       <div style={{ padding: "13px 14px 15px" }}>
-        <div onClick={onOpen} style={{ fontSize: 11.5, fontWeight: 500, letterSpacing: ".12em", textTransform: "uppercase", marginBottom: 4, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</div>
-        <div style={{ color: "var(--camel)", fontWeight: 500, fontSize: 14, marginBottom: 10 }}>{npr(g.price)}</div>
+        <div onClick={onOpen} style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 2, cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</div>
+        <div style={{ color: "var(--stone)", fontWeight: 500, fontSize: 14, marginBottom: 10 }}>{npr(g.price)}</div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           {g.inStock ? (
             <Link href={tryonHref + "?g=" + encodeURIComponent(g.id)}
-              style={{ textDecoration: "underline", textUnderlineOffset: 4, fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", fontWeight: 600, color: "var(--forest-deep)" }}>
-              Try on →
+              style={{ textDecoration: "underline", textUnderlineOffset: 4, fontSize: 13, fontWeight: 600, color: "var(--violet)" }}>
+              peeq it →
             </Link>
           ) : <span />}
-          <button className="ph-btn" onClick={onOpen} style={{ color: "var(--mut)", fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase" }}>
-            Details
+          <button className="ph-btn" onClick={onOpen} style={{ color: "var(--stone)", fontSize: 12.5 }}>
+            details
           </button>
         </div>
       </div>
@@ -246,10 +251,10 @@ function GarmentSheet({ garment, shop, tryonHref, onClose }: {
 }) {
   const wa = waLink(
     shop.whatsapp,
-    `Namaste! I saw "${garment.name}" (${npr(garment.price)}) on ${shop.name || "your"} EasyFitCheck storefront and I'm interested.`
+    `Namaste! I saw "${garment.name}" (${npr(garment.price)}) on ${shop.name || "your"} peeq storefront and I'm interested.`
   );
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(42,61,47,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} className="fade-up"
         style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 380, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto" }}>
         <div style={{ aspectRatio: "3/4", background: "var(--sage-mist)" }}>
@@ -258,7 +263,7 @@ function GarmentSheet({ garment, shop, tryonHref, onClose }: {
         <div style={{ padding: "18px 20px 20px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, fontWeight: 500, fontSize: 17 }}>
             <span>{garment.name}</span>
-            <span style={{ color: "var(--camel)", flexShrink: 0 }}>{npr(garment.price)}</span>
+            <span style={{ color: "var(--stone)", flexShrink: 0 }}>{npr(garment.price)}</span>
           </div>
           <div style={{ color: "var(--mut)", fontSize: 13, marginTop: 3 }}>
             {garment.category}
@@ -267,18 +272,18 @@ function GarmentSheet({ garment, shop, tryonHref, onClose }: {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 18 }}>
             {garment.inStock && (
-              <Link href={tryonHref + "?g=" + encodeURIComponent(garment.id)} className="btn-solid">
-                See it on you
+              <Link href={tryonHref + "?g=" + encodeURIComponent(garment.id)} className="btn-violet">
+                see it on you
               </Link>
             )}
             {wa && (
               <a href={wa} target="_blank" rel="noopener noreferrer" className="btn-wa">
-                Order on WhatsApp
+                order on WhatsApp
               </a>
             )}
             <button className="ph-btn" onClick={onClose}
-              style={{ color: "var(--mut)", fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase", padding: 10 }}>
-              Close
+              style={{ color: "var(--stone)", fontSize: 13, padding: 10 }}>
+              close
             </button>
           </div>
         </div>

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { npr, waLink } from "@/lib/constants";
-import type { ErrorLog, Garment, Lead, TryOnEvent } from "@/lib/types";
+import type { Garment, Lead, TryOnEvent } from "@/lib/types";
 
 /* Vendor analytics, split into dashboard tabs:
    - OverviewTab: stat tiles, 30-day daily chart, most-tried table, CSV, errors
@@ -34,8 +34,8 @@ export function garmentTryCounts(events: TryOnEvent[]): Map<string, number> {
 
 /* ── Overview ─────────────────────────────────────────── */
 
-export function OverviewTab({ events, catalog, errors }: {
-  events: TryOnEvent[]; catalog: Garment[]; errors: ErrorLog[];
+export function OverviewTab({ events, catalog }: {
+  events: TryOnEvent[]; catalog: Garment[];
 }) {
   const byId = useMemo(() => new Map(catalog.map((g) => [g.id, g])), [catalog]);
 
@@ -95,7 +95,7 @@ export function OverviewTab({ events, catalog, errors }: {
     const csv = rows.map((r) => r.map((c) => '"' + c.replaceAll('"', '""') + '"').join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = "easyfitcheck-tryons.csv";
+    a.download = "peeq-tryons.csv";
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -122,7 +122,7 @@ export function OverviewTab({ events, catalog, errors }: {
         <div className="panel-head">
           <span className="title">Try-ons per day</span><span className="sub">last 30 days</span>
           <button className="ph-btn" onClick={exportCsv}
-            style={{ marginLeft: "auto", color: "var(--mut)", fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", padding: "5px 10px", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)" }}>
+            style={{ marginLeft: "auto", color: "var(--mut)", fontSize: 11, letterSpacing: ".1em", padding: "5px 10px", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)" }}>
             Export CSV
           </button>
         </div>
@@ -136,7 +136,7 @@ export function OverviewTab({ events, catalog, errors }: {
             <thead>
               <tr>
                 {["Garment", "Tries", "This week", "Last tried"].map((h, i) => (
-                  <th key={h} style={{ color: "var(--mut)", fontSize: 10, textTransform: "uppercase", letterSpacing: ".12em", textAlign: i ? "right" : "left", padding: "6px 8px 10px", fontWeight: 500 }}>{h}</th>
+                  <th key={h} style={{ color: "var(--mut)", fontSize: 10, letterSpacing: ".12em", textAlign: i ? "right" : "left", padding: "6px 8px 10px", fontWeight: 500 }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -159,21 +159,6 @@ export function OverviewTab({ events, catalog, errors }: {
         </div>
       )}
 
-      {errors.length > 0 && (
-        <details className="panel">
-          <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--mut)", fontWeight: 500 }}>
-            {errors.length} recent error{errors.length !== 1 ? "s" : ""} — tap to view
-          </summary>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-            {errors.map((e) => (
-              <div key={e.id} style={{ fontSize: 12, color: "var(--mut)", fontFamily: "monospace" }}>
-                <span style={{ color: "var(--forest)", fontWeight: 700 }}>[{e.source}]</span> {e.message}
-                <span style={{ marginLeft: 8 }}>{timeAgo(e.createdAt)}</span>
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
     </div>
   );
 }
@@ -181,7 +166,7 @@ export function OverviewTab({ events, catalog, errors }: {
 function StatTile({ label, value, hint, accent }: { label: string; value: number; hint?: string; accent?: boolean }) {
   return (
     <div style={{ background: "var(--cream)", border: "1px solid " + (accent ? "var(--camel)" : "var(--line)"), borderRadius: "var(--radius-card)", padding: "16px 18px" }}>
-      <div style={{ fontSize: 10, color: "var(--mut)", fontWeight: 500, letterSpacing: ".12em", textTransform: "uppercase" }}>{label}</div>
+      <div style={{ fontSize: 10, color: "var(--mut)", fontWeight: 500, letterSpacing: ".12em" }}>{label}</div>
       <div className="ph-display" style={{ fontSize: 34, marginTop: 2, color: accent ? "var(--camel)" : "var(--forest-deep)" }}>
         {value.toLocaleString("en-IN")}
       </div>
@@ -259,7 +244,7 @@ export function LeadsTab({ leads, catalog, onLeadHandled, shopName }: {
         {sorted.slice(0, 50).map((l, i) => {
           const g = byId.get(l.garmentId || "");
           const wa = l.phone
-            ? waLink(l.phone, `Namaste${l.name ? " " + l.name : ""}! This is ${shopName || "the shop"} — about the ${g?.name || "garment"} you tried on with EasyFitCheck. It's ready for you!`)
+            ? waLink(l.phone, `Namaste${l.name ? " " + l.name : ""}! This is ${shopName || "the shop"} — about the ${g?.name || "garment"} you tried on with peeq. It's ready for you!`)
             : null;
           return (
             <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderTop: i ? "1px solid var(--line)" : "none", opacity: l.handled ? 0.5 : 1, flexWrap: "wrap" }}>
@@ -276,21 +261,21 @@ export function LeadsTab({ leads, catalog, onLeadHandled, shopName }: {
               </div>
               <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                 <span style={{
-                  fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", fontWeight: 600, padding: "4px 10px", borderRadius: 12,
-                  background: l.handled ? "transparent" : "var(--camel)",
-                  color: l.handled ? "var(--mut)" : "#fff",
+                  fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 999,
+                  background: l.handled ? "transparent" : "var(--butter)",
+                  color: l.handled ? "var(--stone)" : "var(--ink)",
                   border: l.handled ? "1px solid var(--line)" : "none",
                 }}>
-                  {l.handled ? "Done" : "New"}
+                  {l.handled ? "done" : "new"}
                 </span>
                 {!l.handled && wa && (
                   <a href={wa} target="_blank" rel="noopener noreferrer" className="ph-btn"
-                    style={{ fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", padding: "7px 12px", border: "1px solid var(--whatsapp)", color: "var(--whatsapp)", borderRadius: "var(--radius-btn)", fontWeight: 500, textDecoration: "none" }}>
+                    style={{ fontSize: 11, letterSpacing: ".08em", padding: "7px 12px", border: "1px solid var(--whatsapp)", color: "var(--whatsapp)", borderRadius: "var(--radius-btn)", fontWeight: 500, textDecoration: "none" }}>
                     WhatsApp
                   </a>
                 )}
                 <button className="ph-btn" onClick={() => onLeadHandled(l.id, !l.handled)}
-                  style={{ fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", padding: "7px 12px", border: "1px solid var(--forest)", color: "var(--forest)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
+                  style={{ fontSize: 11, letterSpacing: ".08em", padding: "7px 12px", border: "1px solid var(--forest)", color: "var(--forest)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
                   {l.handled ? "Reopen" : "Done ✓"}
                 </button>
               </div>

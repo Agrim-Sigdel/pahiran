@@ -5,7 +5,7 @@ import QRCode from "qrcode";
 import { CATEGORIES, SIZES, npr } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
 import { OverviewTab, LeadsTab, garmentTryCounts } from "@/components/Analytics";
-import type { ErrorLog, Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
+import type { Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 type Tab = "overview" | "leads" | "catalog" | "settings";
 
@@ -20,7 +20,6 @@ interface DashboardProps {
   toggleStock: (id: string) => void;
   events: TryOnEvent[];
   leads: Lead[];
-  errors: ErrorLog[];
   onLeadHandled: (id: string, handled: boolean) => void;
   loading: boolean;
   launchKiosk: () => void;
@@ -29,7 +28,7 @@ interface DashboardProps {
 
 export default function Dashboard({
   shop, updateShop, changeSlug, catalog, addGarment, editGarment, removeGarment,
-  toggleStock, events, leads, errors, onLeadHandled, loading, launchKiosk, signOut,
+  toggleStock, events, leads, onLeadHandled, loading, launchKiosk, signOut,
 }: DashboardProps) {
   const [tab, setTab] = useState<Tab>("overview");
   const [showForm, setShowForm] = useState(false);
@@ -56,17 +55,15 @@ export default function Dashboard({
       {/* header */}
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22px 0 16px", flexWrap: "wrap", gap: 12 }}>
         <div>
-          <div className="wordmark" style={{ fontSize: 22 }}>EasyFitCheck</div>
-          <div style={{ fontSize: 12, color: "var(--mut)", letterSpacing: ".12em", textTransform: "uppercase", marginTop: 3 }}>
+          <div className="wordmark" style={{ fontSize: 22 }}>peeq</div>
+          <div style={{ fontSize: 12, color: "var(--mut)", letterSpacing: ".12em", marginTop: 3 }}>
             {[shop.name, shop.area].filter(Boolean).join(" · ") || "Vendor dashboard"}
           </div>
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           {signOut && (
             <button className="ph-btn" onClick={signOut}
-              style={{ color: "var(--mut)", fontSize: 12, letterSpacing: ".1em", textTransform: "uppercase" }}>
-              Sign out
-            </button>
+              style={{ color: "var(--mut)", fontSize: 12, letterSpacing: ".1em" }}>sign out</button>
           )}
           <button
             className="ph-btn btn-solid"
@@ -77,9 +74,7 @@ export default function Dashboard({
                 return;
               }
               launchKiosk();
-            }}>
-            Launch kiosk
-          </button>
+            }}>launch kiosk</button>
         </div>
       </header>
 
@@ -105,7 +100,7 @@ export default function Dashboard({
                   <b style={{ color: "var(--camel)" }}>{openLeads} open lead{openLeads !== 1 ? "s" : ""}</b> — tap to view
                 </button>
               )}
-              <OverviewTab events={events} catalog={catalog} errors={errors} />
+              <OverviewTab events={events} catalog={catalog} />
             </div>
           )}
 
@@ -119,7 +114,7 @@ export default function Dashboard({
             <div className="fade-up">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
                 <div>
-                  <span className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>Catalog</span>
+                  <span className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>catalog</span>
                   <span style={{ color: "var(--mut)", marginLeft: 10, fontSize: 13 }}>{catalog.length} item{catalog.length !== 1 ? "s" : ""}</span>
                 </div>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -129,7 +124,7 @@ export default function Dashboard({
                     {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
                   <button className="ph-btn btn-solid" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => setShowForm(true)}>
-                    + Add garment
+                    + add garment
                   </button>
                 </div>
               </div>
@@ -144,22 +139,22 @@ export default function Dashboard({
                       <div key={g.id} className="fade-up" style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)", opacity: g.inStock ? 1 : 0.6 }}>
                         <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--sage-mist)" }}>
                           <img src={g.image} alt={g.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: g.inStock ? "none" : "grayscale(.7)" }} />
-                          <span style={{ position: "absolute", top: 10, left: 10, background: "var(--cream)", color: "var(--forest-deep)", fontSize: 10, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", padding: "4px 10px", borderRadius: 2 }}>
+                          <span style={{ position: "absolute", top: 10, left: 10, background: "var(--cream)", color: "var(--forest-deep)", fontSize: 10, fontWeight: 600, letterSpacing: ".1em", padding: "4px 10px", borderRadius: 2 }}>
                             {g.category}
                           </span>
                           {tries > 0 && (
-                            <span style={{ position: "absolute", top: 10, right: 10, background: "rgba(42,61,47,.8)", color: "var(--cream)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
+                            <span style={{ position: "absolute", top: 10, right: 10, background: "rgba(26,23,20,.8)", color: "var(--cream)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
                               {tries} tr{tries === 1 ? "y" : "ies"}
                             </span>
                           )}
                           {!g.inStock && (
-                            <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--forest-deep)", color: "var(--cream)", fontSize: 10, fontWeight: 500, letterSpacing: ".08em", textTransform: "uppercase", padding: "4px 9px", borderRadius: 2 }}>
+                            <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--forest-deep)", color: "var(--cream)", fontSize: 10, fontWeight: 500, letterSpacing: ".08em", padding: "4px 9px", borderRadius: 2 }}>
                               Out of stock
                             </span>
                           )}
                         </div>
                         <div style={{ padding: "13px 14px 14px" }}>
-                          <div style={{ fontWeight: 500, fontSize: 11.5, letterSpacing: ".12em", textTransform: "uppercase", marginBottom: 4 }}>{g.name}</div>
+                          <div style={{ fontWeight: 500, fontSize: 11.5, letterSpacing: ".12em", marginBottom: 4 }}>{g.name}</div>
                           {g.sizes.length > 0 && (
                             <div style={{ display: "flex", gap: 4, flexWrap: "wrap", margin: "4px 0 6px" }}>
                               {g.sizes.map((s) => (
@@ -269,7 +264,7 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
           <input type="checkbox" checked={listed} style={{ marginTop: 3, accentColor: "var(--forest)" }}
             onChange={(e) => { setListed(e.target.checked); setSaved(false); }} />
           <span>
-            Show my shop on the EasyFitCheck landing page
+            Show my shop on the peeq landing page
             <span style={{ display: "block", fontSize: 12, color: "var(--mut)" }}>
               Shoppers can find and browse your storefront and kiosk.
             </span>
@@ -278,7 +273,7 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
         <button className="ph-btn btn-solid" disabled={!dirty}
           onClick={() => { updateShop({ ...shop, name, area, whatsapp, listed }); setSaved(true); }}
           style={{ alignSelf: "flex-start", marginTop: 6, opacity: dirty ? 1 : 0.55 }}>
-          {saved && !dirty ? "Saved ✓" : "Save changes"}
+          {saved && !dirty ? "saved ✓" : "save changes"}
         </button>
       </div>
     </div>
@@ -294,8 +289,8 @@ function LinkBox({ url, children }: { url: string; children?: React.ReactNode })
       </code>
       <button className="ph-btn"
         onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-        style={{ background: "var(--forest-deep)", color: "var(--cream)", padding: "11px 16px", fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase" }}>
-        {copied ? "Copied ✓" : "Copy"}
+        style={{ background: "var(--forest-deep)", color: "var(--cream)", padding: "11px 16px", fontSize: 11, letterSpacing: ".1em" }}>
+        {copied ? "copied ✓" : "copy"}
       </button>
       {children}
     </div>
@@ -324,7 +319,7 @@ function SlugEditor({ slug, changeSlug }: { slug: string; changeSlug: (slug: str
   if (!editing) {
     return (
       <button className="ph-btn" onClick={() => { setDraft(slug); setEditing(true); setError(""); }}
-        style={{ color: "var(--mut)", padding: "10px 8px", fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase" }}>
+        style={{ color: "var(--mut)", padding: "10px 8px", fontSize: 11, letterSpacing: ".1em" }}>
         Edit
       </button>
     );
@@ -338,13 +333,11 @@ function SlugEditor({ slug, changeSlug }: { slug: string; changeSlug: (slug: str
           onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
           style={{ padding: "10px 13px", borderRadius: "var(--radius-btn)", border: "1px solid " + (valid ? "var(--line)" : "var(--camel)"), fontSize: 14, letterSpacing: 0, textTransform: "none", fontWeight: 400, width: 180, background: "#fff" }} />
         <button className="ph-btn" disabled={!valid || busy} onClick={save}
-          style={{ background: valid ? "var(--forest)" : "var(--line)", color: valid ? "var(--cream)" : "var(--mut)", padding: "10px 14px", fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase" }}>
+          style={{ background: valid ? "var(--forest)" : "var(--line)", color: valid ? "var(--cream)" : "var(--mut)", padding: "10px 14px", fontSize: 11, letterSpacing: ".1em" }}>
           {busy ? "Saving…" : "Save"}
         </button>
         <button className="ph-btn" onClick={() => { setEditing(false); setDraft(slug); setError(""); }}
-          style={{ color: "var(--mut)", padding: "10px 8px", fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase" }}>
-          Cancel
-        </button>
+          style={{ color: "var(--mut)", padding: "10px 8px", fontSize: 11, letterSpacing: ".1em" }}>cancel</button>
       </div>
       <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: error ? "var(--camel)" : "var(--mut)" }}>
         {error || "Lowercase letters, numbers and dashes. Changing this breaks QR codes you've already printed."}
@@ -362,7 +355,7 @@ function EmptyState({ onAdd, anyItems }: { onAdd: () => void; anyItems: boolean 
       <p style={{ color: "var(--mut)", maxWidth: 420, margin: "0 auto 20px", fontSize: 14, lineHeight: 1.6 }}>
         Photograph each garment flat or on a mannequin against a plain wall, then add it here. Clean photos give the best try-on results.
       </p>
-      <button className="ph-btn btn-solid" onClick={onAdd}>+ Add your first garment</button>
+      <button className="ph-btn btn-solid" onClick={onAdd}>+ add your first garment</button>
     </div>
   );
 }
@@ -396,11 +389,11 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
   const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 15, background: "#fff" };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(42,61,47,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} className="fade-up"
         style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 400, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: "28px 26px" }}>
         <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 18 }}>
-          {initial ? "Edit garment" : "Add a garment"}
+          {initial ? "edit garment" : "add a garment"}
         </div>
 
         <div onClick={() => fileRef.current?.click()}
@@ -440,9 +433,7 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
 
         <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
           <button className="ph-btn" onClick={onClose}
-            style={{ flex: 1, color: "var(--forest-deep)", padding: 13, fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
-            Cancel
-          </button>
+            style={{ flex: 1, color: "var(--forest-deep)", padding: 13, fontSize: 12, letterSpacing: ".12em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>cancel</button>
           <button className="ph-btn" disabled={!canSave}
             onClick={() => onSave({
               name: name.trim(), category, price: Number(price || 0), image: image!,
@@ -451,8 +442,8 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
               tryonEnabled: initial?.tryonEnabled ?? true,
               stitchedToOrder: initial?.stitchedToOrder ?? false,
             })}
-            style={{ flex: 2, background: canSave ? "var(--forest)" : "var(--line)", color: canSave ? "var(--cream)" : "var(--mut)", padding: 13, fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
-            {initial ? "Save changes" : "Save to catalog"}
+            style={{ flex: 2, background: canSave ? "var(--forest)" : "var(--line)", color: canSave ? "var(--cream)" : "var(--mut)", padding: 13, fontSize: 12, letterSpacing: ".12em", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
+            {initial ? "save changes" : "save to catalog"}
           </button>
         </div>
         {initial && onRemove && (
@@ -470,16 +461,16 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
 function QRModal({ garment, url, crossDevice, onClose }: { garment: Garment; url: string; crossDevice: boolean; onClose: () => void }) {
   const [qr, setQr] = useState<string | null>(null);
   useEffect(() => {
-    QRCode.toDataURL(url, { width: 480, margin: 2, color: { dark: "#2A3D2F", light: "#ffffff" } })
+    QRCode.toDataURL(url, { width: 480, margin: 2, color: { dark: "#1A1714", light: "#ffffff" } })
       .then(setQr)
       .catch(() => setQr(null));
   }, [url]);
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(42,61,47,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} className="fade-up"
         style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 380, maxWidth: "100%", padding: "28px 26px", textAlign: "center" }}>
-        <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 4 }}>Try-on QR</div>
+        <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 4 }}>try-on QR</div>
         <div style={{ fontSize: 14, fontWeight: 500 }}>{garment.name}</div>
         <div style={{ fontSize: 12, color: "var(--mut)", marginBottom: 4 }}>
           Shoppers scan this on the hanger tag and try it on their own phone.
@@ -499,14 +490,10 @@ function QRModal({ garment, url, crossDevice, onClose }: { garment: Garment; url
         )}
         <div style={{ display: "flex", gap: 10 }}>
           <button className="ph-btn" onClick={onClose}
-            style={{ flex: 1, color: "var(--forest-deep)", padding: 13, fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
-            Close
-          </button>
+            style={{ flex: 1, color: "var(--forest-deep)", padding: 13, fontSize: 12, letterSpacing: ".12em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>close</button>
           {qr && (
-            <a className="ph-btn" href={qr} download={"easyfitcheck-qr-" + garment.id + ".png"}
-              style={{ flex: 2, background: "var(--forest)", color: "var(--cream)", padding: 13, fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", textDecoration: "none", borderRadius: "var(--radius-btn)", fontWeight: 500, textAlign: "center" }}>
-              Download PNG
-            </a>
+            <a className="ph-btn" href={qr} download={"peeq-qr-" + garment.id + ".png"}
+              style={{ flex: 2, background: "var(--forest)", color: "var(--cream)", padding: 13, fontSize: 12, letterSpacing: ".12em", textDecoration: "none", borderRadius: "var(--radius-btn)", fontWeight: 500, textAlign: "center" }}>download PNG</a>
           )}
         </div>
       </div>

@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>peeq — brand direction v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Mukta:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1A1714;
+    --paper:#FAF6F0;
+    --violet:#6D5BFF;
+    --butter:#F5DD90;
+    --stone:#8A8378;
+    --card:#FFFFFF;
+    --line:rgba(26,23,20,.10);
+    --r-card:20px;
+    --r-pill:999px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Mukta',sans-serif;
+    font-weight:400;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:880px;margin:0 auto;padding:0 24px}
+  h1,h2,h3,.display{font-family:'Baloo 2',cursive;font-weight:700;line-height:1.15;letter-spacing:-0.01em}
+  h2{font-size:clamp(26px,4vw,34px);margin-bottom:8px}
+  h3{font-size:19px;font-weight:600;margin-bottom:6px}
+  p{max-width:62ch}
+  section{padding:72px 0;border-top:1px solid var(--line)}
+  .eyebrow{
+    display:inline-block;font-size:13px;font-weight:600;letter-spacing:.14em;
+    color:var(--violet);text-transform:lowercase;margin-bottom:14px;
+  }
+  .muted{color:var(--stone)}
+  .note{
+    background:var(--butter);border-radius:var(--r-card);
+    padding:16px 20px;margin-top:22px;font-size:15px;max-width:640px;
+  }
+  .note strong{font-weight:700}
+
+  /* ---------- hero ---------- */
+  header{padding:96px 0 72px;text-align:center}
+  .tagline{margin-top:10px;font-size:17px;color:var(--stone)}
+  .wordmark{
+    position:relative;display:inline-block;margin-top:34px;
+    font-family:'Baloo 2',cursive;font-weight:800;
+    font-size:clamp(88px,18vw,168px);line-height:1;letter-spacing:-0.03em;
+    user-select:none;
+  }
+  .wordmark .axis{
+    position:absolute;left:50%;top:-14%;height:128%;width:0;
+    border-left:2px dashed var(--violet);opacity:.55;
+  }
+  .axis-label{
+    display:flex;justify-content:center;gap:8px;align-items:center;
+    margin-top:14px;font-size:14px;color:var(--violet);font-weight:600;
+  }
+  .mirror-note{margin:26px auto 0;max-width:520px;font-size:16px;color:var(--stone)}
+
+  /* ---------- icon row ---------- */
+  .icon-row{display:flex;gap:20px;justify-content:flex-start;flex-wrap:wrap;margin-top:26px}
+  .app-icon{
+    width:104px;height:104px;border-radius:26px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Baloo 2',cursive;font-weight:800;font-size:56px;line-height:1;
+    box-shadow:0 6px 18px rgba(26,23,20,.10);
+  }
+  .app-icon span{transform:translateY(-4px);display:inline-block}
+  .blink span{animation:blink 4.5s infinite}
+  @keyframes blink{
+    0%,92%,100%{transform:translateY(-4px) scaleY(1)}
+    94%,96%{transform:translateY(-4px) scaleY(.08)}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .blink span{animation:none}
+    *{transition:none !important}
+  }
+  .ic-violet{background:var(--violet);color:#fff}
+  .ic-paper{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+  .ic-ink{background:var(--ink);color:var(--butter)}
+  .icon-caption{font-size:14px;color:var(--stone);margin-top:12px}
+
+  /* ---------- swatches ---------- */
+  .swatches{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;margin-top:26px}
+  .swatch{border-radius:var(--r-card);overflow:hidden;border:1px solid var(--line);background:var(--card)}
+  .chip{height:96px}
+  .swatch .meta{padding:12px 14px;font-size:14px}
+  .swatch .meta b{display:block;font-weight:700}
+  .swatch .meta code{font-size:13px;color:var(--stone)}
+  .usage{font-size:13.5px;color:var(--stone);margin-top:4px;line-height:1.45}
+
+  /* ---------- type ---------- */
+  .type-table{margin-top:26px;display:flex;flex-direction:column;gap:22px}
+  .type-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 28px;border-bottom:1px solid var(--line);padding-bottom:20px}
+  .type-row:last-child{border-bottom:none}
+  .type-spec{flex:0 0 190px;font-size:13.5px;color:var(--stone);line-height:1.5}
+  .t-display{font-family:'Baloo 2',cursive;font-weight:700;font-size:40px;letter-spacing:-0.01em}
+  .t-h2{font-family:'Baloo 2',cursive;font-weight:600;font-size:26px}
+  .t-body{font-size:17px}
+  .t-caption{font-size:13.5px;color:var(--stone)}
+  .bilingual{
+    margin-top:30px;background:var(--card);border:1px solid var(--line);
+    border-radius:var(--r-card);padding:28px;display:grid;gap:6px;
+  }
+  .bilingual .np{font-family:'Baloo 2',cursive;font-weight:600;font-size:30px}
+  .bilingual .en{font-family:'Baloo 2',cursive;font-weight:600;font-size:30px}
+
+  /* ---------- components ---------- */
+  .components{display:flex;flex-wrap:wrap;gap:22px;margin-top:26px;align-items:flex-start}
+  .btn{
+    display:inline-block;border:none;cursor:pointer;
+    font-family:'Baloo 2',cursive;font-weight:700;font-size:17px;
+    padding:14px 30px;border-radius:var(--r-pill);
+    background:var(--ink);color:var(--paper);
+    transition:transform .18s ease;
+  }
+  .btn:hover{transform:translateY(-3px)}
+  .btn.secondary{background:transparent;color:var(--ink);border:2px solid var(--ink)}
+  .btn.violet{background:var(--violet);color:#fff}
+
+  .garment-card{
+    width:230px;background:var(--card);border:1px solid var(--line);
+    border-radius:var(--r-card);overflow:hidden;
+    transition:transform .18s ease;
+  }
+  .garment-card:hover{transform:translateY(-6px)}
+  .g-img{
+    height:220px;background:linear-gradient(160deg,#E9E2D6,#D8CFC0);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--stone);font-size:14px;
+  }
+  .g-body{padding:14px 16px 16px}
+  .g-body b{font-weight:600;display:block}
+  .g-body .price{color:var(--stone);font-size:14.5px;margin-bottom:12px}
+  .g-body .btn{padding:10px 0;width:100%;text-align:center;font-size:15.5px}
+
+  .qr-tag{
+    width:190px;background:var(--card);border:1px solid var(--line);
+    border-radius:16px;padding:22px 18px 18px;text-align:center;position:relative;
+  }
+  .qr-tag .hole{
+    width:14px;height:14px;border-radius:50%;background:var(--paper);
+    border:1px solid var(--line);position:absolute;top:10px;left:50%;transform:translateX(-50%);
+  }
+  .qr{
+    width:110px;height:110px;margin:14px auto 12px;
+    display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(7,1fr);gap:2px;
+  }
+  .qr i{background:var(--ink);border-radius:2px}
+  .qr i.o{background:transparent}
+  .qr-tag .cta{font-family:'Baloo 2',cursive;font-weight:700;font-size:15px}
+  .qr-tag .sub{font-size:12.5px;color:var(--stone)}
+
+  .sticky-demo{
+    width:300px;background:var(--card);border:1px solid var(--line);
+    border-radius:var(--r-card);overflow:hidden;
+  }
+  .sticky-demo .screen{height:120px;background:linear-gradient(160deg,#EFE8DB,#E2D8C7);
+    display:flex;align-items:center;justify-content:center;color:var(--stone);font-size:13.5px}
+  .sticky-demo .bar{
+    display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--card);
+    border-top:1px solid var(--line);
+  }
+  .sticky-demo .bar .price-tag{font-weight:600;font-size:15px;flex:1}
+  .sticky-demo .bar .btn{padding:10px 22px;font-size:15px}
+
+  /* ---------- principle list ---------- */
+  .principles{margin-top:24px;display:grid;gap:18px;max-width:680px}
+  .principle{display:flex;gap:16px;align-items:flex-start}
+  .p-dot{
+    flex:0 0 34px;height:34px;border-radius:50%;background:var(--butter);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Baloo 2',cursive;font-weight:700;font-size:15px;
+  }
+  .principle b{font-weight:600}
+  .principle p{font-size:15.5px;color:var(--stone);line-height:1.55}
+
+  /* ---------- do dont ---------- */
+  .dd{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-top:26px}
+  .dd .col{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);padding:22px 24px}
+  .dd h3{margin-bottom:12px}
+  .dd ul{list-style:none;display:grid;gap:10px;font-size:15px}
+  .dd li{padding-left:26px;position:relative;line-height:1.5}
+  .do li::before{content:"✓";position:absolute;left:0;color:var(--violet);font-weight:700}
+  .dont li::before{content:"✕";position:absolute;left:0;color:#C0554D;font-weight:700}
+
+  /* ---------- voice ---------- */
+  .voice-samples{margin-top:24px;display:grid;gap:12px;max-width:640px}
+  .vs{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px;font-size:15.5px}
+  .vs .lbl{font-size:12.5px;letter-spacing:.1em;color:var(--stone);display:block;margin-bottom:2px;font-weight:600}
+
+  /* ---------- tokens ---------- */
+  pre{
+    background:var(--ink);color:#EDE7DC;border-radius:var(--r-card);
+    padding:24px 26px;overflow-x:auto;font-size:13.5px;line-height:1.7;
+    font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;margin-top:24px;
+  }
+  pre .c{color:#8A8378}
+  footer{padding:56px 0 80px;text-align:center;font-size:14px;color:var(--stone)}
+  footer .display{font-size:26px;margin-bottom:6px}
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <span class="eyebrow">brand direction · v1 · for the peeq design team</span>
+  <div>
+    <div class="wordmark">
+      peeq
+      <span class="axis" aria-hidden="true"></span>
+    </div>
+  </div>
+  <div class="axis-label">↑ mirror axis</div>
+  <p class="mirror-note">
+    The name contains the product. <strong>p</strong> and <strong>q</strong> are mirror
+    glyphs — a reflection, which is exactly what the app is. The double
+    <strong>ee</strong> in the middle reads as two eyes taking a peek.
+    Nothing needs to be invented; the wordmark just needs to make this visible.
+  </p>
+  <p class="tagline">a little look before you buy · किन्नु अघि एक झलक</p>
+</header>
+
+<section class="wrap" id="logo">
+  <span class="eyebrow">logo</span>
+  <h2>Wordmark first, eyes second</h2>
+  <p>
+    Primary mark: lowercase <b>peeq</b>, custom-drawn geometric monoline. Brief for the
+    logotype: the p and q must be exact horizontal mirrors of each other (same bowl,
+    same stem, flipped), and the two e's should sit slightly closer together than normal
+    tracking so they pair up as a face. Always lowercase, everywhere — packaging, legal
+    pages, app store. Never "Peeq" or "PEEQ".
+  </p>
+  <p style="margin-top:14px">
+    Secondary mark / app icon: just the <b>ee</b>. It's the shortest possible version of
+    the brand and it blinks.
+  </p>
+
+  <div class="icon-row">
+    <div class="app-icon ic-violet blink"><span>ee</span></div>
+    <div class="app-icon ic-paper blink"><span>ee</span></div>
+    <div class="app-icon ic-ink blink"><span>ee</span></div>
+  </div>
+  <p class="icon-caption">App icon concepts — violet is the default store listing. The blink is the brand's one signature animation (see motion).</p>
+
+  <div class="note">
+    <strong>Clearspace rule:</strong> keep space equal to the height of one "e" around
+    the wordmark on all sides. Minimum size: 72px wide on screen before switching to the
+    ee icon.
+  </div>
+</section>
+
+<section class="wrap" id="color">
+  <span class="eyebrow">color</span>
+  <h2>A warm stage, one loud guest</h2>
+  <p>
+    The app's real content is people's own photos. UI color has to flatter skin tones and
+    never compete with garments — so the base palette is warm and quiet, and exactly one
+    color is allowed to be loud.
+  </p>
+
+  <div class="swatches">
+    <div class="swatch">
+      <div class="chip" style="background:#1A1714"></div>
+      <div class="meta"><b>ink</b><code>#1A1714</code>
+        <div class="usage">All text, primary buttons. A warm black — never pure #000.</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background:#FAF6F0;border-bottom:1px solid var(--line)"></div>
+      <div class="meta"><b>fitting-room white</b><code>#FAF6F0</code>
+        <div class="usage">Default background. Warm whites flatter skin in photos.</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background:#6D5BFF"></div>
+      <div class="meta"><b>peeq violet</b><code>#6D5BFF</code>
+        <div class="usage">Interactive only: links, scan moments, active states. Never for body text under 18px (contrast ≈ 4.3:1 on white).</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background:#F5DD90"></div>
+      <div class="meta"><b>butter</b><code>#F5DD90</code>
+        <div class="usage">Highlights, badges, "new" stickers, empty states. Trending in fashion right now; use in small doses.</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background:#8A8378"></div>
+      <div class="meta"><b>stone</b><code>#8A8378</code>
+        <div class="usage">Secondary text, captions, prices.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Retiring:</strong> the current EasyFitCheck green <code>#2A3D2F</code> goes
+    away entirely. Don't blend the two identities during migration — cut over in one release.
+  </div>
+</section>
+
+<section class="wrap" id="type">
+  <span class="eyebrow">typography</span>
+  <h2>One system, two scripts</h2>
+  <p>
+    The non-negotiable constraint: everything must look equally good in Devanagari and
+    Latin, because the product ships bilingual. Both families below carry native
+    Devanagari that was designed together with the Latin — no mismatched fallback fonts.
+  </p>
+
+  <div class="type-table">
+    <div class="type-row">
+      <div class="type-spec">display<br>Baloo 2 · 700<br>40/48 · -1%</div>
+      <div class="t-display">try it on, without trying it on</div>
+    </div>
+    <div class="type-row">
+      <div class="type-spec">heading<br>Baloo 2 · 600<br>26/32</div>
+      <div class="t-h2">your rack, on every body</div>
+    </div>
+    <div class="type-row">
+      <div class="type-spec">body<br>Mukta · 400<br>17/28</div>
+      <div class="t-body">Shoppers take one photo and see any garment from your rack on their own body. No account, no downloads, no fitting-room queue.</div>
+    </div>
+    <div class="type-row">
+      <div class="type-spec">caption<br>Mukta · 500<br>13.5/20</div>
+      <div class="t-caption">free to start · works on any phone · नेपाली र english</div>
+    </div>
+  </div>
+
+  <div class="bilingual">
+    <div class="np">पहिले हेर्नुहोस्, अनि किन्नुहोस्</div>
+    <div class="en">look first, then buy</div>
+    <p class="t-caption" style="margin-top:10px">Baloo 2 rendering both scripts at equal weight — same font file, same voice in both languages. Body copy in Nepali uses Mukta the same way.</p>
+  </div>
+
+  <div class="note">
+    <strong>Both are free Google Fonts</strong> — Baloo 2 (by Ek Type, made for Devanagari)
+    and Mukta. Zero licensing cost, full variable weights, load via one request.
+  </div>
+</section>
+
+<section class="wrap" id="voice">
+  <span class="eyebrow">voice</span>
+  <h2>lowercase, short, a little cheeky</h2>
+  <p>
+    "peeq" becomes a verb inside the product. You don't "generate a virtual try-on
+    preview" — you <b>peeq it</b>. Sentence case is fine for body copy; headings, buttons
+    and the brand itself stay lowercase. Nepali strings get the same energy, never a
+    stiff translation.
+  </p>
+  <div class="voice-samples">
+    <div class="vs"><span class="lbl">primary button</span>peeq it</div>
+    <div class="vs"><span class="lbl">empty state</span>nothing here yet — scan a tag on any hanger to start</div>
+    <div class="vs"><span class="lbl">success toast</span>sent to the shop. they'll text you about size.</div>
+    <div class="vs"><span class="lbl">vendor dashboard, zero leads</span>quiet day. your QR tags are doing the waiting for you.</div>
+    <div class="vs"><span class="lbl">nepali cta</span>हेरौँ त कस्तो देखिन्छ</div>
+  </div>
+</section>
+
+<section class="wrap" id="ui">
+  <span class="eyebrow">ui direction</span>
+  <h2>Minimal means the clothes win</h2>
+
+  <div class="principles">
+    <div class="principle"><div class="p-dot">1</div><div>
+      <b>The photo is the interface.</b>
+      <p>The try-on result owns the screen edge-to-edge. Controls float over it or sit in a bottom sheet — never a persistent chrome frame around the person.</p>
+    </div></div>
+    <div class="principle"><div class="p-dot">2</div><div>
+      <b>One accent, one job.</b>
+      <p>Violet appears only where a tap does something. If a screen has violet in three places, the screen has too many actions.</p>
+    </div></div>
+    <div class="principle"><div class="p-dot">3</div><div>
+      <b>Round everything that's touchable.</b>
+      <p>Pill buttons, 20px card radii, soft shadows. Matches the roundness of Baloo and makes the whole app feel like the wordmark.</p>
+    </div></div>
+    <div class="principle"><div class="p-dot">4</div><div>
+      <b>Thumb-first, always.</b>
+      <p>Primary actions live in the bottom third. The core flow (scan → photo → peeq → send lead) must be completable one-handed on a budget Android phone.</p>
+    </div></div>
+    <div class="principle"><div class="p-dot">5</div><div>
+      <b>Both languages are first-class.</b>
+      <p>Language toggle visible on every screen, never buried in settings. Layouts must survive Nepali strings running ~20% longer.</p>
+    </div></div>
+  </div>
+
+  <h3 style="margin-top:44px">Component starters</h3>
+  <div class="components">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <button class="btn">peeq it</button>
+      <button class="btn violet">scan a tag</button>
+      <button class="btn secondary">how it works</button>
+    </div>
+
+    <div class="garment-card">
+      <div class="g-img">garment photo</div>
+      <div class="g-body">
+        <b>oversized denim jacket</b>
+        <div class="price">रू 3,200 · Thamel Threads</div>
+        <button class="btn">peeq it</button>
+      </div>
+    </div>
+
+    <div class="qr-tag">
+      <div class="hole"></div>
+      <div class="cta">peeq</div>
+      <div class="qr">
+        <i></i><i></i><i></i><i class="o"></i><i></i><i></i><i></i>
+        <i></i><i class="o"></i><i></i><i></i><i></i><i class="o"></i><i></i>
+        <i></i><i></i><i class="o"></i><i></i><i class="o"></i><i></i><i></i>
+        <i class="o"></i><i></i><i></i><i class="o"></i><i></i><i></i><i class="o"></i>
+        <i></i><i></i><i class="o"></i><i></i><i class="o"></i><i></i><i></i>
+        <i></i><i class="o"></i><i></i><i></i><i></i><i class="o"></i><i></i>
+        <i></i><i></i><i></i><i class="o"></i><i></i><i></i><i></i>
+      </div>
+      <div class="cta">see it on you</div>
+      <div class="sub">scan · no app needed</div>
+    </div>
+
+    <div class="sticky-demo">
+      <div class="screen">try-on result fills the screen</div>
+      <div class="bar">
+        <div class="price-tag">रू 3,200</div>
+        <button class="btn">ask for my size</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="motion">
+  <span class="eyebrow">motion &amp; photography</span>
+  <h2>A blink and a peek — that's it</h2>
+  <p>
+    Two motions define the brand, used sparingly:
+  </p>
+  <div class="principles" style="margin-top:20px">
+    <div class="principle"><div class="p-dot">a</div><div>
+      <b>The blink.</b>
+      <p>The ee icon blinks once (scaleY 1 → 0.08 → 1, ~140ms) on app open and while a try-on renders. It replaces generic spinners — the app is "looking".</p>
+    </div></div>
+    <div class="principle"><div class="p-dot">b</div><div>
+      <b>The peek.</b>
+      <p>New content enters by peeking up from the bottom edge (translateY 12px + fade, 240ms, ease-out). Cards, sheets, toasts — everything arrives the same way.</p>
+    </div></div>
+  </div>
+  <p style="margin-top:22px">
+    Photography: mirror-selfie framing, phone flash, real bodies of all sizes — never
+    studio models on seamless backgrounds. Marketing imagery should look like something a
+    shopper actually made in the app two minutes ago. Respect
+    <code>prefers-reduced-motion</code> across the board.
+  </p>
+</section>
+
+<section class="wrap" id="dd">
+  <span class="eyebrow">guardrails</span>
+  <h2>Do / don't</h2>
+  <div class="dd">
+    <div class="col do">
+      <h3>do</h3>
+      <ul>
+        <li>keep the wordmark lowercase in every context</li>
+        <li>let user photos fill the screen; UI floats above</li>
+        <li>use violet only for tappable things</li>
+        <li>write "peeq it" as the universal try-on verb</li>
+        <li>design every screen in Nepali first, then English</li>
+        <li>use butter for playful moments (badges, empty states)</li>
+      </ul>
+    </div>
+    <div class="col dont">
+      <h3>don't</h3>
+      <ul>
+        <li>no gradients on buttons or text</li>
+        <li>no pure black (#000) or cool grays</li>
+        <li>no drop shadows heavier than 10% ink</li>
+        <li>no all-caps anywhere except legal fine print</li>
+        <li>no spinners — the blink is the loading state</li>
+        <li>no mixing old EasyFitCheck green into new screens</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="tokens">
+  <span class="eyebrow">handoff</span>
+  <h2>Tokens, ready to paste</h2>
+<pre>
+<span class="c">/* peeq design tokens — v1 */</span>
+--ink:    #1A1714;  <span class="c">/* text, primary buttons */</span>
+--paper:  #FAF6F0;  <span class="c">/* default background */</span>
+--violet: #6D5BFF;  <span class="c">/* interactive only, ≥18px or non-text */</span>
+--butter: #F5DD90;  <span class="c">/* highlights, badges */</span>
+--stone:  #8A8378;  <span class="c">/* secondary text */</span>
+
+--font-display: 'Baloo 2';   <span class="c">/* 600–800, headings + wordmark ref */</span>
+--font-body:    'Mukta';     <span class="c">/* 400–600, UI + body, both scripts */</span>
+
+--radius-card: 20px;
+--radius-pill: 999px;
+--motion-peek: 240ms ease-out;   <span class="c">/* translateY(12px) + fade */</span>
+--motion-blink: 140ms;           <span class="c">/* scaleY 1 → .08 → 1 */</span>
+</pre>
+  <p style="margin-top:22px">
+    Next steps for the team: (1) commission or draw the custom mirrored wordmark —
+    the Baloo rendering above is a placeholder, not the final logotype; (2) run the violet
+    through real device screens, budget Androids wash it out; (3) rebuild the landing hero
+    around a live try-on demo instead of copy — the product is the best possible hero.
+  </p>
+</section>
+
+<footer>
+  <div class="display">peeq</div>
+  brand direction v1 · july 2026 · prepared for the design team
+</footer>
+
+</body>
+</html>

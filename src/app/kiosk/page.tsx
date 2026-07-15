@@ -33,8 +33,10 @@ function KioskOwn() {
 
   if (catalog === null) {
     return (
-      <div style={{ position: "fixed", inset: 0, background: "var(--ink)", color: "rgba(255,255,255,.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        Loading…
+      <div style={{ position: "fixed", inset: 0, background: "var(--ink)", color: "rgba(255,255,255,.6)", display: "flex", flexDirection: "column", gap: 12, alignItems: "center", justifyContent: "center" }}>
+        {/* the blink is the loading state — the app is "looking" */}
+        <span className="ee-mark ee-looking" style={{ fontSize: 48, color: "#fff" }}><span>ee</span></span>
+        taking a peeq…
       </div>
     );
   }
@@ -42,13 +44,13 @@ function KioskOwn() {
   if (catalog.length === 0) {
     return (
       <div style={{ position: "fixed", inset: 0, background: "var(--ink)", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, textAlign: "center", padding: 24 }}>
-        <div className="ph-display" style={{ fontSize: 26 }}>The rack is empty</div>
+        <div className="ph-display" style={{ fontSize: 26 }}>the rack is empty</div>
         <p style={{ color: "rgba(255,255,255,.55)", maxWidth: 380, margin: 0 }}>
           Add at least one in-stock garment in the dashboard before launching the kiosk.
         </p>
-        <button className="ph-btn" onClick={() => router.push("/dashboard")}
-          style={{ background: "var(--rani)", color: "#fff", padding: "14px 28px", fontSize: 16 }}>
-          Go to dashboard
+        <button className="ph-btn btn-violet" onClick={() => router.push("/dashboard")}
+          style={{ padding: "14px 28px" }}>
+          go to dashboard
         </button>
       </div>
     );
