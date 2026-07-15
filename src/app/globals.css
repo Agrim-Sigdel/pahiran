@@ -10,6 +10,7 @@
   --paper: #FAF6F0;        /* default background — flatters skin in photos */
   --violet: #00372b;       /* interactive only: links, scan moments, active states */
   --butter: #F5DD90;       /* highlights, badges, empty states — small doses */
+  --butter-deep: #C9A94E;  /* butter for light backgrounds (nav ee, badges on paper) */
   --stone: #8A8378;        /* secondary text, captions, prices */
   --card: #FFFFFF;
   --line: rgba(26, 23, 20, .10);
@@ -95,6 +96,32 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 }
 /* faster blink while the app is "looking" (loading state — no spinners) */
 .ee-looking span { animation: blink 1.6s infinite; }
+/* the colored, blinking ee inside the wordmark (inline-block: transforms
+   don't apply to plain inline spans, so the blink needs it). Slower cycle
+   but a longer closed phase than `blink` — actually visible at a glance. */
+.wordmark .ee { color: var(--butter); display: inline-block; animation: ee-wink 2.6s infinite; }
+.efc-nav .wordmark .ee { color: var(--butter-deep); } /* dimmer on the light nav */
+@keyframes ee-wink {
+  0%, 89%, 100% { transform: scaleY(1); }
+  92%, 97% { transform: scaleY(.08); }
+}
+
+/* map pin — shopping bag with the blinking ee (Leaflet divIcon, see osm.ts) */
+.peeq-pin {
+  position: relative; width: 36px; height: 32px;
+  background: var(--violet); border: 2.5px solid #fff;
+  border-radius: 7px 7px 13px 13px;
+  box-shadow: 0 2px 8px rgba(26, 23, 20, .4);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Baloo 2', cursive; font-weight: 800; font-size: 16px;
+  color: var(--butter); line-height: 1; letter-spacing: -0.02em;
+}
+.peeq-pin::before { /* handle */
+  content: ""; position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
+  width: 16px; height: 14px; border: 3px solid #fff; border-bottom: none;
+  border-radius: 9px 9px 0 0;
+}
+.peeq-pin span { display: inline-block; animation: ee-wink 3.4s infinite; }
 
 .efc-chip { font-family: 'Baloo 2', cursive; padding: 8px 18px; font-size: 14px; font-weight: 600; border-radius: var(--radius-btn); white-space: nowrap; border: none; cursor: pointer; flex-shrink: 0; }
 .efc-chip.on { background: var(--violet); color: #fff; }
@@ -137,6 +164,30 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px; }
 .shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 18px; }
 
+/* ── landing product feed — editorial listing (borderless tiles, caption
+   below the image, hover zoom + peeq pill, like a fashion PLP) ── */
+.feed-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px 18px; max-width: 1040px; margin: 0 auto; }
+.feed-card .feed-img { position: relative; display: block; aspect-ratio: 3/4; border-radius: 16px; overflow: hidden; background: var(--paper-deep); }
+.feed-card .feed-img img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .55s cubic-bezier(.2,.6,.2,1); }
+.feed-card:hover .feed-img img { transform: scale(1.045); }
+.feed-cta {
+  position: absolute; left: 10px; right: 10px; bottom: 10px; text-align: center;
+  background: rgba(250, 246, 240, .94); color: var(--ink);
+  font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 13.5px;
+  padding: 10px 0; border-radius: 999px;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .22s ease, transform .22s ease;
+  pointer-events: none;
+}
+.feed-card:hover .feed-cta { opacity: 1; transform: translateY(0); }
+.feed-meta { padding: 11px 2px 0; }
+.feed-shop { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--stone); text-decoration: none; margin-bottom: 3px; }
+.feed-shop:hover { color: var(--violet); }
+.feed-name-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.feed-name-row .nm { font-size: 14px; font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-name-row .pr { font-size: 13.5px; font-weight: 500; color: var(--stone); flex-shrink: 0; }
+@media (max-width: 920px) { .feed-grid { grid-template-columns: repeat(3, 1fr); } }
+
 /* wide content that must scroll inside its box, never the page */
 .scroll-x { overflow-x: auto; }
 
@@ -161,6 +212,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 
   .section-pad { padding: 30px 16px; }
   .card-grid, .shop-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .feed-grid { grid-template-columns: repeat(2, 1fr); gap: 22px 10px; }
 
   .btn-solid, .btn-outline, .btn-violet { padding: 12px 24px; font-size: 15px; }
 
