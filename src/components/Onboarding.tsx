@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import LocationPicker from "@/components/LocationPicker";
 import type { Shop } from "@/lib/types";
 
 /* First-login setup: shown instead of the dashboard until the shop has a
@@ -16,12 +17,13 @@ export function slugify(name: string): string {
 
 export default function Onboarding({ shop, onComplete }: {
   shop: Shop;
-  onComplete: (info: { name: string; area: string; whatsapp: string; listed: boolean }) => Promise<void>;
+  onComplete: (info: { name: string; area: string; whatsapp: string; listed: boolean; lat: number | null; lng: number | null }) => Promise<void>;
 }) {
   const [name, setName] = useState(shop.name);
   const [area, setArea] = useState(shop.area);
   const [whatsapp, setWhatsapp] = useState(shop.whatsapp);
   const [listed, setListed] = useState(shop.listed);
+  const [pin, setPin] = useState<{ lat: number | null; lng: number | null }>({ lat: shop.lat, lng: shop.lng });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -34,7 +36,7 @@ export default function Onboarding({ shop, onComplete }: {
     setBusy(true);
     setError("");
     try {
-      await onComplete({ name: name.trim(), area: area.trim(), whatsapp: whatsapp.trim(), listed });
+      await onComplete({ name: name.trim(), area: area.trim(), whatsapp: whatsapp.trim(), listed, lat: pin.lat, lng: pin.lng });
     } catch (e: any) {
       setError(e?.message || "Could not save. Please try again.");
       setBusy(false);
@@ -69,6 +71,12 @@ export default function Onboarding({ shop, onComplete }: {
               Orders arrive here. You can add or change it later in Settings.
             </span>
           </label>
+          <div className="field">Pin your shop on the map
+            <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--mut)", margin: "2px 0 8px", display: "block" }}>
+              Optional — helps shoppers find you. Tap the map or use your location.
+            </span>
+            <LocationPicker lat={pin.lat} lng={pin.lng} onChange={(lat, lng) => setPin({ lat, lng })} />
+          </div>
 
           {shop.id && slug.length >= 3 && (
             <div style={{ background: "var(--sage)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "11px 13px", fontSize: 12.5, color: "var(--forest-deep)", lineHeight: 1.7 }}>

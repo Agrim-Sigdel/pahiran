@@ -8,6 +8,8 @@ export interface Shop {
   area: string;
   whatsapp: string; // digits for wa.me links; "" = no order button
   listed: boolean; // opt-in: show on the landing page directory
+  lat: number | null; // OSM map pin; null = not placed yet
+  lng: number | null;
 }
 
 export interface Garment {
@@ -55,6 +57,8 @@ export interface ShopRow {
   area: string | null;
   whatsapp: string | null;
   listed: boolean | null;
+  lat: number | null;
+  lng: number | null;
 }
 
 export interface GarmentRow {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import ShopsMap, { type MapShop } from "@/components/ShopsMap";
 
 /* Landing — vendor-facing marketing page. Shoppers normally arrive at a
    shop's own storefront (/s/…) or kiosk (/k/…) via link or hanger QR.
@@ -14,7 +15,7 @@ const STEPS: [string, string, string][] = [
   ["4", "leads reach you", "Size and contact arrive in your dashboard."],
 ];
 
-interface ListedShop { slug: string; name: string; area: string | null }
+interface ListedShop { slug: string; name: string; area: string | null; lat: number | null; lng: number | null }
 
 async function getListedShops(): Promise<ListedShop[]> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -22,14 +23,20 @@ async function getListedShops(): Promise<ListedShop[]> {
   if (!url || !key) return [];
   try {
     const sb = createClient(url, key, { auth: { persistSession: false } });
-    const { data } = await sb
+    const query = (cols: string) => sb
       .from("shops")
-      .select("slug, name, area")
+      .select(cols)
       .eq("listed", true)
       .neq("name", "")
       .order("created_at", { ascending: true })
       .limit(24);
-    return (data as ListedShop[]) ?? [];
+    let { data } = await query("slug, name, area, lat, lng");
+    if (!data) {
+      // lat/lng columns missing (20260715_shop_location.sql not applied) —
+      // keep the directory alive without the map.
+      ({ data } = await query("slug, name, area"));
+    }
+    return (data as unknown as ListedShop[]) ?? [];
   } catch {
     return [];
   }
@@ -37,6 +44,7 @@ async function getListedShops(): Promise<ListedShop[]> {
 
 export default async function Home() {
   const shops = await getListedShops();
+  const pinned = shops.filter((s): s is ListedShop & MapShop => s.lat != null && s.lng != null);
   return (
     <main style={{ minHeight: "100vh", background: "var(--paper)" }}>
       {/* nav */}
@@ -93,6 +101,7 @@ export default async function Home() {
           <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(24px, 3.6vw, 32px)", color: "var(--ink)", textAlign: "center", margin: "0 0 30px" }}>
             browse shops
           </h2>
+          <ShopsMap shops={pinned} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14, maxWidth: 1040, margin: "0 auto" }}>
             {shops.map((s) => (
               <div key={s.slug} style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "22px 20px" }}>

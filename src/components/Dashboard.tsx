@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { CATEGORIES, SIZES, npr } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
 import { OverviewTab, LeadsTab, garmentTryCounts } from "@/components/Analytics";
+import LocationPicker from "@/components/LocationPicker";
 import type { Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 type Tab = "overview" | "leads" | "catalog" | "settings";
@@ -231,10 +232,12 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
   const [area, setArea] = useState(shop.area);
   const [whatsapp, setWhatsapp] = useState(shop.whatsapp);
   const [listed, setListed] = useState(shop.listed);
+  const [pin, setPin] = useState<{ lat: number | null; lng: number | null }>({ lat: shop.lat, lng: shop.lng });
   const [saved, setSaved] = useState(false);
-  useEffect(() => { setName(shop.name); setArea(shop.area); setWhatsapp(shop.whatsapp); setListed(shop.listed); }, [shop]);
+  useEffect(() => { setName(shop.name); setArea(shop.area); setWhatsapp(shop.whatsapp); setListed(shop.listed); setPin({ lat: shop.lat, lng: shop.lng }); }, [shop]);
 
-  const dirty = name !== shop.name || area !== shop.area || whatsapp !== shop.whatsapp || listed !== shop.listed;
+  const dirty = name !== shop.name || area !== shop.area || whatsapp !== shop.whatsapp || listed !== shop.listed
+    || pin.lat !== shop.lat || pin.lng !== shop.lng;
 
   return (
     <div className="panel">
@@ -246,6 +249,12 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
         <label className="field">Area / city
           <input value={area} placeholder="e.g. New Road, Kathmandu" onChange={(e) => { setArea(e.target.value); setSaved(false); }} />
         </label>
+        <div className="field">Shop location on the map
+          <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--mut)", margin: "2px 0 8px", display: "block" }}>
+            Shoppers see this pin on the peeq map and your storefront. Tap the map or drag the dot.
+          </span>
+          <LocationPicker lat={pin.lat} lng={pin.lng} onChange={(lat, lng) => { setPin({ lat, lng }); setSaved(false); }} />
+        </div>
         <label className="field">WhatsApp number (orders)
           <input value={whatsapp} placeholder="e.g. 9779841000000" inputMode="tel"
             onChange={(e) => { setWhatsapp(e.target.value.replace(/[^0-9+ ]/g, "")); setSaved(false); }} />
@@ -271,7 +280,7 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
           </span>
         </label>
         <button className="ph-btn btn-solid" disabled={!dirty}
-          onClick={() => { updateShop({ ...shop, name, area, whatsapp, listed }); setSaved(true); }}
+          onClick={() => { updateShop({ ...shop, name, area, whatsapp, listed, lat: pin.lat, lng: pin.lng }); setSaved(true); }}
           style={{ alignSelf: "flex-start", marginTop: 6, opacity: dirty ? 1 : 0.55 }}>
           {saved && !dirty ? "saved ✓" : "save changes"}
         </button>

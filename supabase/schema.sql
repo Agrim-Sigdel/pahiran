@@ -10,6 +10,8 @@ create table shops (
   area text,
   whatsapp text,                      -- order-link number shown on storefront/kiosk
   listed boolean not null default false, -- opt-in: show on the landing page directory
+  lat double precision,               -- OSM map pin (null = not placed yet)
+  lng double precision,
   created_at timestamptz not null default now()
 );
 

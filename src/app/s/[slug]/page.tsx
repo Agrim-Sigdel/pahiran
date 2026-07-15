@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getShopBySlug, loadCatalog } from "@/lib/storage";
 import { npr, waLink } from "@/lib/constants";
+import { osmViewUrl } from "@/lib/osm";
 import type { Garment, Shop } from "@/lib/types";
 
 /* Public storefront — the shop's full homepage: announce bar, hero,
@@ -184,6 +185,12 @@ export default function StorefrontPage() {
               {shop.name || "The shop"}
             </h4>
             {shop.area && <p style={{ fontSize: 13, color: "rgba(250,246,240,.65)", lineHeight: 1.8, margin: 0 }}>{shop.area}</p>}
+            {shop.lat != null && shop.lng != null && (
+              <a href={osmViewUrl(shop.lat, shop.lng)} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 13, color: "rgba(250,246,240,.65)", lineHeight: 1.8, display: "inline-block", textUnderlineOffset: 3 }}>
+                find us on the map ↗
+              </a>
+            )}
           </div>
           <div>
             <h4 className="ph-display" style={{ fontSize: 19, marginBottom: 12, color: "var(--paper)", fontWeight: 600 }}>visit</h4>

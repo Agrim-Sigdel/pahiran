@@ -25,7 +25,7 @@ const lsSet = (k: string, v: string) => localStorage.setItem(PREFIX + k, v);
 const lsDel = (k: string) => localStorage.removeItem(PREFIX + k);
 
 function rowToShop(r: ShopRow): Shop {
-  return { id: r.id, slug: r.slug, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "", listed: r.listed ?? false };
+  return { id: r.id, slug: r.slug, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "", listed: r.listed ?? false, lat: r.lat ?? null, lng: r.lng ?? null };
 }
 
 /* ---------- vendor's own shop (auth-scoped in Supabase mode) ---------- */
@@ -34,7 +34,7 @@ export async function loadShop(): Promise<Shop | null> {
   if (!isSupabaseConfigured()) {
     try {
       const s = lsGet("shop:profile");
-      return s ? { id: null, slug: null, whatsapp: "", listed: false, ...JSON.parse(s) } : null;
+      return s ? { id: null, slug: null, whatsapp: "", listed: false, lat: null, lng: null, ...JSON.parse(s) } : null;
     } catch {
       return null;
     }
@@ -65,15 +65,27 @@ export async function saveShop(profile: Shop): Promise<void> {
     try {
       lsSet("shop:profile", JSON.stringify({
         name: profile.name, area: profile.area, whatsapp: profile.whatsapp, listed: profile.listed,
+        lat: profile.lat, lng: profile.lng,
       }));
     } catch {}
     return;
   }
   if (!profile.id) return;
-  await supabase()
-    .from("shops")
-    .update({ name: profile.name, area: profile.area, whatsapp: profile.whatsapp || null, listed: profile.listed })
+  const sb = supabase();
+  const fields = { name: profile.name, area: profile.area, whatsapp: profile.whatsapp || null };
+  const { error } = await sb.from("shops")
+    .update({ ...fields, listed: profile.listed, lat: profile.lat, lng: profile.lng })
     .eq("id", profile.id);
+  if (!error) return;
+  if (error.code === "42703") {
+    // shops.listed / lat / lng don't exist yet (20260714_shop_listed.sql or
+    // 20260715_shop_location.sql not applied) — still persist the core
+    // profile so settings keep working.
+    const { error: retryError } = await sb.from("shops").update(fields).eq("id", profile.id);
+    if (retryError) throw retryError;
+    return;
+  }
+  throw error;
 }
 
 /** Change the shop's public /k/{slug} link. Supabase mode only. */

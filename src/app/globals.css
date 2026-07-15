@@ -8,7 +8,7 @@
 :root {
   --ink: #1A1714;          /* text, primary buttons — warm black, never #000 */
   --paper: #FAF6F0;        /* default background — flatters skin in photos */
-  --violet: #6D5BFF;       /* interactive only: links, scan moments, active states */
+  --violet: #00372b;       /* interactive only: links, scan moments, active states */
   --butter: #F5DD90;       /* highlights, badges, empty states — small doses */
   --stone: #8A8378;        /* secondary text, captions, prices */
   --card: #FFFFFF;

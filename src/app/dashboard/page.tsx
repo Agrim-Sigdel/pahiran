@@ -16,7 +16,7 @@ import type { Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [shop, setShop] = useState<Shop>({ id: null, slug: null, name: "", area: "", whatsapp: "", listed: false });
+  const [shop, setShop] = useState<Shop>({ id: null, slug: null, name: "", area: "", whatsapp: "", listed: false, lat: null, lng: null });
   const [catalog, setCatalog] = useState<Garment[]>([]);
   const [events, setEvents] = useState<TryOnEvent[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -94,11 +94,17 @@ export default function DashboardPage() {
     try { await setGarmentStock(garment, inStock); } catch {}
   };
 
-  const updateShop = useCallback((s: Shop) => { setShop(s); saveShop(s); }, []);
+  const updateShop = useCallback((s: Shop) => {
+    setShop(s);
+    saveShop(s).catch((e: any) => {
+      reportError("dashboard", "save shop failed: " + (e?.message || e), { shopId: s.id });
+      alert("Could not save shop settings: " + (e?.message || "please try again."));
+    });
+  }, []);
 
   /* First login: save the profile, then point /k and /s links at a slug
      built from the shop name (falling back to name-2 … if taken). */
-  const completeOnboarding = async (info: { name: string; area: string; whatsapp: string; listed: boolean }) => {
+  const completeOnboarding = async (info: { name: string; area: string; whatsapp: string; listed: boolean; lat: number | null; lng: number | null }) => {
     let next: Shop = { ...shop, ...info };
     await saveShop(next);
     if (next.id) {
