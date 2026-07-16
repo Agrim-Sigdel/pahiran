@@ -16,11 +16,14 @@ export function getKioskSessionId(): string | null {
 
 /* Client → our own /api/tryon proxy. The fal key never reaches the browser.
    shopId/garmentId ride along so the server can cache + log analytics. */
+export type TryOnFinish = "quick" | "studio";
+
 export async function runTryOn(
   personDataUrl: string,
   garmentImage: string,
   category: string,
-  ids?: { shopId?: string | null; garmentId?: string | null }
+  ids?: { shopId?: string | null; garmentId?: string | null },
+  finish: TryOnFinish = "quick"
 ): Promise<string> {
   const res = await fetch("/api/tryon", {
     method: "POST",
@@ -29,6 +32,7 @@ export async function runTryOn(
       personImage: personDataUrl,
       garmentImage,
       category,
+      finish,
       shopId: ids?.shopId || null,
       garmentId: ids?.garmentId || null,
       sessionId: getKioskSessionId(),

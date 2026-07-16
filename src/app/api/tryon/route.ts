@@ -16,6 +16,15 @@ import { overLimit, clientIp } from "@/lib/ratelimit";
      every try-on lands in tryon_events for analytics; in-memory otherwise. */
 
 const FAL_ENDPOINT = "https://fal.run/fal-ai/fashn/tryon/v1.6";
+const OPENAI_ENDPOINT = "https://api.openai.com/v1/images/edits";
+
+/* Two shopper-facing finishes (model names are never disclosed to the UI):
+   - "quick"  → fal/FASHN v1.6 — dedicated try-on, seconds.
+   - "studio" → OpenAI gpt-image-2 image edit — slower, finer detail.
+   Studio silently falls back to quick when no OpenAI key is configured. */
+type Finish = "quick" | "studio";
+
+const openaiKey = () => process.env.OPENAI_API_KEY || process.env.OPEN_AI_API_KEY;
 
 const IP_LIMIT = 30; // generations per IP per window
 const IP_WINDOW_MS = 10 * 60 * 1000;
@@ -90,6 +99,65 @@ async function logEvent(
     .insert({ shop_id: shopId, garment_id: garmentId, cached, session_id: sessionId });
 }
 
+/** Studio finish: gpt-image-2 image edit with try-on guardrails. Returns a
+    data URL; the caller uploads it to storage in Supabase mode. */
+async function runStudio(personImage: string, garmentImage: string, category: string): Promise<string> {
+  const toFile = async (src: string, name: string): Promise<File> => {
+    if (src.startsWith("data:")) {
+      const [head, b64] = src.split(",");
+      return new File([Buffer.from(b64, "base64")], name, { type: head.match(/data:(.*?);/)?.[1] || "image/jpeg" });
+    }
+    const r = await fetch(src);
+    if (!r.ok) throw new Error("garment image fetch failed (" + r.status + ")");
+    return new File([await r.arrayBuffer()], name, { type: r.headers.get("content-type") || "image/jpeg" });
+  };
+  const form = new FormData();
+  form.append("model", "gpt-image-2");
+  form.append("size", "1024x1536");
+  form.append("quality", "medium");
+  form.append(
+    "prompt",
+    `Virtual try-on. Take off the ${category || "clothing"} the person in the first image is currently wearing ` +
+      `and dress them in the exact garment from the second image instead — the old garment must be fully gone, ` +
+      `not visible underneath or through the new one.
+
+Guardrails:
+- Same person: identical face, hair, skin tone, body shape, pose, camera angle and background as the first image.
+- Exact outfit: the garment's color, pattern, neckline, sleeves and details must match the second image precisely — do not redesign it.
+- No glitches: no warped or extra limbs, hands and fingers intact, no floating or melted fabric, no double garments, no added people, text or watermarks.
+- Result must look like a real photograph of this person wearing this garment, nothing else changed.`
+  );
+  form.append("image[]", await toFile(personImage, "person.jpg"));
+  form.append("image[]", await toFile(garmentImage, "garment.jpg"));
+  const res = await fetch(OPENAI_ENDPOINT, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + openaiKey() },
+    body: form,
+  });
+  if (!res.ok) throw new Error("studio provider error " + res.status + ": " + (await res.text()).slice(0, 300));
+  const b64 = (await res.json())?.data?.[0]?.b64_json;
+  if (!b64) throw new Error("studio provider returned no image");
+  return "data:image/png;base64," + b64;
+}
+
+/** Persist a studio data-URL result to Supabase Storage so the cache holds a
+    small public URL instead of megabytes of base64. Falls back to the data
+    URL itself (memory-cache only) if storage is unavailable. */
+async function persistStudioResult(sb: SupabaseClient | null, key: string, dataUrl: string): Promise<{ url: string; cacheable: boolean }> {
+  if (!sb) return { url: dataUrl, cacheable: true }; // memCache can hold data URLs
+  try {
+    const b64 = dataUrl.split(",")[1];
+    const path = "tryon-results/" + key + ".png";
+    const { error } = await sb.storage
+      .from("garments")
+      .upload(path, Buffer.from(b64, "base64"), { contentType: "image/png", upsert: true });
+    if (error) throw error;
+    return { url: sb.storage.from("garments").getPublicUrl(path).data.publicUrl, cacheable: true };
+  } catch {
+    return { url: dataUrl, cacheable: false }; // serve it, just don't cache 2MB rows
+  }
+}
+
 export async function POST(req: Request): Promise<Response> {
   if (!process.env.FAL_KEY) {
     return Response.json(
@@ -108,6 +176,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const { personImage, category } = body || {};
+  const finish: Finish = body?.finish === "studio" && openaiKey() ? "studio" : "quick";
   const garmentId: string | null = typeof body?.garmentId === "string" ? body.garmentId : null;
   const sessionId: string | null =
     typeof body?.sessionId === "string" ? body.sessionId.slice(0, 64) : null;
@@ -151,7 +220,8 @@ export async function POST(req: Request): Promise<Response> {
 
   const key = crypto
     .createHash("sha256")
-    .update(personImage + "|" + garmentImage + "|" + (category || ""))
+    // studio results are cached separately; quick keys stay unchanged
+    .update(personImage + "|" + garmentImage + "|" + (category || "") + (finish === "studio" ? "|studio" : ""))
     .digest("hex");
 
   // Cache hits are free: no fal spend, so no quota consumed.
@@ -175,6 +245,19 @@ export async function POST(req: Request): Promise<Response> {
       { error: "The try-on service is very busy today — please try again tomorrow." },
       { status: 429 }
     );
+  }
+
+  if (finish === "studio") {
+    try {
+      const dataUrl = await runStudio(personImage, garmentImage, category);
+      const { url, cacheable } = await persistStudioResult(sb, key, dataUrl);
+      if (cacheable) await cachePut(sb, key, url, shopId, garmentId);
+      await logEvent(sb, shopId, garmentId, false, sessionId);
+      return Response.json({ url, cached: false, finish });
+    } catch (e: any) {
+      await logError(sb, "studio try-on failed: " + (e?.message || e), { garmentId, category }, shopId);
+      return Response.json({ error: "Try-on service error" }, { status: 502 });
+    }
   }
 
   let res: globalThis.Response;
@@ -221,5 +304,5 @@ export async function POST(req: Request): Promise<Response> {
 
   await cachePut(sb, key, url, shopId, garmentId);
   await logEvent(sb, shopId, garmentId, false, sessionId);
-  return Response.json({ url, cached: false });
+  return Response.json({ url, cached: false, finish });
 }

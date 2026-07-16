@@ -45,6 +45,12 @@ const en = {
 
   genMessages: ["taking a peeq…", "draping the fabric…", "matching the light…", "stitching the details…", "final touches…"],
   genFooter: "usually 15–30 seconds",
+  genFooterStudio: "the studio takes about a minute — worth it",
+
+  finishQuick: "quick peeq",
+  finishQuickSub: "a look in seconds",
+  finishStudio: "studio peeq",
+  finishStudioSub: "our finest look · ~1 min",
 
   pickAPiece: "pick a piece from the rack below",
   sizes: "sizes:",
@@ -121,6 +127,12 @@ const ne: typeof en = {
 
   genMessages: ["एक झलक हेर्दै…", "कपडा ओढाउँदै…", "उज्यालो मिलाउँदै…", "बुट्टा सिलाउँदै…", "अन्तिम टच…"],
   genFooter: "प्रायः १५–३० सेकेन्ड",
+  genFooterStudio: "स्टुडियो फिनिशलाई एक मिनेट जति लाग्छ — तर लायकको छ",
+
+  finishQuick: "quick peeq",
+  finishQuickSub: "सेकेन्डमै एक झलक",
+  finishStudio: "studio peeq",
+  finishStudioSub: "सबैभन्दा राम्रो लुक · ~१ मिनेट",
 
   pickAPiece: "तलको र्‍याकबाट एउटा लुगा छान्नुहोस्",
   sizes: "साइज:",
