@@ -214,6 +214,8 @@ export default function StorefrontPage() {
         </div>
         <div style={{ textAlign: "center", fontSize: 12.5, color: "rgba(250,246,240,.45)", marginTop: 34 }}>
           powered by <b className="wordmark" style={{ color: "var(--butter)", fontSize: 13 }}>peeq</b> · a little look before you buy
+          {" · "}
+          <Link href="/privacy" style={{ color: "rgba(250,246,240,.55)", textUnderlineOffset: 3 }}>privacy</Link>
         </div>
       </footer>
 

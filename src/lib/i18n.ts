@@ -68,6 +68,23 @@ const en = {
   dragToPosition: "drag the garment to position · preview mode",
   retakePhoto: "retake my photo",
 
+  findMySize: "find my size",
+  mySizeTitle: "find your size",
+  mySizePrivacy: "For sizing only. Stays on this device — never sent to the shop.",
+  heightCmLabel: "height (cm)",
+  weightKgLabel: "weight (kg) — optional",
+  forWhomLabel: "who is it for? (optional)",
+  genderWomen: "women",
+  genderMen: "men",
+  showMySize: "show my size",
+  skipSize: "skip",
+  forgetMySize: "forget my size",
+  yourSize: "your size",
+  sizeRoughNote: "rough — add weight to sharpen it",
+  sizeNearestNote: (s: string) => `closest in stock: ${s}`,
+  sizeFree: "free size · one size fits most",
+  recommendedForYou: "recommended for you",
+
   tellShop: "tell the shop",
   leadNote: (g: string, p: string) => `${g} · ${p}. Leave your name and number so the shop can reach you.`,
   yourName: "your name",
@@ -90,6 +107,7 @@ const en = {
   share: "share",
   del: "delete",
   confirmDeleteAll: "Delete all saved looks and your remembered photo from this device?",
+  privacyLink: "how we handle your photo",
 };
 
 const ne: typeof en = {
@@ -150,6 +168,23 @@ const ne: typeof en = {
   dragToPosition: "लुगा तानेर मिलाउनुहोस् · प्रिभ्यु मोड",
   retakePhoto: "फेरि फोटो खिच्नुहोस्",
 
+  findMySize: "मेरो साइज पत्ता लगाउनुहोस्",
+  mySizeTitle: "आफ्नो साइज पत्ता लगाउनुहोस्",
+  mySizePrivacy: "साइजका लागि मात्र। यही डिभाइसमा रहन्छ — पसललाई कहिल्यै पठाइँदैन।",
+  heightCmLabel: "उचाइ (से.मि.)",
+  weightKgLabel: "तौल (के.जी.) — वैकल्पिक",
+  forWhomLabel: "कसका लागि? (वैकल्पिक)",
+  genderWomen: "महिला",
+  genderMen: "पुरुष",
+  showMySize: "मेरो साइज देखाउनुहोस्",
+  skipSize: "छाड्नुहोस्",
+  forgetMySize: "मेरो साइज मेटाउनुहोस्",
+  yourSize: "तपाईंको साइज",
+  sizeRoughNote: "अन्दाजी — राम्रो नतिजाका लागि तौल थप्नुहोस्",
+  sizeNearestNote: (s: string) => `स्टकमा नजिकको: ${s}`,
+  sizeFree: "फ्री साइज · सबैलाई मिल्ने",
+  recommendedForYou: "तपाईंका लागि सिफारिस",
+
   tellShop: "पसललाई भन्नुहोस्",
   leadNote: (g: string, p: string) => `${g} · ${p}। पसलले सम्पर्क गर्न सकोस् भनेर आफ्नो नाम र नम्बर लेख्नुहोस्।`,
   yourName: "तपाईंको नाम",
@@ -172,6 +207,7 @@ const ne: typeof en = {
   share: "सेयर",
   del: "मेटाउनुहोस्",
   confirmDeleteAll: "यस डिभाइसबाट सबै सेभ गरिएका लुक र सम्झिएको फोटो मेटाउने?",
+  privacyLink: "तपाईंको फोटो कसरी प्रयोग हुन्छ",
 };
 
 export type Strings = typeof en;

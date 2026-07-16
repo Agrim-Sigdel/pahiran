@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { mapCategory } from "@/lib/constants";
 import { overLimit, clientIp } from "@/lib/ratelimit";
+import { consumeTryon, refundTryon } from "@/lib/plan";
+import { badOrigin } from "@/lib/origin";
 
 /* Server-side proxy for fal.ai FASHN try-on.
    - FAL_KEY stays on the server (set it in .env.local).
@@ -45,16 +47,57 @@ function serviceClient(): SupabaseClient | null {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+const RESULTS_BUCKET = "results"; // private bucket — signed-URL access only
+const SIGNED_TTL_SEC = 3600; // signed result URLs live 1h — covers a shopper session
+
+/** Fresh signed URL for a stored render, or null if signing fails. */
+async function signResult(sb: SupabaseClient, path: string): Promise<string | null> {
+  const { data } = await sb.storage.from(RESULTS_BUCKET).createSignedUrl(path, SIGNED_TTL_SEC);
+  return data?.signedUrl ?? null;
+}
+
+/** Cache read → a servable URL. Private renders (result_path) are re-signed on
+    every read; legacy rows fall back to their stored result_url. */
 async function cacheGet(sb: SupabaseClient | null, key: string): Promise<string | null> {
   if (!sb) return memCache.get(key) ?? null;
   const { data } = await sb
     .from("tryon_results")
-    .select("result_url")
+    .select("result_url, result_path")
     .eq("cache_key", key)
     .maybeSingle();
-  return data?.result_url ?? null;
+  if (!data) return null;
+  if (data.result_path) {
+    const signed = await signResult(sb, data.result_path);
+    if (signed) return signed;
+  }
+  return data.result_url || null;
 }
 
+/** Upload render bytes to the private bucket, cache the path, return a signed
+    URL. Returns null on any storage failure so the caller can fall back. */
+async function storeResult(
+  sb: SupabaseClient,
+  key: string,
+  bytes: Buffer,
+  contentType: string,
+  shopId: string | null,
+  garmentId: string | null
+): Promise<string | null> {
+  const ext = contentType.includes("png") ? "png" : "jpg";
+  const path = key + "." + ext;
+  const { error } = await sb.storage
+    .from(RESULTS_BUCKET)
+    .upload(path, bytes, { contentType, upsert: true });
+  if (error) return null;
+  await sb.from("tryon_results").upsert(
+    { cache_key: key, result_path: path, result_url: "", shop_id: shopId, garment_id: garmentId },
+    { onConflict: "cache_key" }
+  );
+  return signResult(sb, path);
+}
+
+/** Legacy/fallback cache write for a plain URL (memory cache in local mode,
+    or a provider URL when private storage was unavailable). */
 async function cachePut(
   sb: SupabaseClient | null,
   key: string,
@@ -70,6 +113,29 @@ async function cachePut(
     { cache_key: key, result_url: url, shop_id: shopId, garment_id: garmentId },
     { onConflict: "cache_key" }
   );
+}
+
+/** Best-effort abuse check on the shopper's own photo before we spend on it.
+    Only clearly disallowed uploads are blocked; a normal clothed photo never
+    trips these. No OpenAI key → skipped (fail open). */
+async function moderatePerson(personImage: string): Promise<boolean> {
+  const k = openaiKey();
+  if (!k) return true;
+  try {
+    const res = await fetch("https://api.openai.com/v1/moderations", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + k, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "omni-moderation-latest",
+        input: [{ type: "image_url", image_url: { url: personImage } }],
+      }),
+    });
+    if (!res.ok) return true; // moderation outage shouldn't block real shoppers
+    const cats = (await res.json())?.results?.[0]?.categories || {};
+    return !(cats["sexual"] || cats["sexual/minors"]);
+  } catch {
+    return true;
+  }
 }
 
 async function logError(
@@ -140,25 +206,10 @@ Guardrails:
   return "data:image/png;base64," + b64;
 }
 
-/** Persist a studio data-URL result to Supabase Storage so the cache holds a
-    small public URL instead of megabytes of base64. Falls back to the data
-    URL itself (memory-cache only) if storage is unavailable. */
-async function persistStudioResult(sb: SupabaseClient | null, key: string, dataUrl: string): Promise<{ url: string; cacheable: boolean }> {
-  if (!sb) return { url: dataUrl, cacheable: true }; // memCache can hold data URLs
-  try {
-    const b64 = dataUrl.split(",")[1];
-    const path = "tryon-results/" + key + ".png";
-    const { error } = await sb.storage
-      .from("garments")
-      .upload(path, Buffer.from(b64, "base64"), { contentType: "image/png", upsert: true });
-    if (error) throw error;
-    return { url: sb.storage.from("garments").getPublicUrl(path).data.publicUrl, cacheable: true };
-  } catch {
-    return { url: dataUrl, cacheable: false }; // serve it, just don't cache 2MB rows
-  }
-}
-
 export async function POST(req: Request): Promise<Response> {
+  if (badOrigin(req)) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
   if (!process.env.FAL_KEY) {
     return Response.json(
       { error: "Server missing FAL_KEY — add it to .env.local" },
@@ -176,7 +227,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const { personImage, category } = body || {};
-  const finish: Finish = body?.finish === "studio" && openaiKey() ? "studio" : "quick";
+  let finish: Finish = body?.finish === "studio" && openaiKey() ? "studio" : "quick";
   const garmentId: string | null = typeof body?.garmentId === "string" ? body.garmentId : null;
   const sessionId: string | null =
     typeof body?.sessionId === "string" ? body.sessionId.slice(0, 64) : null;
@@ -218,17 +269,27 @@ export async function POST(req: Request): Promise<Response> {
     }
   }
 
-  const key = crypto
-    .createHash("sha256")
-    // studio results are cached separately; quick keys stay unchanged
-    .update(personImage + "|" + garmentImage + "|" + (category || "") + (finish === "studio" ? "|studio" : ""))
-    .digest("hex");
+  // studio results are cached separately; quick keys stay unchanged
+  const cacheKey = (f: Finish) =>
+    crypto
+      .createHash("sha256")
+      .update(personImage + "|" + garmentImage + "|" + (category || "") + (f === "studio" ? "|studio" : ""))
+      .digest("hex");
+  let key = cacheKey(finish);
 
-  // Cache hits are free: no fal spend, so no quota consumed.
+  // Cache hits are free: no spend, so no quota consumed.
   const cachedUrl = await cacheGet(sb, key);
   if (cachedUrl) {
     await logEvent(sb, shopId, garmentId, true, sessionId);
     return Response.json({ url: cachedUrl, cached: true });
+  }
+
+  // Abuse check on the shopper's own photo before we spend anything on it.
+  if (!(await moderatePerson(personImage))) {
+    return Response.json(
+      { error: "This photo can't be used for try-on. Please use a clear, fully-clothed photo of yourself." },
+      { status: 422 }
+    );
   }
 
   const ip = clientIp(req);
@@ -239,7 +300,8 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
   const day = new Date().toISOString().slice(0, 10);
-  if (await overLimit(sb, "tryon:global:" + day, dailyCap(), DAY_MS)) {
+  // Platform-wide money circuit-breaker: fail closed so a DB blip can't leak spend.
+  if (await overLimit(sb, "tryon:global:" + day, dailyCap(), DAY_MS, { failClosed: true })) {
     await logError(sb, "global daily try-on cap reached", { day, cap: dailyCap() }, shopId);
     return Response.json(
       { error: "The try-on service is very busy today — please try again tomorrow." },
@@ -247,14 +309,54 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
+  /* Per-shop plan metering (Supabase mode only — local mode has no plans).
+     Reserve one generation now; refund below if it fails. If the shop's studio
+     allowance is spent but quick remains, downgrade to quick instead of failing. */
+  if (sb && shopId) {
+    let res = await consumeTryon(sb, shopId, finish === "studio");
+    if (!res.allowed && res.reason === "studio_limit") {
+      finish = "quick";
+      key = cacheKey(finish);
+      const altCached = await cacheGet(sb, key); // a quick result may already be cached — free
+      if (altCached) {
+        await logEvent(sb, shopId, garmentId, true, sessionId);
+        return Response.json({ url: altCached, cached: true, finish });
+      }
+      res = await consumeTryon(sb, shopId, false);
+    }
+    if (!res.allowed) {
+      if (res.reason === "error") {
+        await logError(sb, "plan meter unavailable", { shopId }, shopId);
+        return Response.json(
+          { error: "Try-on is briefly unavailable — please try again." },
+          { status: 503 }
+        );
+      }
+      return Response.json(
+        {
+          error: "This shop has used up its try-ons for now — ask the staff, or check back soon.",
+          reason: res.reason,
+        },
+        { status: 402 }
+      );
+    }
+  }
+
   if (finish === "studio") {
     try {
       const dataUrl = await runStudio(personImage, garmentImage, category);
-      const { url, cacheable } = await persistStudioResult(sb, key, dataUrl);
-      if (cacheable) await cachePut(sb, key, url, shopId, garmentId);
+      if (sb) {
+        const bytes = Buffer.from(dataUrl.split(",")[1], "base64");
+        const signed = await storeResult(sb, key, bytes, "image/png", shopId, garmentId);
+        await logEvent(sb, shopId, garmentId, false, sessionId);
+        // storage failed → serve the render once, uncached, still private (data URL)
+        return Response.json({ url: signed || dataUrl, cached: false, finish });
+      }
+      memCache.set(key, dataUrl); // local mode
       await logEvent(sb, shopId, garmentId, false, sessionId);
-      return Response.json({ url, cached: false, finish });
+      return Response.json({ url: dataUrl, cached: false, finish });
     } catch (e: any) {
+      if (sb && shopId) await refundTryon(sb, shopId, true);
       await logError(sb, "studio try-on failed: " + (e?.message || e), { garmentId, category }, shopId);
       return Response.json({ error: "Try-on service error" }, { status: 502 });
     }
@@ -277,11 +379,13 @@ export async function POST(req: Request): Promise<Response> {
       }),
     });
   } catch (e: any) {
+    if (sb && shopId) await refundTryon(sb, shopId, false);
     await logError(sb, "fal.ai unreachable: " + (e?.message || e), { garmentId, category }, shopId);
     return Response.json({ error: "Try-on service unreachable" }, { status: 502 });
   }
 
   if (!res.ok) {
+    if (sb && shopId) await refundTryon(sb, shopId, false);
     const txt = await res.text().catch(() => "");
     await logError(
       sb,
@@ -298,8 +402,27 @@ export async function POST(req: Request): Promise<Response> {
   const data = await res.json();
   const url: string | undefined = data?.images?.[0]?.url;
   if (!url) {
+    if (sb && shopId) await refundTryon(sb, shopId, false);
     await logError(sb, "fal.ai returned no image", { garmentId, category }, shopId);
     return Response.json({ error: "Try-on service returned no image" }, { status: 502 });
+  }
+
+  // Move the render off the provider's public URL into our private bucket.
+  if (sb) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error("result fetch " + r.status);
+      const ct = r.headers.get("content-type") || "image/jpeg";
+      const bytes = Buffer.from(await r.arrayBuffer());
+      const signed = await storeResult(sb, key, bytes, ct, shopId, garmentId);
+      if (signed) {
+        await logEvent(sb, shopId, garmentId, false, sessionId);
+        return Response.json({ url: signed, cached: false, finish });
+      }
+    } catch (e: any) {
+      await logError(sb, "result storage failed: " + (e?.message || e), { garmentId }, shopId);
+    }
+    // storage unavailable → cache the provider URL so the render still works
   }
 
   await cachePut(sb, key, url, shopId, garmentId);

@@ -14,6 +14,8 @@ import {
   type ErrorLog,
   type GarmentRow,
   type ShopRow,
+  type PlanInfo,
+  type Subscription,
   rowToGarment,
 } from "@/lib/types";
 
@@ -365,6 +367,52 @@ export async function setLeadHandled(leadId: string, handled: boolean): Promise<
     return;
   }
   await supabase().from("leads").update({ handled }).eq("id", leadId);
+}
+
+/* ---------- plan & usage (Supabase mode only) ---------- */
+
+function rowToPlan(r: any): PlanInfo {
+  return {
+    id: r.id,
+    name: r.name,
+    priceNpr: r.price_npr,
+    tryonLimit: r.tryon_limit,
+    studioLimit: r.studio_limit,
+    maxGarments: r.max_garments ?? null,
+    listedAllowed: r.listed_allowed ?? true,
+    sort: r.sort ?? 0,
+  };
+}
+
+/** All plans for the upgrade comparison, cheapest first. */
+export async function getPlans(): Promise<PlanInfo[]> {
+  if (!isSupabaseConfigured()) return [];
+  const { data } = await supabase().from("plans").select("*").order("sort", { ascending: true });
+  return ((data as any[]) || []).map(rowToPlan);
+}
+
+/** The shop's current plan + this period's usage. Null in local mode. */
+export async function getSubscription(shopId: string | null): Promise<Subscription | null> {
+  if (!isSupabaseConfigured() || !shopId) return null;
+  const { data } = await supabase()
+    .from("shop_subscriptions")
+    .select(
+      "plan_id, status, period_end, tryons_used, studio_used, plans(id, name, price_npr, tryon_limit, studio_limit, max_garments, listed_allowed, sort)"
+    )
+    .eq("shop_id", shopId)
+    .maybeSingle();
+  if (!data) return null;
+  const d = data as any;
+  const plan = Array.isArray(d.plans) ? d.plans[0] : d.plans;
+  if (!plan) return null;
+  return {
+    planId: d.plan_id,
+    status: d.status,
+    periodEnd: d.period_end,
+    tryonsUsed: d.tryons_used ?? 0,
+    studioUsed: d.studio_used ?? 0,
+    plan: rowToPlan(plan),
+  };
 }
 
 /* ---------- error logs (vendor debugging view) ---------- */

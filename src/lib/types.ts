@@ -48,6 +48,26 @@ export interface ErrorLog {
   createdAt: string;
 }
 
+export interface PlanInfo {
+  id: string;
+  name: string;
+  priceNpr: number;
+  tryonLimit: number;
+  studioLimit: number;
+  maxGarments: number | null;
+  listedAllowed: boolean;
+  sort: number;
+}
+
+export interface Subscription {
+  planId: string;
+  status: string; // active | past_due | canceled
+  periodEnd: string; // ISO
+  tryonsUsed: number;
+  studioUsed: number;
+  plan: PlanInfo;
+}
+
 /* Raw Supabase rows */
 export interface ShopRow {
   id: string;

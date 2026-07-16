@@ -206,6 +206,9 @@ export default async function Home() {
       {/* footer */}
       <footer style={{ background: "var(--ink)", color: "rgba(250,246,240,.6)", padding: "30px 20px", textAlign: "center" }}>
         <div className="wordmark" style={{ fontSize: 26, color: "var(--paper)" }}>p<span className="ee">ee</span>q</div>
+        <div style={{ marginTop: 12 }}>
+          <Link href="/privacy" style={{ fontSize: 13, color: "rgba(250,246,240,.6)", textUnderlineOffset: 3 }}>privacy</Link>
+        </div>
       </footer>
     </main>
   );

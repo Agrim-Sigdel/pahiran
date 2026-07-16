@@ -6,9 +6,10 @@ import { CATEGORIES, SIZES, npr } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
 import { OverviewTab, LeadsTab, garmentTryCounts } from "@/components/Analytics";
 import LocationPicker from "@/components/LocationPicker";
+import PlanTab from "@/components/PlanTab";
 import type { Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
-type Tab = "overview" | "leads" | "catalog" | "settings";
+type Tab = "overview" | "leads" | "catalog" | "settings" | "plan";
 
 interface DashboardProps {
   shop: Shop;
@@ -48,6 +49,7 @@ export default function Dashboard({
     { key: "overview", label: "Overview" },
     { key: "leads", label: "Leads", badge: openLeads || undefined },
     { key: "catalog", label: "Catalog" },
+    { key: "plan", label: "Plan" },
     { key: "settings", label: "Settings" },
   ];
 
@@ -186,6 +188,12 @@ export default function Dashboard({
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {tab === "plan" && (
+            <div className="fade-up">
+              <PlanTab shop={shop} />
             </div>
           )}
 

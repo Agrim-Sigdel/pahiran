@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { overLimit, clientIp } from "@/lib/ratelimit";
+import { badOrigin } from "@/lib/origin";
 
 /* Shopper "I'm interested" → vendor leads inbox. Anonymous shoppers can't
    write through RLS, so the server inserts with the service role after
@@ -7,6 +8,9 @@ import { overLimit, clientIp } from "@/lib/ratelimit";
    flood a vendor's inbox. */
 
 export async function POST(req: Request): Promise<Response> {
+  if (badOrigin(req)) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {

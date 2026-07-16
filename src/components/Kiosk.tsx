@@ -11,6 +11,8 @@ import {
   saveLook, listLooks, setLookFavorite, deleteLook, clearAllLooks,
   lookImageURL, shareLook, shareImage, type SavedLook,
 } from "@/lib/looks";
+import { getProfile, saveProfile, forgetProfile, type Profile } from "@/lib/profile";
+import { recommendSize, HEIGHT_MIN, HEIGHT_MAX, WEIGHT_MIN, WEIGHT_MAX, type Gender, type SizeRec } from "@/lib/sizing";
 import { LangContext, STRINGS, useLangState, useT } from "@/lib/i18n";
 import type { Garment, Shop } from "@/lib/types";
 
@@ -291,7 +293,10 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boole
       </div>
 
       <div style={{ maxWidth: 340, textAlign: "left", background: "var(--butter)", borderRadius: 18, padding: "14px 18px", fontSize: 13.5, lineHeight: 1.6, color: "var(--ink)" }}>
-        <b>{t.consentTitle}</b> {t.consentBody}
+        <b>{t.consentTitle}</b> {t.consentBody}{" "}
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "var(--violet)", textUnderlineOffset: 2 }}>
+          {t.privacyLink}
+        </a>
       </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", margin: "16px 0 12px" }}>
@@ -400,6 +405,7 @@ function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCount
               onClick={async () => {
                 if (confirm(t.confirmDeleteAll)) {
                   await clearAllLooks();
+                  forgetProfile();
                   refresh();
                 }
               }}
@@ -455,11 +461,11 @@ function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCount
 }
 
 /* ---------- "I want this" → vendor leads inbox ---------- */
-function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garment; onClose: () => void }) {
+function InterestedModal({ shop, garment, recommended, onClose }: { shop: Shop; garment: Garment; recommended?: string; onClose: () => void }) {
   const t = useT();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [size, setSize] = useState(garment.sizes[0] || "");
+  const [size, setSize] = useState(recommended || garment.sizes[0] || "");
   const [state, setState] = useState<"form" | "sending" | "done" | "error">("form");
   const wa = waLink(
     shop.whatsapp,
@@ -513,18 +519,29 @@ function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garm
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10, textAlign: "left" }}>
               {garment.sizes.length > 0 && (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
-                  {garment.sizes.map((s) => (
-                    <button key={s} className="ph-btn" onClick={() => setSize(s)}
-                      style={{
-                        padding: "8px 16px", fontSize: 13, borderRadius: 999, fontWeight: 600,
-                        background: size === s ? "var(--violet)" : "var(--paper)",
-                        color: size === s ? "#fff" : "var(--stone)",
-                        border: "1px solid " + (size === s ? "var(--violet)" : "var(--line)"),
-                      }}>
-                      {s}
-                    </button>
-                  ))}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
+                  {recommended && garment.sizes.includes(recommended) && (
+                    <div style={{ fontSize: 11.5, color: "var(--violet)", fontWeight: 600 }}>
+                      {t.recommendedForYou}: {recommended}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
+                    {garment.sizes.map((s) => {
+                      const isRec = recommended === s;
+                      return (
+                        <button key={s} className="ph-btn" onClick={() => setSize(s)}
+                          style={{
+                            padding: "8px 16px", fontSize: 13, borderRadius: 999, fontWeight: 600,
+                            background: size === s ? "var(--violet)" : "var(--paper)",
+                            color: size === s ? "#fff" : "var(--stone)",
+                            border: (size === s ? "1px solid var(--violet)"
+                              : isRec ? "1.5px dashed var(--violet)" : "1px solid var(--line)"),
+                          }}>
+                          {s}{isRec ? " ★" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
               <input style={input} placeholder={t.yourName} value={name} maxLength={80}
@@ -554,6 +571,111 @@ function InterestedModal({ shop, garment, onClose }: { shop: Shop; garment: Garm
               </a>
             )}
           </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- "find my size": height/weight → a size hint ----------
+   Never feeds the try-on image (the models take body shape from the photo);
+   it only helps the shopper pick a size and pre-fills the lead form. */
+function SizeBadge({ rec, onEdit }: { rec: SizeRec; onEdit: () => void }) {
+  const t = useT();
+  const note = rec.nearest ? t.sizeNearestNote(rec.size) : rec.confidence === "rough" ? t.sizeRoughNote : "";
+  return (
+    <button className="ph-btn" onClick={onEdit}
+      aria-label={t.findMySize}
+      style={{ display: "flex", alignItems: "center", gap: 6, border: "1px solid var(--violet)", color: "var(--violet)", padding: "7px 14px", fontSize: 13, fontWeight: 600, borderRadius: 999, background: "var(--card)" }}>
+      <span>📏 {rec.free ? t.sizeFree : `${t.yourSize}: ${rec.size}`}</span>
+      {note && <span style={{ color: "var(--stone)", fontWeight: 500, fontSize: 11 }}>· {note}</span>}
+      <span style={{ color: "var(--stone)", fontSize: 11 }}>✎</span>
+    </button>
+  );
+}
+
+function FindMySizeSheet({ initial, onClose, onSaved, onForget }: {
+  initial: Profile | null;
+  onClose: () => void;
+  onSaved: (p: Profile) => void;
+  onForget: () => void;
+}) {
+  const t = useT();
+  const [height, setHeight] = useState(initial?.heightCm ? String(initial.heightCm) : "");
+  const [weight, setWeight] = useState(initial?.weightKg ? String(initial.weightKg) : "");
+  const [gender, setGender] = useState<Gender | undefined>(initial?.gender);
+
+  const h = Number(height);
+  const w = Number(weight);
+  const heightOk = Number.isFinite(h) && h >= HEIGHT_MIN && h <= HEIGHT_MAX;
+  const weightOk = weight.trim() === "" || (Number.isFinite(w) && w >= WEIGHT_MIN && w <= WEIGHT_MAX);
+  const canSave = heightOk && weightOk;
+
+  const save = () => {
+    if (!canSave) return;
+    onSaved(saveProfile({
+      heightCm: Math.round(h),
+      weightKg: weight.trim() !== "" ? Math.round(w) : undefined,
+      gender,
+    }));
+  };
+
+  const input: React.CSSProperties = {
+    width: "100%", padding: "12px 15px", borderRadius: 14, border: "1px solid var(--line)",
+    background: "#fff", color: "var(--ink)", fontSize: 15,
+  };
+  const genderChip = (g: Gender, label: string) => (
+    <button key={g} className="ph-btn" onClick={() => setGender((cur) => (cur === g ? undefined : g))}
+      style={{
+        flex: 1, padding: "9px 0", fontSize: 13, borderRadius: 999, fontWeight: 600,
+        background: gender === g ? "var(--violet)" : "var(--paper)",
+        color: gender === g ? "#fff" : "var(--stone)",
+        border: "1px solid " + (gender === g ? "var(--violet)" : "var(--line)"),
+      }}>
+      {label}
+    </button>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 60, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="peek"
+        style={{ background: "var(--card)", borderRadius: "var(--radius-card)", width: 380, maxWidth: "100%", padding: "26px 24px", textAlign: "center", marginBottom: 8 }}>
+        <div className="ph-display" style={{ fontSize: 24, fontWeight: 600, color: "var(--ink)", marginBottom: 4 }}>📏 {t.mySizeTitle}</div>
+        <p style={{ color: "var(--stone)", fontSize: 12.5, margin: "0 0 16px", lineHeight: 1.5 }}>{t.mySizePrivacy}</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, textAlign: "left" }}>
+          <label style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600 }}>
+            {t.heightCmLabel}
+            <input style={{ ...input, marginTop: 5 }} value={height} inputMode="numeric" maxLength={3}
+              onChange={(e) => setHeight(e.target.value.replace(/\D/g, ""))} placeholder="165" />
+          </label>
+          <label style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600 }}>
+            {t.weightKgLabel}
+            <input style={{ ...input, marginTop: 5 }} value={weight} inputMode="numeric" maxLength={3}
+              onChange={(e) => setWeight(e.target.value.replace(/\D/g, ""))} placeholder="60" />
+          </label>
+          <div style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600 }}>
+            {t.forWhomLabel}
+            <div style={{ display: "flex", gap: 8, marginTop: 5 }}>
+              {genderChip("f", t.genderWomen)}
+              {genderChip("m", t.genderMen)}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+          <button className="ph-btn" onClick={onClose}
+            style={{ flex: 1, border: "1px solid var(--line)", color: "var(--ink)", padding: 13, fontSize: 14, borderRadius: 999, fontWeight: 600 }}>
+            {t.skipSize}
+          </button>
+          <button className="ph-btn" disabled={!canSave} onClick={save}
+            style={{ flex: 2, background: "var(--violet)", color: "#fff", padding: 13, fontSize: 14, borderRadius: 999, fontWeight: 700, fontFamily: "'Baloo 2', cursive", opacity: canSave ? 1 : 0.6 }}>
+            {t.showMySize}
+          </button>
+        </div>
+        {initial && (
+          <button className="ph-btn" onClick={onForget}
+            style={{ color: "var(--stone)", fontSize: 12, marginTop: 12, textDecoration: "underline", textUnderlineOffset: 3 }}>
+            {t.forgetMySize}
+          </button>
         )}
       </div>
     </div>
@@ -592,7 +714,14 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
   const autoStarted = useRef(false);
   const photoAr = useImageAspect(photo); // stage adopts the photo's own ratio — no cropping
   const [finish, setFinish] = useState<TryOnFinish>("quick");
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [showSize, setShowSize] = useState(false);
   const t = useT();
+
+  useEffect(() => { setProfile(getProfile()); }, []);
+  // size hint from the shopper's own measurements — never touches the try-on image
+  const rec: SizeRec | null = selected && profile ? recommendSize(profile, selected) : null;
+  const recSize = rec && !rec.free ? rec.size : undefined;
 
   const startTryOn = useCallback(async (garment: Garment, finishOverride?: TryOnFinish) => {
     const useFinish = finishOverride ?? finish;
@@ -748,6 +877,14 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
                 </span>
               )}
             </span>
+            {selected.sizes.length > 0 && (
+              rec
+                ? <SizeBadge rec={rec} onEdit={() => setShowSize(true)} />
+                : <button className="ph-btn" onClick={() => setShowSize(true)}
+                    style={{ border: "1px dashed var(--violet)", color: "var(--violet)", padding: "8px 16px", fontSize: 13, fontWeight: 600, borderRadius: 999, background: "transparent" }}>
+                    📏 {t.findMySize}
+                  </button>
+            )}
             <button className="ph-btn" onClick={() => setInterested(true)}
               style={{ background: "var(--ink)", color: "var(--paper)", padding: "11px 24px", fontSize: 15, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999 }}>
               {t.iWantThis}
@@ -781,7 +918,16 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
         )}
 
         {interested && selected && (
-          <InterestedModal shop={shop} garment={selected} onClose={() => setInterested(false)} />
+          <InterestedModal shop={shop} garment={selected} recommended={recSize} onClose={() => setInterested(false)} />
+        )}
+
+        {showSize && (
+          <FindMySizeSheet
+            initial={profile}
+            onClose={() => setShowSize(false)}
+            onSaved={(p) => { setProfile(p); setShowSize(false); }}
+            onForget={() => { forgetProfile(); setProfile(null); setShowSize(false); }}
+          />
         )}
 
         {notice && phase === "preview" && (
