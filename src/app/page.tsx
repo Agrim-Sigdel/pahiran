@@ -109,37 +109,25 @@ export default async function Home() {
         </div>
       </nav>
 
-      {/* hero */}
-      <section style={{ maxWidth: 680, margin: "0 auto", padding: "72px 20px 64px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 22 }}>
-        <div className="kicker">a little look before you buy · किन्नु अघि एक झलक</div>
-        <h1 className="ph-display" style={{ fontSize: "clamp(36px, 6vw, 60px)", lineHeight: 1.1, color: "var(--ink)", margin: 0 }}>
-          try it on,<br />without trying it on
-        </h1>
-        <p style={{ color: "var(--stone)", fontSize: 17, maxWidth: 440, lineHeight: 1.65, margin: 0 }}>
-          Shoppers take one photo and see any garment from your rack on their own body.
-        </p>
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
-          <Link href="/login" className="btn-violet">create your shop</Link>
-          <a href="#how" className="btn-outline">how it works</a>
+      {/* hero — the whole promise in one crossfade: same you, new fit */}
+      <section className="hero2">
+        <div className="hero2-copy">
+          <div className="kicker">a little look before you buy · किन्नु अघि एक झलक</div>
+          <h1 className="ph-display" style={{ fontSize: "clamp(42px, 6.5vw, 68px)", lineHeight: 1.05, color: "var(--ink)", margin: 0 }}>
+            try it on,<br />without<br />trying it on
+          </h1>
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center" }}>
+            <Link href="/login" className="btn-violet" style={{ padding: "15px 36px" }}>create your shop</Link>
+            <a href="#how" className="linklike" style={{ fontSize: 15 }}>how it works ↓</a>
+          </div>
         </div>
-        <div style={{ fontSize: 13.5, color: "var(--stone)", fontWeight: 500 }}>
-          free to start · works on any phone · नेपाली र english
-        </div>
-      </section>
-
-      {/* how it works */}
-      <section id="how" className="section-pad" style={{ background: "var(--card)", borderTop: "1px solid var(--line)" }}>
-        <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(24px, 3.6vw, 32px)", color: "var(--ink)", textAlign: "center", margin: "0 0 30px" }}>
-          how it works
-        </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, maxWidth: 1040, margin: "0 auto" }}>
-          {STEPS.map(([n, t, d]) => (
-            <div key={n} style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "22px 20px" }}>
-              <div className="ee-mark" style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--butter)", fontSize: 17, color: "var(--ink)" }}>{n}</div>
-              <div className="ph-display" style={{ fontSize: 18, fontWeight: 600, color: "var(--ink)", margin: "12px 0 4px" }}>{t}</div>
-              <div style={{ fontSize: 14.5, color: "var(--stone)", lineHeight: 1.6 }}>{d}</div>
-            </div>
-          ))}
+        <div className="hero2-visual">
+          <img src="/hero/hero-a.jpg" alt="A shopper in her own outfit" />
+          <img src="/hero/hero-b.jpg" alt="The same shopper in a garment from the rack, as rendered by peeq" className="fit-b" />
+          <div className="hero2-chip">
+            <span className="ee-mark ee-blink" style={{ fontSize: 15, color: "var(--butter-deep)" }}><span>ee</span></span>
+            same you · new fit
+          </div>
         </div>
       </section>
 
@@ -197,6 +185,22 @@ export default async function Home() {
           put it in your shop
         </h2>
         <Link href="/login" className="btn-solid" style={{ padding: "15px 40px" }}>get started</Link>
+      </section>
+
+      {/* how it works — reference detail, tucked above the footer */}
+      <section id="how" className="section-pad" style={{ background: "var(--card)", borderTop: "1px solid var(--line)" }}>
+        <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(24px, 3.6vw, 32px)", color: "var(--ink)", textAlign: "center", margin: "0 0 30px" }}>
+          how it works
+        </h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, maxWidth: 1040, margin: "0 auto" }}>
+          {STEPS.map(([n, t, d]) => (
+            <div key={n} style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "22px 20px" }}>
+              <div className="ee-mark" style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--butter)", fontSize: 17, color: "var(--ink)" }}>{n}</div>
+              <div className="ph-display" style={{ fontSize: 18, fontWeight: 600, color: "var(--ink)", margin: "12px 0 4px" }}>{t}</div>
+              <div style={{ fontSize: 14.5, color: "var(--stone)", lineHeight: 1.6 }}>{d}</div>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* footer */}

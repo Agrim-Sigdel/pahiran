@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { npr, waLink } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
-import { runTryOn, getKioskSessionId } from "@/lib/tryon";
+import { runTryOn, getKioskSessionId, type TryOnFinish } from "@/lib/tryon";
 import { logLocalTryOn, submitLead } from "@/lib/storage";
 import { reportError } from "@/lib/logging";
 import {
@@ -319,12 +319,14 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boole
 
 /* ---------- generating overlay: the app is "looking" — the ee blinks
    over the dimmed photo. No spinners, no scan lines. ---------- */
-function GeneratingOverlay({ garment }: { garment: Garment | null }) {
+function GeneratingOverlay({ garment, finish = "quick" }: { garment: Garment | null; finish?: TryOnFinish }) {
   const t = useT();
   const [msg, setMsg] = useState(0);
   // Asymptotic progress — quick at first, eases toward (never reaching) done,
   // so it stays honest whether the result lands in 2s (cache) or 40s.
+  // Studio finish eases much slower: it genuinely takes about a minute.
   const [progress, setProgress] = useState(4);
+  const tau = finish === "studio" ? 30 : 11;
   useEffect(() => {
     const timer = setInterval(() => setMsg((m) => (m + 1) % t.genMessages.length), 3200);
     return () => clearInterval(timer);
@@ -333,10 +335,10 @@ function GeneratingOverlay({ garment }: { garment: Garment | null }) {
     const t0 = performance.now();
     const timer = setInterval(() => {
       const s = (performance.now() - t0) / 1000;
-      setProgress(Math.max(4, Math.min(96, Math.round(100 * (1 - Math.exp(-s / 11))))));
+      setProgress(Math.max(4, Math.min(96, Math.round(100 * (1 - Math.exp(-s / tau))))));
     }, 300);
     return () => clearInterval(timer);
-  }, []);
+  }, [tau]);
 
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
@@ -354,7 +356,7 @@ function GeneratingOverlay({ garment }: { garment: Garment | null }) {
         <div style={{ width: "72%", maxWidth: 300, height: 5, borderRadius: 5, background: "rgba(255,255,255,.2)", overflow: "hidden" }}>
           <div style={{ height: "100%", width: progress + "%", borderRadius: 5, background: "var(--violet)", transition: "width .3s linear" }} />
         </div>
-        <div style={{ color: "rgba(255,255,255,.55)", fontSize: 12 }}>{progress}% · {t.genFooter}</div>
+        <div style={{ color: "rgba(255,255,255,.55)", fontSize: 12 }}>{progress}% · {finish === "studio" ? t.genFooterStudio : t.genFooter}</div>
       </div>
     </div>
   );
@@ -589,9 +591,11 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
   const requestSeq = useRef(0); // ignore stale responses if shopper taps another garment mid-generation
   const autoStarted = useRef(false);
   const photoAr = useImageAspect(photo); // stage adopts the photo's own ratio — no cropping
+  const [finish, setFinish] = useState<TryOnFinish>("quick");
   const t = useT();
 
-  const startTryOn = useCallback(async (garment: Garment) => {
+  const startTryOn = useCallback(async (garment: Garment, finishOverride?: TryOnFinish) => {
+    const useFinish = finishOverride ?? finish;
     const seq = ++requestSeq.current;
     setSelected(garment);
     setNotice("");
@@ -603,7 +607,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     try {
       const url = await runTryOn(photo, garment.image, garment.category, {
         shopId: shop.id, garmentId: garment.id,
-      });
+      }, useFinish);
       if (seq !== requestSeq.current) return;
       logLocalTryOn(garment.id, getKioskSessionId()); // no-op in Supabase mode (server logs it)
       setResultImage(url);
@@ -618,7 +622,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
       setNotice(t.previewNotice);
       setPhase("preview");
     }
-  }, [setSelected, photo, shop.id, t.previewNotice]);
+  }, [setSelected, photo, shop.id, t.previewNotice, finish]);
 
   /* hanger QR / storefront deep link: start as soon as we have a photo */
   useEffect(() => {
@@ -698,13 +702,39 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
               }} draggable={false} />
           )}
 
-          {phase === "generating" && <GeneratingOverlay garment={selected} />}
+          {phase === "generating" && <GeneratingOverlay garment={selected} finish={finish} />}
 
           {phase === "idle" && (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 16, background: "linear-gradient(transparent 60%, rgba(26,23,20,.85))" }}>
               <div style={{ color: "#fff", fontSize: 14.5 }}>{t.pickAPiece}</div>
             </div>
           )}
+        </div>
+
+        {/* finish picker — always visible; switching with a garment on stage
+            re-runs it in the new finish (cache makes flip-backs instant) */}
+        <div style={{ display: "flex", gap: 8, width: "100%", maxWidth: 400 }}>
+          {([
+            { id: "quick" as const, name: t.finishQuick, sub: t.finishQuickSub, icon: "⚡" },
+            { id: "studio" as const, name: t.finishStudio, sub: t.finishStudioSub, icon: "✨" },
+          ]).map((f) => (
+            <button key={f.id} className="ph-btn"
+              onClick={() => {
+                if (f.id === finish) return;
+                setFinish(f.id);
+                if (selected && phase !== "idle") startTryOn(selected, f.id);
+              }}
+              style={{
+                flex: 1, padding: "9px 12px", borderRadius: 14, textAlign: "left",
+                border: finish === f.id ? "2px solid var(--violet)" : "1px solid var(--line)",
+                background: finish === f.id ? "var(--card)" : "transparent",
+              }}>
+              <div style={{ fontFamily: "'Baloo 2', cursive", fontWeight: 700, fontSize: 14, color: finish === f.id ? "var(--violet)" : "var(--ink)" }}>
+                {f.icon} {f.name}
+              </div>
+              <div style={{ fontSize: 11.5, color: "var(--stone)", marginTop: 1 }}>{f.sub}</div>
+            </button>
+          ))}
         </div>
 
         {/* result bar — price + actions, sticky-bar style in the thumb zone */}

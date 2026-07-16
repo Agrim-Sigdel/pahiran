@@ -164,6 +164,25 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px; }
 .shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 18px; }
 
+/* ── landing hero — one look, two fits. The b-image crossfades in and out
+   so the page opens on the product's whole promise with zero words. ── */
+.hero2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; max-width: 1040px; margin: 0 auto; padding: 60px 20px 72px; }
+.hero2-copy { display: flex; flex-direction: column; gap: 22px; align-items: flex-start; }
+.hero2-visual { position: relative; border-radius: 26px; overflow: hidden; aspect-ratio: 2/3; max-height: 620px; width: 100%; box-shadow: var(--shadow-soft); background: var(--paper-deep); justify-self: end; }
+.hero2-visual img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hero2-visual img.fit-b { opacity: 0; animation: hero-swap 9s ease-in-out infinite; }
+@keyframes hero-swap {
+  0%, 38% { opacity: 0; }
+  46%, 88% { opacity: 1; }
+  96%, 100% { opacity: 0; }
+}
+.hero2-chip { position: absolute; left: 14px; bottom: 14px; display: inline-flex; align-items: center; gap: 8px; background: rgba(250,246,240,.92); color: var(--ink); border-radius: 999px; padding: 8px 16px 8px 12px; font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 13.5px; }
+@media (max-width: 760px) {
+  .hero2 { grid-template-columns: 1fr; gap: 26px; padding: 36px 20px 48px; }
+  .hero2-copy { align-items: center; text-align: center; }
+  .hero2-visual { max-height: none; justify-self: center; max-width: 420px; }
+}
+
 /* ── landing product feed — editorial listing (borderless tiles, caption
    below the image, hover zoom + peeq pill, like a fashion PLP) ── */
 .feed-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px 18px; max-width: 1040px; margin: 0 auto; }
