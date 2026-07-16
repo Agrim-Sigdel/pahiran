@@ -31,6 +31,23 @@ export function appOrigin(req: Request): string {
   return proto + "://" + host;
 }
 
+/** Admin allowlist (comma-separated ADMIN_EMAILS, defaults to the founder). */
+export function adminEmails(): string[] {
+  return (process.env.ADMIN_EMAILS || "siliconpeaksvc@gmail.com")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** True if the bearer token belongs to an allow-listed admin account. */
+export async function isAdmin(sb: SupabaseClient, token: string | null): Promise<boolean> {
+  if (!token) return false;
+  const { data, error } = await sb.auth.getUser(token);
+  const email = data.user?.email?.toLowerCase();
+  if (error || !email) return false;
+  return adminEmails().includes(email);
+}
+
 /** Confirm the bearer token belongs to the owner of this shop. */
 export async function ownsShop(sb: SupabaseClient, token: string | null, shopId: string): Promise<boolean> {
   if (!token) return false;

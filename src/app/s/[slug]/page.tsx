@@ -202,7 +202,7 @@ export default function StorefrontPage() {
               <h4 className="ph-display" style={{ fontSize: 19, marginBottom: 12, color: "var(--paper)", fontWeight: 600 }}>order &amp; ask</h4>
               <p style={{ fontSize: 13, color: "rgba(250,246,240,.65)", margin: "0 0 12px" }}>Fastest reply on WhatsApp:</p>
               <div style={{ display: "flex", gap: 8 }}>
-                <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="What are you looking for?"
+                <input value={ask} maxLength={200} onChange={(e) => setAsk(e.target.value)} placeholder="What are you looking for?"
                   style={{ flex: 1, padding: "11px 15px", borderRadius: 999, border: "1px solid rgba(250,246,240,.25)", background: "rgba(255,255,255,.06)", color: "var(--paper)", fontSize: 13 }} />
                 <a href={askWa} target="_blank" rel="noopener noreferrer" className="ph-btn"
                   style={{ background: "var(--whatsapp)", color: "#fff", padding: "11px 20px", fontSize: 13, fontWeight: 600, borderRadius: 999, textDecoration: "none", display: "flex", alignItems: "center" }}>

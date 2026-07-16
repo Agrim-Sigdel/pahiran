@@ -252,10 +252,10 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
       <div className="panel-head"><span className="title">Shop identity</span></div>
       <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 560 }}>
         <label className="field">Shop name
-          <input value={name} placeholder="e.g. Juju Fashion House" onChange={(e) => { setName(e.target.value); setSaved(false); }} />
+          <input value={name} maxLength={60} placeholder="e.g. Juju Fashion House" onChange={(e) => { setName(e.target.value); setSaved(false); }} />
         </label>
         <label className="field">Area / city
-          <input value={area} placeholder="e.g. New Road, Kathmandu" onChange={(e) => { setArea(e.target.value); setSaved(false); }} />
+          <input value={area} maxLength={80} placeholder="e.g. New Road, Kathmandu" onChange={(e) => { setArea(e.target.value); setSaved(false); }} />
         </label>
         <div className="field">Shop location on the map
           <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--mut)", margin: "2px 0 8px", display: "block" }}>
@@ -264,7 +264,7 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
           <LocationPicker lat={pin.lat} lng={pin.lng} onChange={(lat, lng) => { setPin({ lat, lng }); setSaved(false); }} />
         </div>
         <label className="field">WhatsApp number (orders)
-          <input value={whatsapp} placeholder="e.g. 9779841000000" inputMode="tel"
+          <input value={whatsapp} maxLength={20} placeholder="e.g. 9779841000000" inputMode="tel"
             onChange={(e) => { setWhatsapp(e.target.value.replace(/[^0-9+ ]/g, "")); setSaved(false); }} />
         </label>
         <div className="field">Kiosk link (QR target)
@@ -345,8 +345,8 @@ function SlugEditor({ slug, changeSlug }: { slug: string; changeSlug: (slug: str
     <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ fontSize: 13, letterSpacing: 0, textTransform: "none", fontWeight: 400 }}>/k/</span>
-        <input value={draft} autoFocus
-          onChange={(e) => { setDraft(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "")); setError(""); }}
+        <input value={draft} autoFocus maxLength={40}
+          onChange={(e) => { setDraft(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40)); setError(""); }}
           onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
           style={{ padding: "10px 13px", borderRadius: "var(--radius-btn)", border: "1px solid " + (valid ? "var(--line)" : "var(--camel)"), fontSize: 14, letterSpacing: 0, textTransform: "none", fontWeight: 400, width: 180, background: "#fff" }} />
         <button className="ph-btn" disabled={!valid || busy} onClick={save}
@@ -422,13 +422,13 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
         <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Garment name (e.g. Red Banarasi Silk Sari)" />
+          <input style={input} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="Garment name (e.g. Red Banarasi Silk Sari)" />
           <div style={{ display: "flex", gap: 10 }}>
             <select value={category} onChange={(e) => setCategory(e.target.value)}
               style={{ ...input, flex: 1 }}>
               {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
             </select>
-            <input style={{ ...input, flex: 1 }} value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, ""))} placeholder="Price (NPR)" inputMode="numeric" />
+            <input style={{ ...input, flex: 1 }} value={price} maxLength={8} onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))} placeholder="Price (NPR)" inputMode="numeric" />
           </div>
           <div>
             <div className="field" style={{ marginBottom: 7 }}>Available sizes (optional)</div>

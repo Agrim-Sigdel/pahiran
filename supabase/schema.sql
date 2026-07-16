@@ -165,7 +165,7 @@ create table plans (
 );
 
 insert into plans (id, name, price_npr, tryon_limit, studio_limit, max_garments, listed_allowed, sort) values
-  ('free',    'Free',    0,     100,  10,   50, true, 0),
+  ('free',    'Free',    0,      50,   5,   50, true, 0),
   ('starter', 'Starter', 3000,  300,  20,  200, true, 1),
   ('growth',  'Growth',  5000,  800,  60, null, true, 2),
   ('pro',     'Pro',     0,    3000, 300, null, true, 3);
@@ -320,16 +320,50 @@ end $$;
 create table plan_requests (
   id uuid primary key default gen_random_uuid(),
   shop_id uuid not null references shops (id) on delete cascade,
-  kind text not null default 'plan',   -- 'plan' | 'credits'
+  kind text not null default 'plan' check (kind in ('plan', 'credits')),
   plan_id text references plans (id),
-  note text,
+  note text check (note is null or char_length(note) <= 200),
   status text not null default 'open', -- open | done
   created_at timestamptz not null default now()
 );
 create index plan_requests_open_idx on plan_requests (status, created_at desc);
+-- At most one OPEN request of each kind per shop — blocks duplicate-spam.
+create unique index plan_requests_one_open on plan_requests (shop_id, kind) where status = 'open';
 
 alter table plan_requests enable row level security;
 create policy "own plan_requests read" on plan_requests
   for select using (shop_id in (select id from shops where owner = auth.uid()));
 create policy "own plan_requests insert" on plan_requests
   for insert with check (shop_id in (select id from shops where owner = auth.uid()));
+
+-- Admin top-up: raise a shop's current-period headroom by lowering *_used.
+create or replace function grant_credits(p_shop_id uuid, p_tryons integer, p_studio integer)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  update shop_subscriptions set
+    tryons_used = greatest(tryons_used - coalesce(p_tryons, 0), 0),
+    studio_used = greatest(studio_used - coalesce(p_studio, 0), 0)
+  where shop_id = p_shop_id;
+end $$;
+
+-- Enforce the shop's plan garment cap on insert. null max_garments = unlimited.
+create or replace function enforce_garment_limit()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  lim integer;
+  cnt integer;
+begin
+  select p.max_garments into lim
+    from shop_subscriptions s join plans p on p.id = s.plan_id
+    where s.shop_id = new.shop_id;
+  if lim is null then return new; end if;
+  select count(*) into cnt from garments where shop_id = new.shop_id;
+  if cnt >= lim then
+    raise exception 'garment_limit_reached'
+      using errcode = 'check_violation', hint = 'Upgrade the shop plan to add more garments.';
+  end if;
+  return new;
+end $$;
+
+create trigger garments_limit before insert on garments
+  for each row execute function enforce_garment_limit();

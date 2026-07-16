@@ -19,7 +19,7 @@ create table if not exists plans (
 );
 
 insert into plans (id, name, price_npr, tryon_limit, studio_limit, max_garments, listed_allowed, sort) values
-  ('free',    'Free',    0,     100,  10,   50, true, 0),
+  ('free',    'Free',    0,      50,   5,   50, true, 0),
   ('starter', 'Starter', 3000,  300,  20,  200, true, 1),
   ('growth',  'Growth',  5000,  800,  60, null, true, 2),
   ('pro',     'Pro',     0,    3000, 300, null, true, 3)

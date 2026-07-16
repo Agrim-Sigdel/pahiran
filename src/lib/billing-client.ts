@@ -26,10 +26,11 @@ export async function submitBillingRequest(opts: {
   const { shop, kind, plan, currentPlanName } = opts;
   const who = shop.name || shop.slug || "my shop";
 
-  const note =
+  const note = (
     kind === "plan" && plan
       ? `Upgrade to ${plan.name} (${npr(plan.priceNpr)}/mo)`
-      : `Credit top-up${currentPlanName ? ` (currently on ${currentPlanName})` : ""}`;
+      : `Credit top-up${currentPlanName ? ` (currently on ${currentPlanName})` : ""}`
+  ).slice(0, 200);
 
   // Durable admin record (best-effort — the email still goes out if this fails).
   if (isSupabaseConfigured() && shop.id) {

@@ -54,17 +54,17 @@ export default function Onboarding({ shop, onComplete }: {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <label className="field">Shop name
-            <input value={name} autoFocus placeholder="e.g. Juju Fashion House"
+            <input value={name} autoFocus maxLength={60} placeholder="e.g. Juju Fashion House"
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
           </label>
           <label className="field">Area / city
-            <input value={area} placeholder="e.g. New Road, Kathmandu"
+            <input value={area} maxLength={80} placeholder="e.g. New Road, Kathmandu"
               onChange={(e) => setArea(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
           </label>
           <label className="field">WhatsApp number
-            <input value={whatsapp} placeholder="e.g. 9779841000000" inputMode="tel"
+            <input value={whatsapp} maxLength={20} placeholder="e.g. 9779841000000" inputMode="tel"
               onChange={(e) => setWhatsapp(e.target.value.replace(/[^0-9+ ]/g, ""))}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
             <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--mut)", marginTop: 4, display: "block" }}>

@@ -51,7 +51,12 @@ export default function DashboardPage() {
       const saved = await persistGarment(shop, g, catalog.map((x) => x.id));
       setCatalog((c) => [saved, ...c]);
     } catch (e: any) {
-      reportError("dashboard", "add garment failed: " + (e?.message || e), { shopId: shop.id });
+      const msg = String(e?.message || e);
+      if (msg.includes("garment_limit_reached")) {
+        alert("You've reached your plan's garment limit. Upgrade in the Plan tab to add more.");
+        return;
+      }
+      reportError("dashboard", "add garment failed: " + msg, { shopId: shop.id });
       alert("Could not save garment: " + (e?.message || "image may be too large — try a smaller photo."));
     }
   };

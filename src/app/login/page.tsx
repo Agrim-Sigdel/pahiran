@@ -67,9 +67,9 @@ export default function LoginPage() {
           : ""}
       </div>
       <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <input style={input} type="email" required placeholder="you@shop.com" value={email}
+        <input style={input} type="email" required maxLength={120} placeholder="you@shop.com" value={email}
           onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-        <input style={input} type="password" required minLength={6} placeholder="Password (6+ characters)"
+        <input style={input} type="password" required minLength={6} maxLength={72} placeholder="Password (6+ characters)"
           value={password} onChange={(e) => setPassword(e.target.value)}
           autoComplete={mode === "signin" ? "current-password" : "new-password"} />
         <button className="ph-btn btn-solid" disabled={busy} type="submit"

@@ -115,7 +115,7 @@ export default function LocationPicker({ lat, lng, onChange }: {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", gap: 8 }}>
-        <input value={query} placeholder="Search a place, e.g. New Road"
+        <input value={query} placeholder="Search a place, e.g. New Road" maxLength={100}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); search(); } }}
           style={{ flex: 1 }} />
