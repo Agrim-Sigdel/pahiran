@@ -44,7 +44,7 @@ function KioskOwn() {
   if (catalog.length === 0) {
     return (
       <div style={{ position: "fixed", inset: 0, background: "var(--ink)", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, textAlign: "center", padding: 24 }}>
-        <div className="ph-display" style={{ fontSize: 26 }}>the rack is empty</div>
+        <div className="ph-display" style={{ fontSize: 26 }}>nothing listed yet</div>
         <p style={{ color: "rgba(255,255,255,.55)", maxWidth: 380, margin: 0 }}>
           Add at least one in-stock garment in the dashboard before launching the kiosk.
         </p>

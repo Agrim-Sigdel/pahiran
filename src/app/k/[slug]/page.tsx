@@ -55,7 +55,7 @@ function PublicKiosk() {
       <div style={{ position: "fixed", inset: 0, background: "var(--ink)", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, textAlign: "center", padding: 24 }}>
         <div className="ph-display" style={{ fontSize: 26 }}>{shop.name || "This shop"}</div>
         <p style={{ color: "rgba(255,255,255,.55)", maxWidth: 380, margin: 0 }}>
-          nothing on the rack right now — check back soon.
+          nothing listed yet — check back soon.
         </p>
       </div>
     );

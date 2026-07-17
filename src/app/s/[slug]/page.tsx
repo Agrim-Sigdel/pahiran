@@ -166,7 +166,7 @@ export default function StorefrontPage() {
         )}
         {shown.length === 0 ? (
           <div style={{ color: "var(--mut)", padding: 50, textAlign: "center" }}>
-            Nothing on the rack{filter !== "All" ? " in this category" : ""} right now — check back soon.
+            Nothing listed{filter !== "All" ? " in this category" : ""} right now — check back soon.
           </div>
         ) : (
           <div className="shop-grid">
