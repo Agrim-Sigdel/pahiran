@@ -64,9 +64,9 @@ async function runOpenAI(
   form.append("quality", quality);
   form.append(
     "prompt",
-    `Virtual try-on. Take off the ${category || "clothing"} the person in the first image is currently wearing ` +
-      `and dress them in the exact garment from the second image instead — the old garment must be fully gone, ` +
-      `not visible underneath or through the new one.
+    `Virtual try-on for a clothing shop. Show the person in the first image wearing the exact garment ` +
+      `from the second image in place of their current ${category || "garment"} — a straight swap, with the ` +
+      `previous garment no longer visible underneath or through the new one.
 
 Guardrails:
 - Same person: identical face, hair, skin tone, body shape, pose, camera angle and background as the first image.

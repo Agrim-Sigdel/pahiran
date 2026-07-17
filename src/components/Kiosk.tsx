@@ -986,7 +986,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
         ))}
       </div>
 
-      {/* garment rail — the rack */}
+      {/* garment rail */}
       <div className="garment-rail" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "14px 16px 6px" }}>
         {rail.map((g) => (
           <button key={g.id} onClick={() => startTryOn(g)} className="ph-btn"

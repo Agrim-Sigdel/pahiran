@@ -52,7 +52,7 @@ const en = {
   finishStudio: "studio peeq",
   finishStudioSub: "our finest look · ~1 min",
 
-  pickAPiece: "pick a piece from the rack below",
+  pickAPiece: "pick a piece below",
   sizes: "sizes:",
   aiResultNote: "AI try-on · ask staff to see it in person",
   holdToCompare: "hold to compare",
@@ -152,7 +152,7 @@ const ne: typeof en = {
   finishStudio: "studio peeq",
   finishStudioSub: "सबैभन्दा राम्रो लुक · ~१ मिनेट",
 
-  pickAPiece: "तलको र्‍याकबाट एउटा लुगा छान्नुहोस्",
+  pickAPiece: "तलबाट एउटा लुगा छान्नुहोस्",
   sizes: "साइज:",
   aiResultNote: "AI ट्राई-अन · सक्कली हेर्न स्टाफलाई भन्नुहोस्",
   holdToCompare: "तुलना गर्न थिचिराख्नुहोस्",

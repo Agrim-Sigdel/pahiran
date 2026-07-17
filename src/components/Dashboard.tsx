@@ -72,7 +72,7 @@ export default function Dashboard({
             className="ph-btn btn-solid"
             onClick={() => {
               if (catalog.length === 0) {
-                alert("Add at least one garment to your catalog first — the kiosk needs something on the rack to show shoppers.");
+                alert("Add at least one garment to your catalog first — the kiosk needs something to show shoppers.");
                 setTab("catalog");
                 return;
               }
@@ -367,7 +367,7 @@ function EmptyState({ onAdd, anyItems }: { onAdd: () => void; anyItems: boolean 
   return (
     <div style={{ border: "1.5px dashed var(--line)", borderRadius: "var(--radius-modal)", padding: "60px 24px", textAlign: "center", background: "var(--cream)" }}>
       <div className="ph-display" style={{ fontSize: 22, marginBottom: 8, color: "var(--forest-deep)" }}>
-        {anyItems ? "Nothing in this category yet" : "Your rack is empty"}
+        {anyItems ? "Nothing in this category yet" : "No garments yet"}
       </div>
       <p style={{ color: "var(--mut)", maxWidth: 420, margin: "0 auto 20px", fontSize: 14, lineHeight: 1.6 }}>
         Photograph each garment flat or on a mannequin against a plain wall, then add it here. Clean photos give the best try-on results.

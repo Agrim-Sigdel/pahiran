@@ -169,23 +169,73 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .hero2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; max-width: 1040px; margin: 0 auto; padding: 60px 20px 72px; }
 .hero2-copy { display: flex; flex-direction: column; gap: 22px; align-items: flex-start; }
 .hero2-visual { position: relative; border-radius: 26px; overflow: hidden; aspect-ratio: 2/3; max-height: 620px; width: 100%; box-shadow: var(--shadow-soft); background: var(--paper-deep); justify-self: end; }
-.hero2-visual img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.hero2-visual img.fit-b { opacity: 0; animation: hero-swap 9s ease-in-out infinite; }
-@keyframes hero-swap {
-  0%, 38% { opacity: 0; }
-  46%, 88% { opacity: 1; }
-  96%, 100% { opacity: 0; }
+/* stacked slides — the active one gets opacity 1 inline (hard cut, no fade) */
+.hero2-visual img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+/* "looking…" beat while a picked fit loads in */
+.hero2-peeqing { position: absolute; inset: 0; z-index: 2; background: rgba(26, 23, 20, .45); display: flex; align-items: center; justify-content: center; }
+
+/* the fit rail — flat-lay outfit cards as the selector */
+.hero2-right { display: flex; gap: 14px; align-items: stretch; justify-self: end; width: 100%; }
+.hero2-right .hero2-visual { justify-self: auto; flex: 1; }
+.hero2-rail { display: flex; flex-direction: column; gap: 12px; justify-content: center; width: 108px; flex-shrink: 0; }
+.hero2-rail-hint { font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 12.5px; color: var(--ink); text-align: center; letter-spacing: .02em; }
+.hero2-fitcard { position: relative; padding: 0; border-radius: 16px; overflow: hidden; background: #fff; border: 1.5px solid var(--line); cursor: pointer; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.hero2-fitcard img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.hero2-fitlabel { display: block; font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 11px; padding: 4px 0 6px; text-align: center; color: var(--stone); background: #fff; }
+.hero2-fitcard.on { border: 2.5px solid var(--violet); transform: scale(1.05); box-shadow: var(--shadow-soft); }
+.hero2-fitcard.on .hero2-fitlabel { color: #fff; background: var(--violet); }
+.hero2-fitcard:hover:not(.on) { transform: translateY(-3px); box-shadow: var(--shadow-soft); border-color: var(--butter-deep); }
+/* pre-interaction nudge: idle cards breathe until the visitor plays once */
+.hero2-fitcard.nudge { animation: fit-nudge 2.6s ease-in-out infinite; }
+.hero2-fitcard.nudge:nth-of-type(odd) { animation-delay: 1.3s; }
+@keyframes fit-nudge {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
 }
-.hero2-chip { position: absolute; left: 14px; bottom: 14px; display: inline-flex; align-items: center; gap: 8px; background: rgba(250,246,240,.92); color: var(--ink); border-radius: 999px; padding: 8px 16px 8px 12px; font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 13.5px; }
+/* per-fit kinetic type — pops in with its image via .peek */
+.hero2-line {
+  position: absolute; left: 20px; bottom: 18px; z-index: 3;
+  font-family: 'Baloo 2', cursive; font-weight: 800; line-height: 1;
+  font-size: clamp(30px, 4.2vw, 48px); letter-spacing: -0.02em; text-transform: lowercase;
+  color: #fff; text-shadow: 0 2px 22px rgba(26, 23, 20, .55), 0 1px 4px rgba(26, 23, 20, .35);
+  pointer-events: none;
+}
 @media (max-width: 760px) {
   .hero2 { grid-template-columns: 1fr; gap: 26px; padding: 36px 20px 48px; }
   .hero2-copy { align-items: center; text-align: center; }
   .hero2-visual { max-height: none; justify-self: center; max-width: 420px; }
+  .hero2-right { flex-direction: column; max-width: 420px; margin: 0 auto; }
+  .hero2-rail { flex-direction: row; flex-wrap: wrap; width: 100%; justify-content: center; }
+  .hero2-rail-hint { width: 100%; }
+  .hero2-fitcard { width: 72px; }
+}
+
+/* ── owner page — alternating proof rows (copy ⇄ screenshot) ── */
+.owner-row { display: grid; grid-template-columns: 1fr 1.15fr; gap: 36px; align-items: center; margin-bottom: 52px; }
+.owner-row.flip { grid-template-columns: 1.15fr 1fr; }
+.owner-row.flip .owner-copy { order: 2; }
+/* screenshots vary in aspect (the analytics one is a tall phone capture) —
+   cap the height so every row sits at the same visual weight; tall images
+   crop from the top, which is where their content lives */
+.owner-row img { width: 100%; max-height: 400px; object-fit: cover; object-position: top; display: block; border-radius: var(--radius-card); border: 1px solid var(--line); box-shadow: var(--shadow-soft); }
+/* phone screenshots render at device width, centered, with a device-ish radius */
+.owner-row img.phone { width: 100%; max-width: 280px; max-height: 440px; margin: 0 auto; border-radius: 22px; }
+/* the second vertical creative rides along only on phones */
+.owner-hero-dm { display: none; }
+@media (max-width: 760px) {
+  /* both vertical creatives shrink to a card-ish width so they don't eat the whole scroll */
+  .owner-poster { max-width: 330px; margin: 0 auto; }
+  .owner-hero-dm { display: block; width: 100%; max-width: 330px; margin: 14px auto 0; border-radius: var(--radius-card); border: 1px solid var(--line); box-shadow: var(--shadow-soft); }
+}
+.owner-copy p { color: var(--stone); font-size: 15.5px; line-height: 1.7; margin: 0; }
+@media (max-width: 760px) {
+  .owner-row, .owner-row.flip { grid-template-columns: 1fr; gap: 18px; margin-bottom: 40px; }
+  .owner-row.flip .owner-copy { order: 0; }
 }
 
 /* ── landing product feed — editorial listing (borderless tiles, caption
    below the image, hover zoom + peeq pill, like a fashion PLP) ── */
-.feed-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px 18px; max-width: 1040px; margin: 0 auto; }
+.feed-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 30px 18px; max-width: 1040px; margin: 0 auto; }
 .feed-card .feed-img { position: relative; display: block; aspect-ratio: 3/4; border-radius: 16px; overflow: hidden; background: var(--paper-deep); }
 .feed-card .feed-img img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .55s cubic-bezier(.2,.6,.2,1); }
 .feed-card:hover .feed-img img { transform: scale(1.045); }
@@ -203,9 +253,9 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .feed-shop { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--stone); text-decoration: none; margin-bottom: 3px; }
 .feed-shop:hover { color: var(--violet); }
 .feed-name-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-.feed-name-row .nm { font-size: 14px; font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-name-row .nm { min-width: 0; font-size: 14px; font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .feed-name-row .pr { font-size: 13.5px; font-weight: 500; color: var(--stone); flex-shrink: 0; }
-@media (max-width: 920px) { .feed-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 920px) { .feed-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 /* wide content that must scroll inside its box, never the page */
 .scroll-x { overflow-x: auto; }
@@ -231,7 +281,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 
   .section-pad { padding: 30px 16px; }
   .card-grid, .shop-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  .feed-grid { grid-template-columns: repeat(2, 1fr); gap: 22px 10px; }
+  .feed-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 10px; }
 
   .btn-solid, .btn-outline, .btn-violet { padding: 12px 24px; font-size: 15px; }
 

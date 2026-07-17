@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import ShopsMap, { type MapShop } from "@/components/ShopsMap";
+import HeroTryOn from "@/components/HeroTryOn";
 import { npr } from "@/lib/constants";
 
 /* Landing — vendor-facing marketing page. Shoppers normally arrive at a
@@ -9,11 +10,12 @@ import { npr } from "@/lib/constants";
 
 export const revalidate = 300;
 
+/* shopper-facing steps — the vendor version lives on /owner */
 const STEPS: [string, string, string][] = [
-  ["1", "photograph the rack", "Add each garment with one phone photo."],
-  ["2", "print the QR tags", "Each garment gets a QR code for its hanger."],
-  ["3", "shoppers peeq it", "One photo of themselves, no account needed."],
-  ["4", "leads reach you", "Size and contact arrive in your dashboard."],
+  ["1", "pick a shop", "Browse shops near you, or scan a hanger QR in store."],
+  ["2", "one photo", "Snap a photo of yourself — it's never stored."],
+  ["3", "see it on you", "Any piece in the shop, on your body, in seconds."],
+  ["4", "make it yours", "Save the look, share it, or tell the shop your size."],
 ];
 
 interface ListedShop { slug: string; name: string; area: string | null; lat: number | null; lng: number | null }
@@ -105,7 +107,7 @@ export default async function Home() {
           <div className="wordmark" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>p<span className="ee">ee</span>q</div>
         </div>
         <div className="nav-tools">
-          <Link href="/login" style={{ color: "var(--violet)" }}>vendor log in</Link>
+          <Link href="/owner" style={{ color: "var(--violet)" }}>for store owners</Link>
         </div>
       </nav>
 
@@ -116,26 +118,22 @@ export default async function Home() {
           <h1 className="ph-display" style={{ fontSize: "clamp(42px, 6.5vw, 68px)", lineHeight: 1.05, color: "var(--ink)", margin: 0 }}>
             try it on,<br />without<br />trying it on
           </h1>
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center" }}>
-            <Link href="/login" className="btn-violet" style={{ padding: "15px 36px" }}>create your shop</Link>
-            <a href="#how" className="linklike" style={{ fontSize: 15 }}>how it works ↓</a>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
+            <a href={shops.length > 0 ? "#shops" : "#how"} className="btn-violet" style={{ padding: "15px 36px" }}>browse shops</a>
+            <Link href="/owner" className="btn-outline" style={{ padding: "13px 30px" }}>I own a store →</Link>
+          </div>
+          <div style={{ fontSize: 13, color: "var(--stone)", fontWeight: 500 }}>
+            free for shoppers · no account needed · नेपाली र english
           </div>
         </div>
-        <div className="hero2-visual">
-          <img src="/hero/hero-a.jpg" alt="A shopper in her own outfit" />
-          <img src="/hero/hero-b.jpg" alt="The same shopper in a garment from the rack, as rendered by peeq" className="fit-b" />
-          <div className="hero2-chip">
-            <span className="ee-mark ee-blink" style={{ fontSize: 15, color: "var(--butter-deep)" }}><span>ee</span></span>
-            same you · new fit
-          </div>
-        </div>
+        <HeroTryOn />
       </section>
 
       {/* shop directory (opt-in) */}
       {shops.length > 0 && (
         <section id="shops" className="section-pad">
           <div style={{ textAlign: "center", margin: "0 0 34px" }}>
-            <div className="kicker" style={{ marginBottom: 8 }}>fresh off the rack</div>
+            <div className="kicker" style={{ marginBottom: 8 }}>fresh picks</div>
             <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(24px, 3.6vw, 32px)", color: "var(--ink)", margin: 0 }}>
               browse shops
             </h2>
@@ -179,12 +177,26 @@ export default async function Home() {
         </section>
       )}
 
-      {/* final CTA */}
-      <section className="section-pad" style={{ textAlign: "center", padding: "56px 20px" }}>
-        <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(26px, 4vw, 36px)", color: "var(--ink)", margin: "0 0 20px" }}>
-          put it in your shop
-        </h2>
-        <Link href="/login" className="btn-solid" style={{ padding: "15px 40px" }}>get started</Link>
+      {/* the fork — shopper stays, store owner diverts to /owner */}
+      <section className="section-pad" style={{ padding: "56px 20px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, maxWidth: 880, margin: "0 auto" }}>
+          <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "34px 30px", textAlign: "center" }}>
+            <div className="kicker" style={{ marginBottom: 10 }}>here to shop?</div>
+            <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(22px, 3vw, 28px)", color: "var(--ink)", margin: "0 0 18px" }}>
+              see it on you first
+            </h2>
+            <a href={shops.length > 0 ? "#shops" : "#how"} className="btn-violet" style={{ padding: "13px 34px" }}>browse shops</a>
+          </div>
+          <div style={{ background: "var(--ink)", borderRadius: "var(--radius-card)", padding: "34px 30px", textAlign: "center" }}>
+            <div className="kicker" style={{ marginBottom: 10, color: "var(--butter)" }}>own a store?</div>
+            <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(22px, 3vw, 28px)", color: "var(--paper)", margin: "0 0 18px" }}>
+              put <span className="wordmark" style={{ color: "var(--paper)", fontSize: "inherit" }}>p<span className="ee">ee</span>q</span> in your shop
+            </h2>
+            <Link href="/owner" className="ph-btn" style={{ background: "var(--butter)", color: "var(--ink)", padding: "13px 34px", fontSize: 16, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999, textDecoration: "none", display: "inline-block" }}>
+              peeq for store owners →
+            </Link>
+          </div>
+        </div>
       </section>
 
       {/* how it works — reference detail, tucked above the footer */}
