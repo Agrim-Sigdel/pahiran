@@ -12,6 +12,7 @@ import {
   lookImageURL, shareLook, shareImage, type SavedLook,
 } from "@/lib/looks";
 import { getProfile, saveProfile, forgetProfile, type Profile } from "@/lib/profile";
+import { useAccount, getContact } from "@/lib/account";
 import { recommendSize, HEIGHT_MIN, HEIGHT_MAX, WEIGHT_MIN, WEIGHT_MAX, type Gender, type SizeRec } from "@/lib/sizing";
 import { LangContext, STRINGS, useLangState, useT } from "@/lib/i18n";
 import type { Garment, Shop } from "@/lib/types";
@@ -77,6 +78,8 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
   const [showLooks, setShowLooks] = useState(false);
   const [lang, toggleLang] = useLangState();
   const t = STRINGS[lang];
+  const { user, configured } = useAccount();
+  const loggedIn = !!user && configured;
   const cats = ["All", ...Array.from(new Set(catalog.map((g) => g.category)))];
   const rail = catFilter === "All" ? catalog : catalog.filter((g) => g.category === catFilter);
   const initialGarment = initialGarmentId ? catalog.find((g) => g.id === initialGarmentId) ?? null : null;
@@ -145,9 +148,10 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
           start={() => setStep("capture")}
           savedPhoto={savedPhoto}
           useSaved={() => { setPhoto(savedPhoto); setStep("tryon"); }}
-          forgetSaved={() => { forgetPhoto(); setSavedPhoto(null); }} />
+          forgetSaved={() => { forgetPhoto(); setSavedPhoto(null); }}
+          loggedIn={loggedIn} showAccount={configured} />
       )}
-      {step === "capture" && <CaptureScreen onPhoto={takePhoto} />}
+      {step === "capture" && <CaptureScreen onPhoto={takePhoto} loggedIn={loggedIn} />}
       {step === "tryon" && photo && (
         <TryOnScreen photo={photo} shop={shop} rail={rail} cats={cats} catFilter={catFilter} setCatFilter={setCatFilter}
           selected={selected} setSelected={setSelected} retakePhoto={() => setStep("capture")}
@@ -159,9 +163,10 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
   );
 }
 
-function AttractScreen({ count, highlight, start, savedPhoto, useSaved, forgetSaved }: {
+function AttractScreen({ count, highlight, start, savedPhoto, useSaved, forgetSaved, loggedIn, showAccount }: {
   count: number; highlight: Garment | null; start: () => void;
   savedPhoto: string | null; useSaved: () => void; forgetSaved: () => void;
+  loggedIn: boolean; showAccount: boolean;
 }) {
   const t = useT();
   return (
@@ -201,6 +206,11 @@ function AttractScreen({ count, highlight, start, savedPhoto, useSaved, forgetSa
           </button>
         </>
       )}
+      {showAccount && (
+        <a href="/account" style={{ marginTop: 22, fontSize: 13, color: "var(--violet)", fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3 }}>
+          {loggedIn ? "♥ your saved looks" : "sign in to save your looks"}
+        </a>
+      )}
     </div>
   );
 }
@@ -208,7 +218,7 @@ function AttractScreen({ count, highlight, start, savedPhoto, useSaved, forgetSa
 /* ---------- capture: consent lives here, above the shutter ----------
    The viewfinder box adopts the camera's real aspect ratio and snap()
    captures the full frame — what you see is exactly what you get. */
-function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boolean) => void }) {
+function CaptureScreen({ onPhoto, loggedIn }: { onPhoto: (dataUrl: string, remember: boolean) => void; loggedIn: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -317,6 +327,7 @@ function CaptureScreen({ onPhoto }: { onPhoto: (dataUrl: string, remember: boole
       </label>
       <div style={{ color: "var(--stone)", fontSize: 12, marginTop: 8 }}>
         {remember ? t.rememberedNote : t.notSavedNote}
+        {loggedIn && remember && " Synced privately to your peeq account — only you can see it."}
       </div>
     </div>
   );
@@ -467,6 +478,15 @@ function InterestedModal({ shop, garment, recommended, onClose }: { shop: Shop; 
   const [phone, setPhone] = useState("");
   const [size, setSize] = useState(recommended || garment.sizes[0] || "");
   const [state, setState] = useState<"form" | "sending" | "done" | "error">("form");
+
+  // prefill from the shopper's account (no-op when logged out / local mode)
+  useEffect(() => {
+    getContact().then((c) => {
+      if (!c) return;
+      if (c.name) setName((n) => n || c.name);
+      if (c.phone) setPhone((p) => p || c.phone);
+    });
+  }, []);
   const wa = waLink(
     shop.whatsapp,
     `Namaste! I tried on "${garment.name}"${size ? " (size " + size + ")" : ""} at ${shop.name || "your shop"} with peeq and I want it.`
@@ -718,6 +738,10 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
   const [showSize, setShowSize] = useState(false);
   const t = useT();
 
+  /* deep link (hanger QR / storefront "peeq it") = shop just this one piece:
+     no rack, no category chips, no filmstrip — only the garment they scanned */
+  const locked = !!initialGarment;
+
   useEffect(() => { setProfile(getProfile()); }, []);
   // size hint from the shopper's own measurements — never touches the try-on image
   const rec: SizeRec | null = selected && profile ? recommendSize(profile, selected) : null;
@@ -957,7 +981,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
       </div>
 
       {/* session filmstrip — flip between already-generated looks instantly */}
-      {history.length > 0 && (
+      {!locked && history.length > 0 && (
         <div style={{ padding: "12px 16px 0" }}>
           <div style={{ fontSize: 12, letterSpacing: ".1em", color: "var(--stone)", fontWeight: 600, marginBottom: 7 }}>
             {t.thisSession}
@@ -977,36 +1001,41 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
         </div>
       )}
 
-      {/* category chips */}
-      <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "10px 16px 0" }} className="garment-rail">
-        {cats.map((c) => (
-          <button key={c} className={"efc-chip " + (catFilter === c ? "on" : "off")} onClick={() => setCatFilter(c)}>
-            {c}
-          </button>
-        ))}
-      </div>
+      {/* browse the rack — hidden on a deep link, where only the scanned piece shows */}
+      {!locked && (
+        <>
+          {/* category chips */}
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "10px 16px 0" }} className="garment-rail">
+            {cats.map((c) => (
+              <button key={c} className={"efc-chip " + (catFilter === c ? "on" : "off")} onClick={() => setCatFilter(c)}>
+                {c}
+              </button>
+            ))}
+          </div>
 
-      {/* garment rail */}
-      <div className="garment-rail" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "14px 16px 6px" }}>
-        {rail.map((g) => (
-          <button key={g.id} onClick={() => startTryOn(g)} className="ph-btn"
-            style={{
-              flexShrink: 0, width: 108, padding: 0, borderRadius: 16, overflow: "hidden", textAlign: "left",
-              background: "var(--card)", border: "2px solid " + (selected?.id === g.id ? "var(--violet)" : "var(--line)"),
-            }}>
-            <div style={{ aspectRatio: "3/4", background: "var(--paper-deep)" }}>
-              <img src={g.image} alt={g.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-            </div>
-            <div style={{ padding: "7px 9px 9px" }}>
-              <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</div>
-              <div style={{ fontSize: 11.5, color: "var(--stone)", fontWeight: 500, marginTop: 2 }}>{npr(g.price)}</div>
-              {g.sizes.length > 0 && (
-                <div style={{ fontSize: 9.5, color: "var(--stone)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.sizes.join(" ")}</div>
-              )}
-            </div>
-          </button>
-        ))}
-      </div>
+          {/* garment rail */}
+          <div className="garment-rail" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "14px 16px 6px" }}>
+            {rail.map((g) => (
+              <button key={g.id} onClick={() => startTryOn(g)} className="ph-btn"
+                style={{
+                  flexShrink: 0, width: 108, padding: 0, borderRadius: 16, overflow: "hidden", textAlign: "left",
+                  background: "var(--card)", border: "2px solid " + (selected?.id === g.id ? "var(--violet)" : "var(--line)"),
+                }}>
+                <div style={{ aspectRatio: "3/4", background: "var(--paper-deep)" }}>
+                  <img src={g.image} alt={g.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                </div>
+                <div style={{ padding: "7px 9px 9px" }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--stone)", fontWeight: 500, marginTop: 2 }}>{npr(g.price)}</div>
+                  {g.sizes.length > 0 && (
+                    <div style={{ fontSize: 9.5, color: "var(--stone)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.sizes.join(" ")}</div>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
