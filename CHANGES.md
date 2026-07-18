@@ -4,6 +4,7 @@ _Session summary. Companion to [STATUS.md](./STATUS.md) and [PRODUCT_PLAN.md](./
 
 This session added three things and fixed one:
 
+
 1. **A traditional shopping experience** on the storefront (cart, sizes, search/sort, wishlist).
 2. **Real product pages** (`/s/[slug]/[garment]`) with server-rendered share cards.
 3. **Shopper accounts** (email/password; Google OAuth deferred) that sync saved try-ons, cart, wishlist and checkout details across devices.
