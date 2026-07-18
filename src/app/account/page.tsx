@@ -111,7 +111,7 @@ function SignedIn({ email }: { email: string }) {
     <main style={{ minHeight: "100vh", background: "var(--sage)" }}>
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 22px", background: "var(--paper)", borderBottom: "1px solid var(--line)", flexWrap: "wrap", gap: 10 }}>
         <div>
-          <div className="wordmark" style={{ fontSize: 20 }}>peeq</div>
+          <div className="wordmark" style={{ fontSize: 20 }}>p<span className="ee" style={{ color: "var(--butter-deep)" }}>ee</span>q</div>
           <div style={{ fontSize: 12, color: "var(--stone)", marginTop: 2 }}>{email}</div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>

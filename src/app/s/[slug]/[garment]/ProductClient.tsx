@@ -144,7 +144,7 @@ export default function ProductClient() {
       )}
 
       <footer style={{ background: "var(--ink)", color: "rgba(250,246,240,.45)", textAlign: "center", fontSize: 12.5, padding: "26px 16px" }}>
-        powered by <b className="wordmark" style={{ color: "var(--butter)", fontSize: 13 }}>peeq</b> · a little look before you buy
+        powered by <b className="wordmark" style={{ color: "var(--paper)", fontSize: 13 }}>p<span className="ee">ee</span>q</b> · a little look before you buy
         {" · "}
         <Link href="/privacy" style={{ color: "rgba(250,246,240,.55)", textUnderlineOffset: 3 }}>privacy</Link>
       </footer>

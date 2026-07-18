@@ -71,7 +71,7 @@ export default function AdminPage() {
       <div style={{ maxWidth: 820, margin: "0 auto", padding: "24px min(26px, 4vw) 60px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <div>
-            <div className="wordmark" style={{ fontSize: 22 }}>peeq</div>
+            <div className="wordmark" style={{ fontSize: 22 }}>p<span className="ee" style={{ color: "var(--butter-deep)" }}>ee</span>q</div>
             <div style={{ fontSize: 12, color: "var(--mut)", letterSpacing: ".12em", marginTop: 3 }}>admin · billing requests</div>
           </div>
           <Link href="/dashboard" className="ph-btn" style={{ fontSize: 12, color: "var(--mut)" }}>← dashboard</Link>
