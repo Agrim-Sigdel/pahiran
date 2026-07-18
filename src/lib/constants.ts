@@ -28,3 +28,12 @@ export function waLink(number: string, message: string): string | null {
   if (digits.length < 8) return null;
   return "https://wa.me/" + digits + "?text=" + encodeURIComponent(message);
 }
+
+/* Storefront checkout channels. Both default ON; set the env var to "0" to
+   disable that channel for a deployment. If leads are on, a checkout also
+   drops into the vendor's inbox; if WhatsApp is on (and the shop has a
+   number), the order opens as one itemised WhatsApp message. */
+export const CHECKOUT = {
+  whatsapp: process.env.NEXT_PUBLIC_CHECKOUT_WHATSAPP !== "0",
+  leads: process.env.NEXT_PUBLIC_CHECKOUT_LEADS !== "0",
+};
