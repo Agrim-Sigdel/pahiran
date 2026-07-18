@@ -210,7 +210,7 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
                 </button>
               </div>
               <p style={{ fontSize: 11.5, color: "var(--stone)", textAlign: "center", margin: "10px 0 0", lineHeight: 1.5 }}>
-                No online payment — the shop confirms price, payment and delivery with you directly.
+                No online payment. The shop confirms price, payment and delivery with you directly.
               </p>
             </div>
           </>

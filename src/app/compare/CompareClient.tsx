@@ -27,6 +27,7 @@ type Slot = { state: "pending" } | { state: "done"; url: string; ms: number } | 
 
 export default function CompareClient() {
   const [items, setItems] = useState<Item[]>([]);
+  const [search, setSearch] = useState("");
   const [garment, setGarment] = useState<Item | null>(null);
   const [person, setPerson] = useState<string | null>(null);
   const [quality, setQuality] = useState<"low" | "medium" | "high">("low");
@@ -100,8 +101,18 @@ export default function CompareClient() {
         {items.length === 0 ? (
           <p style={{ color: "var(--stone)", fontSize: 14 }}>No garments found — add some in the dashboard first.</p>
         ) : (
+          <>
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder={"search " + items.length + " garments by name or category…"}
+            style={{ width: "100%", maxWidth: 340, padding: "10px 14px", borderRadius: 999, border: "1px solid var(--line)", background: "var(--card)", fontSize: 13.5, marginBottom: 12 }} />
+          {(() => {
+            const q = search.trim().toLowerCase();
+            const shown = q ? items.filter((g) => (g.name + " " + g.category).toLowerCase().includes(q)) : items;
+            return shown.length === 0 ? (
+              <p style={{ color: "var(--stone)", fontSize: 13.5 }}>nothing matches &ldquo;{search}&rdquo;</p>
+            ) : (
           <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
-            {items.map((g) => (
+            {shown.map((g) => (
               <button key={g.id} onClick={() => setGarment(g)} className="ph-btn"
                 style={{
                   flexShrink: 0, width: 110, padding: 0, borderRadius: 12, overflow: "hidden",
@@ -113,6 +124,9 @@ export default function CompareClient() {
               </button>
             ))}
           </div>
+            );
+          })()}
+          </>
         )}
 
         {/* 2 — person */}
