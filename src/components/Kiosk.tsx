@@ -13,6 +13,7 @@ import {
 } from "@/lib/looks";
 import { getProfile, saveProfile, forgetProfile, type Profile } from "@/lib/profile";
 import { useAccount, getContact } from "@/lib/account";
+import { useCart } from "@/lib/cart";
 import { recommendSize, HEIGHT_MIN, HEIGHT_MAX, WEIGHT_MIN, WEIGHT_MAX, type Gender, type SizeRec } from "@/lib/sizing";
 import { LangContext, STRINGS, useLangState, useT } from "@/lib/i18n";
 import type { Garment, Shop } from "@/lib/types";
@@ -80,6 +81,9 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
   const t = STRINGS[lang];
   const { user, configured } = useAccount();
   const loggedIn = !!user && configured;
+  // same per-slug bag as the storefront — a look that lands can convert on the spot
+  const cart = useCart(shop.slug || "");
+  const canShop = !!shop.slug;
   const cats = ["All", ...Array.from(new Set(catalog.map((g) => g.category)))];
   const rail = catFilter === "All" ? catalog : catalog.filter((g) => g.category === catFilter);
   const initialGarment = initialGarmentId ? catalog.find((g) => g.id === initialGarmentId) ?? null : null;
@@ -122,6 +126,12 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
               ✆<span className="hide-sm"> {t.contact}</span>
             </a>
           )}
+          {canShop && cart.count > 0 && (
+            <a className="ph-btn" href={`/s/${shop.slug}`} aria-label={t.viewBag(cart.count)}
+              style={{ ...barBtn, background: "var(--violet)", color: "#fff", border: "none", textDecoration: "none" }}>
+              🛍 ({cart.count})
+            </a>
+          )}
           {looksCount > 0 && (
             <button className="ph-btn" onClick={() => setShowLooks(true)} aria-label={t.myLooksLabel}
               style={{ ...barBtn, background: "var(--butter)", border: "none" }}>
@@ -155,7 +165,7 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId }: KioskPr
       {step === "tryon" && photo && (
         <TryOnScreen photo={photo} shop={shop} rail={rail} cats={cats} catFilter={catFilter} setCatFilter={setCatFilter}
           selected={selected} setSelected={setSelected} retakePhoto={() => setStep("capture")}
-          initialGarment={initialGarment}
+          initialGarment={initialGarment} cart={canShop ? cart : null}
           onLookSaved={() => setLooksCount((n) => n + 1)} />
       )}
     </div>
@@ -215,20 +225,25 @@ function AttractScreen({ count, highlight, start, savedPhoto, useSaved, forgetSa
   );
 }
 
-/* ---------- capture: consent lives here, above the shutter ----------
-   The viewfinder box adopts the camera's real aspect ratio and snap()
-   captures the full frame — what you see is exactly what you get. */
+/* ---------- capture: upload-first, consent lives here ----------
+   Opens on an upload prompt (no surprise camera-permission dialog); the
+   camera only starts — and only asks for permission — when the shopper
+   explicitly chooses it. The viewfinder box adopts the camera's real
+   aspect ratio and snap() captures the full frame. */
 function CaptureScreen({ onPhoto, loggedIn }: { onPhoto: (dataUrl: string, remember: boolean) => void; loggedIn: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [mode, setMode] = useState<"upload" | "camera">("upload");
   const [camState, setCamState] = useState<"starting" | "live" | "denied">("starting");
   const [camAr, setCamAr] = useState<number | null>(null);
-  const [remember, setRemember] = useState(false);
+  const [remember, setRemember] = useState(true);
   const t = useT();
 
   useEffect(() => {
+    if (mode !== "camera") return;
     let cancelled = false;
+    setCamState("starting");
     (async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1280 } } });
@@ -244,8 +259,8 @@ function CaptureScreen({ onPhoto, loggedIn }: { onPhoto: (dataUrl: string, remem
         setCamState("live");
       } catch { if (!cancelled) setCamState("denied"); }
     })();
-    return () => { cancelled = true; streamRef.current?.getTracks().forEach((tr) => tr.stop()); };
-  }, []);
+    return () => { cancelled = true; streamRef.current?.getTracks().forEach((tr) => tr.stop()); streamRef.current = null; };
+  }, [mode]);
 
   const snap = () => {
     const v = videoRef.current;
@@ -268,39 +283,57 @@ function CaptureScreen({ onPhoto, loggedIn }: { onPhoto: (dataUrl: string, remem
   return (
     <div className="peek" style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: "14px 20px 30px" }}>
       <div className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(19px, 3vw, 24px)", textAlign: "center", color: "var(--ink)" }}>
-        {t.standBack}
+        {mode === "upload" ? t.uploadTitle : t.standBack}
       </div>
 
-      <div
-        onClick={camState === "denied" ? () => fileRef.current?.click() : undefined}
-        className="k-cam"
-        style={{
-          ...(camAr ? ({ "--ar": String(camAr) } as React.CSSProperties) : {}),
-          borderRadius: 20, overflow: "hidden", background: "var(--ink)", position: "relative",
-          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          margin: "14px 0 16px", cursor: camState === "denied" ? "pointer" : "default",
-        }}>
-        {camState !== "denied" ? (
-          /* box matches the stream's aspect ratio, so nothing is cropped */
-          <video ref={videoRef} playsInline muted
-            onLoadedMetadata={(e) => {
-              const el = e.currentTarget;
-              if (el.videoWidth && el.videoHeight) setCamAr(el.videoWidth / el.videoHeight);
-            }}
-            style={{ width: "100%", height: "100%", objectFit: "contain", transform: "scaleX(-1)" }} />
-        ) : (
-          <div style={{ textAlign: "center", color: "rgba(255,255,255,.65)", padding: 24, fontSize: 14, lineHeight: 1.6 }}>
-            {t.cameraUnavailable}<br />
-            <span style={{ color: "var(--butter)", fontWeight: 600 }}>{t.tapAnywhere}</span><br />{t.uploadInstead}
-          </div>
-        )}
-        {camState === "starting" && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.55)", fontSize: 13 }}>
-            <EeMark size={34} looking color="rgba(255,255,255,.8)" />
-            {t.startingCamera}
-          </div>
-        )}
-      </div>
+      {mode === "upload" ? (
+        /* upload-first: the whole box is the file picker — no camera
+           permission is requested unless the shopper asks for the camera */
+        <div
+          onClick={() => fileRef.current?.click()}
+          className="k-cam"
+          style={{
+            "--ar": "3/4",
+            borderRadius: 20, border: "2px dashed var(--violet)", background: "var(--card)",
+            display: "flex", flexDirection: "column", gap: 12, alignItems: "center", justifyContent: "center",
+            flexShrink: 0, margin: "14px 0 16px", padding: 24, cursor: "pointer", textAlign: "center",
+          } as React.CSSProperties}>
+          <span style={{ fontSize: 40, lineHeight: 1 }} aria-hidden>🧍</span>
+          <div style={{ fontSize: 14, lineHeight: 1.6, color: "var(--stone)", maxWidth: 260 }}>{t.uploadHint}</div>
+          <span className="ph-btn btn-violet" style={{ padding: "12px 26px", fontSize: 15 }}>{t.uploadCta}</span>
+        </div>
+      ) : (
+        <div
+          onClick={camState === "denied" ? () => fileRef.current?.click() : undefined}
+          className="k-cam"
+          style={{
+            ...(camAr ? ({ "--ar": String(camAr) } as React.CSSProperties) : {}),
+            borderRadius: 20, overflow: "hidden", background: "var(--ink)", position: "relative",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            margin: "14px 0 16px", cursor: camState === "denied" ? "pointer" : "default",
+          }}>
+          {camState !== "denied" ? (
+            /* box matches the stream's aspect ratio, so nothing is cropped */
+            <video ref={videoRef} playsInline muted
+              onLoadedMetadata={(e) => {
+                const el = e.currentTarget;
+                if (el.videoWidth && el.videoHeight) setCamAr(el.videoWidth / el.videoHeight);
+              }}
+              style={{ width: "100%", height: "100%", objectFit: "contain", transform: "scaleX(-1)" }} />
+          ) : (
+            <div style={{ textAlign: "center", color: "rgba(255,255,255,.65)", padding: 24, fontSize: 14, lineHeight: 1.6 }}>
+              {t.cameraUnavailable}<br />
+              <span style={{ color: "var(--butter)", fontWeight: 600 }}>{t.tapAnywhere}</span><br />{t.uploadInstead}
+            </div>
+          )}
+          {camState === "starting" && (
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.55)", fontSize: 13 }}>
+              <EeMark size={34} looking color="rgba(255,255,255,.8)" />
+              {t.startingCamera}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ maxWidth: 340, textAlign: "left", background: "var(--butter)", borderRadius: 18, padding: "14px 18px", fontSize: 13.5, lineHeight: 1.6, color: "var(--ink)" }}>
         <b>{t.consentTitle}</b> {t.consentBody}{" "}
@@ -310,14 +343,22 @@ function CaptureScreen({ onPhoto, loggedIn }: { onPhoto: (dataUrl: string, remem
       </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", margin: "16px 0 12px" }}>
-        {camState === "live" && (
-          <button className="ph-btn btn-violet" onClick={snap} style={{ padding: "14px 34px", fontSize: 16 }}>
-            {t.agreeTakePhoto}
+        {mode === "upload" ? (
+          <button className="ph-btn btn-outline" onClick={() => setMode("camera")} style={{ padding: "12px 24px", fontSize: 15 }}>
+            {t.useCameraInstead}
           </button>
+        ) : (
+          <>
+            {camState === "live" && (
+              <button className="ph-btn btn-violet" onClick={snap} style={{ padding: "14px 34px", fontSize: 16 }}>
+                {t.agreeTakePhoto}
+              </button>
+            )}
+            <button className="ph-btn btn-outline" onClick={() => fileRef.current?.click()} style={{ padding: "12px 24px", fontSize: 15 }}>
+              {t.agreeUpload}
+            </button>
+          </>
         )}
-        <button className="ph-btn btn-outline" onClick={() => fileRef.current?.click()} style={{ padding: "12px 24px", fontSize: 15 }}>
-          {t.agreeUpload}
-        </button>
         <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleUpload(e.target.files?.[0])} />
       </div>
       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--stone)", cursor: "pointer" }}>
@@ -492,10 +533,20 @@ function InterestedModal({ shop, garment, recommended, onClose }: { shop: Shop; 
     `Namaste! I tried on "${garment.name}"${size ? " (size " + size + ")" : ""} at ${shop.name || "your shop"} with peeq and I want it.`
   );
 
-  const canSend = name.trim().length >= 2 && phone.replace(/\D/g, "").length >= 7;
+  const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
+
+  const validate = (): boolean => {
+    const digits = phone.replace(/\D/g, "");
+    const next = {
+      name: name.trim().length < 2 ? t.errName : undefined,
+      phone: digits.length < 7 || digits.length > 15 ? t.errPhone : undefined,
+    };
+    setErrors(next);
+    return !next.name && !next.phone;
+  };
 
   const send = async () => {
-    if (!canSend) return;
+    if (!validate()) return;
     setState("sending");
     try {
       await submitLead(shop, garment, { name: name.trim(), phone: phone.trim(), size });
@@ -564,10 +615,14 @@ function InterestedModal({ shop, garment, recommended, onClose }: { shop: Shop; 
                   </div>
                 </div>
               )}
-              <input style={input} placeholder={t.yourName} value={name} maxLength={80}
-                onChange={(e) => setName(e.target.value)} />
-              <input style={input} placeholder={t.phoneNumber} value={phone} maxLength={30} inputMode="tel"
-                onChange={(e) => setPhone(e.target.value.replace(/[^0-9+ ]/g, ""))} />
+              <input style={{ ...input, borderColor: errors.name ? "var(--camel)" : "var(--line)" }}
+                placeholder={t.yourName} value={name} maxLength={80} aria-invalid={!!errors.name}
+                onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((x) => ({ ...x, name: undefined })); }} />
+              {errors.name && <div style={{ fontSize: 12.5, color: "var(--camel)", marginTop: -4 }}>{errors.name}</div>}
+              <input style={{ ...input, borderColor: errors.phone ? "var(--camel)" : "var(--line)" }}
+                placeholder={t.phoneNumber} value={phone} maxLength={30} inputMode="tel" aria-invalid={!!errors.phone}
+                onChange={(e) => { setPhone(e.target.value.replace(/[^0-9+ ]/g, "")); if (errors.phone) setErrors((x) => ({ ...x, phone: undefined })); }} />
+              {errors.phone && <div style={{ fontSize: 12.5, color: "var(--camel)", marginTop: -4 }}>{errors.phone}</div>}
             </div>
             {state === "error" && (
               <div style={{ fontSize: 12.5, color: "#C0554D", marginTop: 10 }}>
@@ -579,8 +634,8 @@ function InterestedModal({ shop, garment, recommended, onClose }: { shop: Shop; 
                 style={{ flex: 1, border: "1px solid var(--line)", color: "var(--ink)", padding: 13, fontSize: 14, borderRadius: 999, fontWeight: 600 }}>
                 {t.cancel}
               </button>
-              <button className="ph-btn" disabled={!canSend || state === "sending"} onClick={send}
-                style={{ flex: 2, background: "var(--ink)", color: "var(--paper)", padding: 13, fontSize: 14, borderRadius: 999, fontWeight: 700, fontFamily: "'Baloo 2', cursive", opacity: !canSend || state === "sending" ? 0.6 : 1 }}>
+              <button className="ph-btn" disabled={state === "sending"} onClick={send}
+                style={{ flex: 2, background: "var(--ink)", color: "var(--paper)", padding: 13, fontSize: 14, borderRadius: 999, fontWeight: 700, fontFamily: "'Baloo 2', cursive", opacity: state === "sending" ? 0.6 : 1 }}>
                 {state === "sending" ? t.sending : t.sendToShop}
               </button>
             </div>
@@ -714,14 +769,16 @@ interface TryOnScreenProps {
   setSelected: (g: Garment | null) => void;
   retakePhoto: () => void;
   initialGarment: Garment | null;
+  cart: ReturnType<typeof useCart> | null; // null = no public storefront (no slug) — hide add-to-bag
   onLookSaved: () => void;
 }
 
-function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selected, setSelected, retakePhoto, initialGarment, onLookSaved }: TryOnScreenProps) {
+function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selected, setSelected, retakePhoto, initialGarment, cart, onLookSaved }: TryOnScreenProps) {
   const [phase, setPhase] = useState<"idle" | "generating" | "result" | "preview">("idle");
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [interested, setInterested] = useState(false);
+  const [bagState, setBagState] = useState<"idle" | "pick" | "added">("idle");
   const [lookState, setLookState] = useState<"idle" | "saving" | "saved">("idle");
   const [shareState, setShareState] = useState<"idle" | "sharing">("idle");
   const [showOriginal, setShowOriginal] = useState(false); // hold-to-compare
@@ -754,6 +811,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     setNotice("");
     setResultImage(null);
     setLookState(savedIds.current.has(garment.id) ? "saved" : "idle");
+    setBagState("idle");
     setShowOriginal(false);
     setPhase("generating");
     setOverlay({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
@@ -792,8 +850,18 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     setResultImage(h.url);
     setNotice("");
     setLookState(savedIds.current.has(h.garment.id) ? "saved" : "idle");
+    setBagState("idle");
     setShowOriginal(false);
     setPhase("result");
+  };
+
+  /* straight from the mirror into the bag — same per-slug cart the storefront
+     checks out from, so the try-on high converts without re-finding the piece */
+  const addToBag = (size: string) => {
+    if (!cart || !selected) return;
+    cart.add(selected, size);
+    setBagState("added");
+    setTimeout(() => setBagState("idle"), 2200);
   };
 
   /* drag the garment overlay (manual preview fallback) */
@@ -909,6 +977,35 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
                     📏 {t.findMySize}
                   </button>
             )}
+            {cart && selected.inStock && (
+              <button className="ph-btn"
+                onClick={() => {
+                  if (bagState === "added") return;
+                  if (selected.sizes.length > 1) setBagState(bagState === "pick" ? "idle" : "pick");
+                  else addToBag(selected.sizes[0] || "");
+                }}
+                style={{ background: bagState === "added" ? "var(--forest)" : "var(--violet)", color: "#fff", padding: "11px 24px", fontSize: 15, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999 }}>
+                {bagState === "added" ? t.addedToBag : t.addToBag}
+              </button>
+            )}
+            {cart && bagState === "pick" && selected.sizes.length > 1 && (
+              <div className="peek" style={{ width: "100%", display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
+                <span style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600 }}>{t.chooseSize}</span>
+                {selected.sizes.map((s) => {
+                  const isRec = recSize === s;
+                  return (
+                    <button key={s} className="ph-btn" onClick={() => addToBag(s)}
+                      style={{
+                        padding: "8px 16px", fontSize: 13, borderRadius: 999, fontWeight: 600,
+                        background: "var(--paper)", color: "var(--ink)",
+                        border: isRec ? "1.5px dashed var(--violet)" : "1px solid var(--line)",
+                      }}>
+                      {s}{isRec ? " ★" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <button className="ph-btn" onClick={() => setInterested(true)}
               style={{ background: "var(--ink)", color: "var(--paper)", padding: "11px 24px", fontSize: 15, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999 }}>
               {t.iWantThis}
@@ -937,6 +1034,12 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
               style={{ border: "1px solid " + (lookState === "saved" ? "var(--violet)" : "var(--line)"), color: lookState === "saved" ? "var(--violet)" : "var(--ink)", padding: "9px 18px", fontSize: 13.5, fontWeight: 600, borderRadius: 999, background: "transparent" }}>
               {lookState === "saved" ? t.savedLook : lookState === "saving" ? t.savingLook : t.saveLook}
             </button>
+            {cart && cart.count > 0 && (
+              <a href={`/s/${shop.slug}`}
+                style={{ width: "100%", textAlign: "center", fontSize: 13.5, fontWeight: 600, color: "var(--violet)", textDecoration: "underline", textUnderlineOffset: 3 }}>
+                {t.viewBag(cart.count)}
+              </a>
+            )}
             <span style={{ fontSize: 11.5, color: "var(--stone)", width: "100%", textAlign: "center" }}>{t.aiResultNote}</span>
           </div>
         )}

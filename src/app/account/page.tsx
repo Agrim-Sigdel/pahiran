@@ -9,6 +9,7 @@ import {
   deviceLooksCount, migrateDeviceLooksToCloud, type SavedLook,
 } from "@/lib/looks";
 import { npr } from "@/lib/constants";
+import { nameError, phoneError, fieldErrorStyle } from "@/lib/validate";
 
 /* Shopper account hub — your saved try-ons, contact details (for one-tap
    checkout), and full deletion, all synced to your account and available on
@@ -85,7 +86,20 @@ function SignedIn({ email }: { email: string }) {
     return urls.current.get(l.id)!;
   };
 
-  const saveInfo = async () => { await saveContact(contact); setSavedMsg(true); setTimeout(() => setSavedMsg(false), 1600); };
+  const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
+
+  // both fields are optional prefill data — validated only when filled in
+  const saveInfo = async () => {
+    const next = {
+      name: contact.name.trim() ? nameError(contact.name) ?? undefined : undefined,
+      phone: phoneError(contact.phone, { required: false }) ?? undefined,
+    };
+    setErrors(next);
+    if (next.name || next.phone) return;
+    await saveContact({ name: contact.name.trim(), phone: contact.phone.trim() });
+    setSavedMsg(true);
+    setTimeout(() => setSavedMsg(false), 1600);
+  };
 
   const input: React.CSSProperties = {
     padding: "11px 14px", borderRadius: 12, border: "1px solid var(--line)", background: "#fff", color: "var(--ink)", fontSize: 14, width: "100%",
@@ -136,8 +150,16 @@ function SignedIn({ email }: { email: string }) {
           <h2 className="ph-display" style={{ fontSize: 18, fontWeight: 600, color: "var(--ink)", margin: "0 0 4px" }}>your details</h2>
           <p style={{ fontSize: 13, color: "var(--stone)", margin: "0 0 14px" }}>Saved for one-tap checkout — never shown to other shoppers.</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-            <input style={input} placeholder="Your name" maxLength={80} value={contact.name} onChange={(e) => setContact((c) => ({ ...c, name: e.target.value }))} />
-            <input style={input} placeholder="Phone number" maxLength={30} inputMode="tel" value={contact.phone} onChange={(e) => setContact((c) => ({ ...c, phone: e.target.value.replace(/[^0-9+ ]/g, "") }))} />
+            <div>
+              <input style={{ ...input, borderColor: errors.name ? "var(--camel)" : "var(--line)" }} placeholder="Your name" maxLength={80} value={contact.name} aria-invalid={!!errors.name}
+                onChange={(e) => { setContact((c) => ({ ...c, name: e.target.value })); if (errors.name) setErrors((x) => ({ ...x, name: undefined })); }} />
+              {errors.name && <div style={{ ...fieldErrorStyle, marginTop: 4 }}>{errors.name}</div>}
+            </div>
+            <div>
+              <input style={{ ...input, borderColor: errors.phone ? "var(--camel)" : "var(--line)" }} placeholder="Phone number" maxLength={30} inputMode="tel" value={contact.phone} aria-invalid={!!errors.phone}
+                onChange={(e) => { setContact((c) => ({ ...c, phone: e.target.value.replace(/[^0-9+ ]/g, "") })); if (errors.phone) setErrors((x) => ({ ...x, phone: undefined })); }} />
+              {errors.phone && <div style={{ ...fieldErrorStyle, marginTop: 4 }}>{errors.phone}</div>}
+            </div>
           </div>
           <button className="ph-btn btn-violet" onClick={saveInfo} style={{ marginTop: 14, padding: "10px 22px" }}>
             {savedMsg ? "✓ saved" : "save details"}

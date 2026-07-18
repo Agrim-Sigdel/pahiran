@@ -120,12 +120,28 @@ export function roleHome(role: "shopper" | "vendor"): string {
   return role === "vendor" ? "/dashboard" : "/account";
 }
 
-/** 'shopper' | 'vendor' | null (no profile yet / logged out). */
+/** True when this auth user owns a shop row — the ground truth for vendor-ness. */
+async function ownsShop(uid: string): Promise<boolean> {
+  const { data } = await supabase().from("shops").select("id").eq("owner", uid).maybeSingle();
+  return !!data;
+}
+
+/** 'shopper' | 'vendor' | null (no profile yet / logged out).
+    Owning a shop always means 'vendor', whatever profiles.role says — a shop
+    owner mis-stamped 'shopper' (e.g. a pre-profiles vendor whose first sign-in
+    after the migration went through the shopper flow) is healed on the spot,
+    so they can never be locked out of their own dashboard. */
 export async function getRole(): Promise<"shopper" | "vendor" | null> {
   const uid = await currentUserId();
   if (!uid) return null;
   const { data } = await supabase().from("profiles").select("role").eq("id", uid).maybeSingle();
-  return (data?.role as "shopper" | "vendor") ?? null;
+  const stored = (data?.role as "shopper" | "vendor") ?? null;
+  if (stored === "vendor") return "vendor";
+  if (await ownsShop(uid)) {
+    await markVendor();
+    return "vendor";
+  }
+  return stored;
 }
 
 /** Name + phone for checkout / lead prefill (empty strings if unset). */

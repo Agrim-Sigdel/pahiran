@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import LocationPicker from "@/components/LocationPicker";
+import { nameError, phoneError, fieldErrorStyle } from "@/lib/validate";
 import type { Shop } from "@/lib/types";
 
 /* First-login setup: shown instead of the dashboard until the shop has a
@@ -27,12 +28,23 @@ export default function Onboarding({ shop, onComplete }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  const [errors, setErrors] = useState<{ name?: string; area?: string; whatsapp?: string }>({});
+
   const slug = slugify(name);
   const host = typeof window === "undefined" ? "" : window.location.host;
-  const canSave = name.trim().length >= 2 && area.trim().length >= 2 && !busy;
+
+  const validate = (): boolean => {
+    const next = {
+      name: nameError(name, "Shop name") ?? undefined,
+      area: nameError(area, "Area / city") ?? undefined,
+      whatsapp: phoneError(whatsapp, { required: false }) ?? undefined,
+    };
+    setErrors(next);
+    return !next.name && !next.area && !next.whatsapp;
+  };
 
   const submit = async () => {
-    if (!canSave) return;
+    if (busy || !validate()) return;
     setBusy(true);
     setError("");
     try {
@@ -54,19 +66,25 @@ export default function Onboarding({ shop, onComplete }: {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <label className="field">Shop name
-            <input value={name} autoFocus maxLength={60} placeholder="e.g. Juju Fashion House"
-              onChange={(e) => setName(e.target.value)}
+            <input value={name} autoFocus maxLength={60} placeholder="e.g. Juju Fashion House" aria-invalid={!!errors.name}
+              style={errors.name ? { borderColor: "var(--camel)" } : undefined}
+              onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((x) => ({ ...x, name: undefined })); }}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
+            {errors.name && <span style={{ ...fieldErrorStyle, fontWeight: 400, letterSpacing: 0, textTransform: "none", marginTop: 4, display: "block" }}>{errors.name}</span>}
           </label>
           <label className="field">Area / city
-            <input value={area} maxLength={80} placeholder="e.g. New Road, Kathmandu"
-              onChange={(e) => setArea(e.target.value)}
+            <input value={area} maxLength={80} placeholder="e.g. New Road, Kathmandu" aria-invalid={!!errors.area}
+              style={errors.area ? { borderColor: "var(--camel)" } : undefined}
+              onChange={(e) => { setArea(e.target.value); if (errors.area) setErrors((x) => ({ ...x, area: undefined })); }}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
+            {errors.area && <span style={{ ...fieldErrorStyle, fontWeight: 400, letterSpacing: 0, textTransform: "none", marginTop: 4, display: "block" }}>{errors.area}</span>}
           </label>
           <label className="field">WhatsApp number
-            <input value={whatsapp} maxLength={20} placeholder="e.g. 9779841000000" inputMode="tel"
-              onChange={(e) => setWhatsapp(e.target.value.replace(/[^0-9+ ]/g, ""))}
+            <input value={whatsapp} maxLength={20} placeholder="e.g. 9779841000000" inputMode="tel" aria-invalid={!!errors.whatsapp}
+              style={errors.whatsapp ? { borderColor: "var(--camel)" } : undefined}
+              onChange={(e) => { setWhatsapp(e.target.value.replace(/[^0-9+ ]/g, "")); if (errors.whatsapp) setErrors((x) => ({ ...x, whatsapp: undefined })); }}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
+            {errors.whatsapp && <span style={{ ...fieldErrorStyle, fontWeight: 400, letterSpacing: 0, textTransform: "none", marginTop: 4, display: "block" }}>{errors.whatsapp}</span>}
             <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--mut)", marginTop: 4, display: "block" }}>
               Orders arrive here. You can add or change it later in Settings.
             </span>
@@ -99,8 +117,8 @@ export default function Onboarding({ shop, onComplete }: {
 
           {error && <div style={{ fontSize: 13, color: "var(--camel)" }}>{error}</div>}
 
-          <button className="ph-btn btn-solid" disabled={!canSave} onClick={submit}
-            style={{ marginTop: 4, opacity: canSave ? 1 : 0.55 }}>
+          <button className="ph-btn btn-solid" disabled={busy} onClick={submit}
+            style={{ marginTop: 4, opacity: busy ? 0.55 : 1 }}>
             {busy ? "setting up…" : "open my dashboard"}
           </button>
         </div>

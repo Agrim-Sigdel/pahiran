@@ -1,8 +1,10 @@
-import { redirect } from "next/navigation";
+"use client";
 
-/* Vendor sign-in moved into the unified /signin. This route stays for old
-   bookmarks / links and forwards with the vendor intent preselected. */
+import AuthPage from "@/components/AuthPage";
+
+/* Vendor sign-in — the surface /dashboard, /kiosk and the owner landing page
+   funnel to. Shoppers sign in at /signin. */
 
 export default function LoginPage() {
-  redirect("/signin?intent=vendor");
+  return <AuthPage intent="vendor" />;
 }

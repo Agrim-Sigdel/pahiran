@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { npr, waLink, CHECKOUT } from "@/lib/constants";
 import { submitLead } from "@/lib/storage";
+import { nameError, phoneError, fieldErrorStyle } from "@/lib/validate";
 import { useCart, type CartLine } from "@/lib/cart";
 import type { Garment, Shop } from "@/lib/types";
 
@@ -100,13 +101,19 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
   const [name, setName] = useState(defaultName || "");
   const [phone, setPhone] = useState(defaultPhone || "");
   const [state, setState] = useState<"cart" | "sending" | "done">("cart");
+  const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
 
   useEffect(() => { if (defaultName && !name) setName(defaultName); }, [defaultName]);
   useEffect(() => { if (defaultPhone && !phone) setPhone(defaultPhone); }, [defaultPhone]);
 
   const canWa = CHECKOUT.whatsapp && !!waLink(shop.whatsapp, "x");
   const canLead = CHECKOUT.leads;
-  const canCheckout = name.trim().length >= 2 && phone.replace(/\D/g, "").length >= 7;
+
+  const validate = (): boolean => {
+    const next = { name: nameError(name) ?? undefined, phone: phoneError(phone) ?? undefined };
+    setErrors(next);
+    return !next.name && !next.phone;
+  };
 
   const orderMessage = (): string => {
     const lines = cart.lines
@@ -119,7 +126,7 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
   };
 
   const checkout = async () => {
-    if (!canCheckout) return;
+    if (!validate()) return;
     setState("sending");
     if (canLead) {
       for (const l of cart.lines) {
@@ -186,12 +193,16 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
                 </div>
               )}
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="Your name"
-                  style={{ padding: "12px 15px", borderRadius: 14, border: "1px solid var(--line)", background: "#fff", color: "var(--ink)", fontSize: 15 }} />
-                <input value={phone} maxLength={30} inputMode="tel" onChange={(e) => setPhone(e.target.value.replace(/[^0-9+ ]/g, ""))} placeholder="Phone number"
-                  style={{ padding: "12px 15px", borderRadius: 14, border: "1px solid var(--line)", background: "#fff", color: "var(--ink)", fontSize: 15 }} />
-                <button className="ph-btn" disabled={!canCheckout || state === "sending"} onClick={checkout}
-                  style={{ background: canWa ? "var(--whatsapp)" : "var(--violet)", color: "#fff", fontWeight: 700, fontFamily: "'Baloo 2', cursive", fontSize: 16, padding: "14px 0", borderRadius: 999, opacity: !canCheckout || state === "sending" ? 0.6 : 1 }}>
+                <input value={name} maxLength={80} placeholder="Your name" aria-invalid={!!errors.name}
+                  onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((x) => ({ ...x, name: undefined })); }}
+                  style={{ padding: "12px 15px", borderRadius: 14, border: "1px solid " + (errors.name ? "var(--camel)" : "var(--line)"), background: "#fff", color: "var(--ink)", fontSize: 15 }} />
+                {errors.name && <div style={{ ...fieldErrorStyle, marginTop: -4 }}>{errors.name}</div>}
+                <input value={phone} maxLength={30} inputMode="tel" placeholder="Phone number" aria-invalid={!!errors.phone}
+                  onChange={(e) => { setPhone(e.target.value.replace(/[^0-9+ ]/g, "")); if (errors.phone) setErrors((x) => ({ ...x, phone: undefined })); }}
+                  style={{ padding: "12px 15px", borderRadius: 14, border: "1px solid " + (errors.phone ? "var(--camel)" : "var(--line)"), background: "#fff", color: "var(--ink)", fontSize: 15 }} />
+                {errors.phone && <div style={{ ...fieldErrorStyle, marginTop: -4 }}>{errors.phone}</div>}
+                <button className="ph-btn" disabled={state === "sending"} onClick={checkout}
+                  style={{ background: canWa ? "var(--whatsapp)" : "var(--violet)", color: "#fff", fontWeight: 700, fontFamily: "'Baloo 2', cursive", fontSize: 16, padding: "14px 0", borderRadius: 999, opacity: state === "sending" ? 0.6 : 1 }}>
                   {state === "sending" ? "sending…" : canWa ? "place order on WhatsApp" : "place order"}
                 </button>
                 <button className="ph-btn" onClick={onKeepShopping} style={{ color: "var(--stone)", fontSize: 13, padding: 6 }}>
