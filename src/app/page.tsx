@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import ShopsMap, { type MapShop } from "@/components/ShopsMap";
 import HeroTryOn from "@/components/HeroTryOn";
+import AccountMenu from "@/components/AccountMenu";
 import { npr } from "@/lib/constants";
 
 /* Landing — vendor-facing marketing page. Shoppers normally arrive at a
@@ -106,8 +107,9 @@ export default async function Home() {
         <div className="nav-logo">
           <div className="wordmark" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>p<span className="ee">ee</span>q</div>
         </div>
-        <div className="nav-tools">
+        <div className="nav-tools" style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <Link href="/owner" style={{ color: "var(--violet)" }}>for store owners</Link>
+          <AccountMenu />
         </div>
       </nav>
 

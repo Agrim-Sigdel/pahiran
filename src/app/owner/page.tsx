@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AccountMenu from "@/components/AccountMenu";
 
 /* Vendor landing — where "I own a store" traffic from the main page lands.
    Structure: hook → the poster creative → three proof blocks (in-store QR,
@@ -24,8 +25,9 @@ export default function OwnerPage() {
             <div className="wordmark" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>p<span className="ee">ee</span>q</div>
           </Link>
         </div>
-        <div className="nav-tools">
-          <Link href="/login" style={{ color: "var(--violet)" }}>vendor log in</Link>
+        <div className="nav-tools" style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <Link href="/signin?intent=vendor" style={{ color: "var(--violet)" }}>vendor log in</Link>
+          <AccountMenu />
         </div>
       </nav>
 
@@ -36,7 +38,7 @@ export default function OwnerPage() {
           stop answering<br />&ldquo;will this suit me?&rdquo;
         </h1>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
-          <Link href="/login" className="btn-violet" style={{ padding: "15px 40px" }}>create your shop — free</Link>
+          <Link href="/signin?intent=vendor" className="btn-violet" style={{ padding: "15px 40px" }}>create your shop — free</Link>
           <Link href="/" className="btn-outline">try it as a shopper</Link>
         </div>
       </section>
@@ -140,7 +142,7 @@ export default function OwnerPage() {
         <p style={{ color: "var(--stone)", fontSize: 15, margin: "0 0 22px" }}>
           free to start · works on any phone or tablet · नेपाली र english
         </p>
-        <Link href="/login" className="btn-solid" style={{ padding: "15px 44px" }}>create your shop</Link>
+        <Link href="/signin?intent=vendor" className="btn-solid" style={{ padding: "15px 44px" }}>create your shop</Link>
       </section>
 
       {/* footer */}

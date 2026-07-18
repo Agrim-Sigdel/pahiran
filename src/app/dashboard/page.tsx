@@ -12,6 +12,7 @@ import {
   updateShopSlug,
 } from "@/lib/storage";
 import { reportError } from "@/lib/logging";
+import { getRole, markVendor } from "@/lib/account";
 import type { Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
@@ -30,6 +31,13 @@ export default function DashboardPage() {
           router.replace("/login");
           return;
         }
+        // shopper accounts don't get a shop provisioned — send them to /account
+        const role = await getRole();
+        if (role === "shopper") {
+          router.replace("/account");
+          return;
+        }
+        await markVendor(); // visiting the dashboard is the explicit vendor action
       }
       const s = await loadShop();
       if (s) setShop(s);
