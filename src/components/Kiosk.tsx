@@ -285,7 +285,7 @@ function CaptureScreen({ onPhoto, loggedIn }: { onPhoto: (dataUrl: string, remem
       <div className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(19px, 3vw, 24px)", textAlign: "center", color: "var(--ink)" }}>
         {mode === "upload" ? t.uploadTitle : t.standBack}
       </div>
-      <div style={{ marginTop: 6, fontSize: 12.5, fontWeight: 600, color: "var(--ink)", background: "var(--butter)", borderRadius: 999, padding: "5px 14px" }}>
+      <div style={{ marginTop: 5, fontSize: 13, color: "var(--stone)" }}>
         {t.waistUpNote}
       </div>
 
@@ -338,8 +338,8 @@ function CaptureScreen({ onPhoto, loggedIn }: { onPhoto: (dataUrl: string, remem
         </div>
       )}
 
-      <div style={{ maxWidth: 340, textAlign: "left", background: "var(--butter)", borderRadius: 18, padding: "14px 18px", fontSize: 13.5, lineHeight: 1.6, color: "var(--ink)" }}>
-        <b>{t.consentTitle}</b> {t.consentBody}{" "}
+      <div style={{ maxWidth: 340, textAlign: "left", background: "var(--card)", border: "1px solid var(--line)", borderRadius: 18, padding: "14px 18px", fontSize: 13, lineHeight: 1.6, color: "var(--stone)" }}>
+        <b style={{ color: "var(--ink)" }}>{t.consentTitle}</b> {t.consentBody}{" "}
         <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "var(--violet)", textUnderlineOffset: 2 }}>
           {t.privacyLink}
         </a>

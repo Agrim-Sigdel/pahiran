@@ -241,7 +241,7 @@ function BuyPanel({ garment, slug, shop, onAdd }: {
       </div>
 
       <p style={{ fontSize: 12.5, color: "var(--stone)", marginTop: 18, lineHeight: 1.6, maxWidth: 420 }}>
-        No online payment — add pieces to your bag and the shop confirms price, payment and delivery with you directly.
+        No online payment. Add pieces to your bag and the shop confirms price, payment and delivery with you directly.
       </p>
     </div>
   );

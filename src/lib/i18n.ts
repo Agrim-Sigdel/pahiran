@@ -29,7 +29,7 @@ const en = {
 
   consentTitle: "Your photo, your call.",
   consentBody:
-    "It's used only to show these clothes on you, processed securely by our AI service, and never kept by the shop. Nothing is stored unless you save a look, and that stays on this device.",
+    "Used only to show these clothes on you, never kept by the shop. Saved looks stay on this device.",
   agreeTakePhoto: "agree & take photo",
   agreeUpload: "upload instead",
 
@@ -39,7 +39,7 @@ const en = {
   useCameraInstead: "or take one with the camera",
 
   standBack: "stand back so we can see you fully",
-  waistUpNote: "use a waist-up photo — not a close-up selfie",
+  waistUpNote: "use a waist-up photo, not a close-up selfie",
   cameraUnavailable: "Camera isn't available here.",
   tapAnywhere: "Tap anywhere in this box",
   uploadInstead: "to upload a full-body photo instead.",
@@ -141,8 +141,8 @@ const ne: typeof en = {
 
   consentTitle: "तपाईंको फोटो, तपाईंको निर्णय।",
   consentBody:
-    "यो यी लुगाहरू तपाईंमा देखाउन मात्र प्रयोग हुन्छ, हाम्रो AI सेवाले सुरक्षित रूपमा प्रोसेस गर्छ, र पसलले कहिल्यै राख्दैन। तपाईंले लुक सेभ नगरेसम्म केही पनि सेभ हुँदैन — गरे पनि यही डिभाइसमा मात्र रहन्छ।",
-  agreeTakePhoto: "मन्जुर — फोटो खिच्नुहोस्",
+    "लुगा तपाईंमा देखाउन मात्र प्रयोग हुन्छ, पसलले कहिल्यै राख्दैन। सेभ गरेका लुक यही डिभाइसमा मात्र रहन्छन्।",
+  agreeTakePhoto: "मन्जुर, फोटो खिच्नुहोस्",
   agreeUpload: "अपलोड गर्नुहोस्",
 
   uploadTitle: "आफ्नो पूरा शरीर देखिने फोटो हाल्नुहोस्",
@@ -151,7 +151,7 @@ const ne: typeof en = {
   useCameraInstead: "वा क्यामेराले खिच्नुहोस्",
 
   standBack: "पूरै देखिने गरी अलि पर उभिनुहोस्",
-  waistUpNote: "कम्मरदेखि माथिको फोटो — नजिकको सेल्फी होइन",
+  waistUpNote: "कम्मरदेखि माथिको फोटो, नजिकको सेल्फी होइन",
   cameraUnavailable: "यहाँ क्यामेरा उपलब्ध छैन।",
   tapAnywhere: "यो बाकसभित्र जहाँसुकै ट्याप गर्नुहोस्",
   uploadInstead: "र पूरा शरीर देखिने फोटो अपलोड गर्नुहोस्।",
