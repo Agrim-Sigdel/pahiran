@@ -59,7 +59,7 @@ export default function Dashboard({
       {/* header */}
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22px 0 16px", flexWrap: "wrap", gap: 12 }}>
         <div>
-          <div className="wordmark" style={{ fontSize: 22 }}>peeq</div>
+          <div className="wordmark" style={{ fontSize: 22 }}>p<span className="ee" style={{ color: "var(--butter-deep)" }}>ee</span>q</div>
           <div style={{ fontSize: 12, color: "var(--mut)", letterSpacing: ".12em", marginTop: 3 }}>
             {[shop.name, shop.area].filter(Boolean).join(" · ") || "Vendor dashboard"}
           </div>
