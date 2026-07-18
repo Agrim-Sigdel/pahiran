@@ -6,7 +6,7 @@ import AccountMenu from "@/components/AccountMenu";
    catalog, analytics) → steps strip → close. Every CTA funnels to /login. */
 
 const VENDOR_STEPS: [string, string][] = [
-  ["photograph your pieces", "one phone photo per garment — we help you shoot it"],
+  ["photograph your pieces", "one phone photo per garment. we help you shoot it"],
   ["print the QR tags", "every hanger gets its own try-on code"],
   ["shoppers peeq it", "on their own photo, no app, no account"],
   ["leads reach you", "name, size and number in your dashboard"],
@@ -136,9 +136,15 @@ export default function OwnerPage() {
 
       {/* steps strip */}
       <section className="section-pad" style={{ background: "var(--card)", borderTop: "1px solid var(--line)" }}>
-        <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(22px, 3vw, 28px)", color: "var(--ink)", textAlign: "center", margin: "0 0 26px" }}>
-          live in an afternoon
-        </h2>
+        <div style={{ textAlign: "center", margin: "0 0 26px" }}>
+          <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(22px, 3vw, 28px)", color: "var(--ink)", margin: 0 }}>
+            your whole shop, on peeq
+          </h2>
+          <p style={{ color: "var(--stone)", fontSize: 14.5, margin: "8px auto 0", maxWidth: 460, lineHeight: 1.6 }}>
+            set up in one afternoon, then manage your inventory, prices, QR tags and
+            customer leads from a single dashboard.
+          </p>
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 14, maxWidth: 1040, margin: "0 auto" }}>
           {VENDOR_STEPS.map(([t, d], i) => (
             <div key={t} style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "20px 18px" }}>
