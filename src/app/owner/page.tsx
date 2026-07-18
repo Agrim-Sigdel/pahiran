@@ -38,7 +38,7 @@ export default function OwnerPage() {
           stop answering<br />&ldquo;will this suit me?&rdquo;
         </h1>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
-          <Link href="/login" className="btn-violet" style={{ padding: "15px 40px" }}>create your shop — free</Link>
+          <Link href="/login" className="btn-violet" style={{ padding: "15px 40px" }}>create your shop free</Link>
           <Link href="/" className="btn-outline">try it as a shopper</Link>
         </div>
       </section>
@@ -115,6 +115,22 @@ export default function OwnerPage() {
             </p>
           </div>
           <img className="phone" src="/hero/owner-analytics.jpg" alt="peeq analytics — try-ons per day and most-tried items" />
+        </div>
+      </section>
+
+      {/* custom solution / demo call */}
+      <section style={{ maxWidth: 1040, margin: "0 auto", padding: "0 20px 40px" }}>
+        <div style={{ background: "var(--ink)", borderRadius: "var(--radius-card)", padding: "38px 30px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8 }}>
+          <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(20px, 2.8vw, 26px)", color: "var(--paper)", margin: 0, maxWidth: 560 }}>
+            need a custom solution or integration for your business?
+          </h2>
+          <p style={{ color: "rgba(250,246,240,.65)", fontSize: 14.5, margin: 0 }}>
+            schedule a free demo call with us. 15 minutes, no strings.
+          </p>
+          <a href="https://cal.com/contractorops/15min" target="_blank" rel="noopener noreferrer" className="ph-btn"
+            style={{ background: "var(--butter)", color: "var(--ink)", padding: "13px 32px", fontSize: 15, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999, textDecoration: "none", display: "inline-block", marginTop: 12 }}>
+            book a free demo call →
+          </a>
         </div>
       </section>
 

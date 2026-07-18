@@ -186,7 +186,13 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
           {busy ? "one moment…" : mode === "signin" ? "sign in" : "sign up"}
         </button>
       </form>
-      {message && <div style={{ marginTop: 14, fontSize: 13, color: "var(--camel)" }}>{message}</div>}
+      {message && (
+        message.startsWith("Check your email") ? (
+          <div className="note-ok" style={{ marginTop: 14 }}>{message}</div>
+        ) : (
+          <div style={{ marginTop: 14, fontSize: 13, color: "var(--camel)" }}>{message}</div>
+        )
+      )}
       <button className="ph-btn" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); setFieldErrors({}); }}
         style={{ color: "var(--stone)", fontSize: 13, marginTop: 18, textDecoration: "underline", textUnderlineOffset: 3 }}>
         {mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
