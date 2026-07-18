@@ -101,6 +101,19 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
    but a longer closed phase than `blink` — actually visible at a glance. */
 .wordmark .ee { color: var(--butter); display: inline-block; animation: ee-wink 2.6s infinite; }
 .efc-nav .wordmark .ee { color: var(--butter-deep); } /* dimmer on the light nav */
+/* success note — green light that slides in (email-confirm etc.) */
+.note-ok {
+  display: flex; align-items: center; gap: 9px; text-align: left;
+  background: #E9F7EE; border: 1px solid #7BCB9A; color: #0B6B3A;
+  border-radius: 14px; padding: 12px 16px; font-size: 13.5px; font-weight: 600;
+  animation: note-slide .35s ease-out;
+}
+.note-ok::before { content: "✓"; flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: #2FA968; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+@keyframes note-slide {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: none; }
+}
+
 @keyframes ee-wink {
   0%, 89%, 100% { transform: scaleY(1); }
   92%, 97% { transform: scaleY(.08); }

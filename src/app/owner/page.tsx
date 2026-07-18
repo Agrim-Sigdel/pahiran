@@ -6,7 +6,7 @@ import AccountMenu from "@/components/AccountMenu";
    catalog, analytics) → steps strip → close. Every CTA funnels to /login. */
 
 const VENDOR_STEPS: [string, string][] = [
-  ["photograph your pieces", "one phone photo per garment — we help you shoot it"],
+  ["photograph your pieces", "one phone photo per garment. we help you shoot it"],
   ["print the QR tags", "every hanger gets its own try-on code"],
   ["shoppers peeq it", "on their own photo, no app, no account"],
   ["leads reach you", "name, size and number in your dashboard"],
@@ -38,7 +38,7 @@ export default function OwnerPage() {
           stop answering<br />&ldquo;will this suit me?&rdquo;
         </h1>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
-          <Link href="/login" className="btn-violet" style={{ padding: "15px 40px" }}>create your shop — free</Link>
+          <Link href="/login" className="btn-violet" style={{ padding: "15px 40px" }}>create your shop free</Link>
           <Link href="/" className="btn-outline">try it as a shopper</Link>
         </div>
       </section>
@@ -118,11 +118,33 @@ export default function OwnerPage() {
         </div>
       </section>
 
+      {/* custom solution / demo call */}
+      <section style={{ maxWidth: 1040, margin: "0 auto", padding: "0 20px 40px" }}>
+        <div style={{ background: "var(--ink)", borderRadius: "var(--radius-card)", padding: "38px 30px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8 }}>
+          <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(20px, 2.8vw, 26px)", color: "var(--paper)", margin: 0, maxWidth: 560 }}>
+            need a custom solution or integration for your business?
+          </h2>
+          <p style={{ color: "rgba(250,246,240,.65)", fontSize: 14.5, margin: 0 }}>
+            schedule a free demo call with us. 15 minutes, no strings.
+          </p>
+          <a href="https://cal.com/contractorops/15min" target="_blank" rel="noopener noreferrer" className="ph-btn"
+            style={{ background: "var(--butter)", color: "var(--ink)", padding: "13px 32px", fontSize: 15, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999, textDecoration: "none", display: "inline-block", marginTop: 12 }}>
+            book a free demo call →
+          </a>
+        </div>
+      </section>
+
       {/* steps strip */}
       <section className="section-pad" style={{ background: "var(--card)", borderTop: "1px solid var(--line)" }}>
-        <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(22px, 3vw, 28px)", color: "var(--ink)", textAlign: "center", margin: "0 0 26px" }}>
-          live in an afternoon
-        </h2>
+        <div style={{ textAlign: "center", margin: "0 0 26px" }}>
+          <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(22px, 3vw, 28px)", color: "var(--ink)", margin: 0 }}>
+            your whole shop, on peeq
+          </h2>
+          <p style={{ color: "var(--stone)", fontSize: 14.5, margin: "8px auto 0", maxWidth: 460, lineHeight: 1.6 }}>
+            set up in one afternoon, then manage your inventory, prices, QR tags and
+            customer leads from a single dashboard.
+          </p>
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 14, maxWidth: 1040, margin: "0 auto" }}>
           {VENDOR_STEPS.map(([t, d], i) => (
             <div key={t} style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "20px 18px" }}>
