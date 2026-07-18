@@ -37,6 +37,7 @@ export default function Dashboard({
   const [editing, setEditing] = useState<Garment | null>(null);
   const [filter, setFilter] = useState("All");
   const [qrGarment, setQrGarment] = useState<Garment | null>(null);
+  const [showTagSheet, setShowTagSheet] = useState(false);
 
   const openLeads = leads.filter((l) => !l.handled).length;
   const tryCounts = useMemo(() => garmentTryCounts(events), [events]);
@@ -126,6 +127,12 @@ export default function Dashboard({
                     <option>All</option>
                     {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
+                  {catalog.length > 0 && (
+                    <button className="ph-btn" style={{ padding: "10px 18px", fontSize: 12, fontWeight: 600, border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", color: "var(--forest-deep)", background: "var(--cream)" }}
+                      onClick={() => setShowTagSheet(true)}>
+                      🖨 qr tags
+                    </button>
+                  )}
                   <button className="ph-btn btn-solid" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => setShowForm(true)}>
                     + add garment
                   </button>
@@ -214,6 +221,13 @@ export default function Dashboard({
           onClose={() => setEditing(null)}
           onSave={(g) => { editGarment({ ...editing, ...g }); setEditing(null); }}
           onRemove={() => { removeGarment(editing.id); setEditing(null); }}
+        />
+      )}
+      {showTagSheet && (
+        <TagSheetModal
+          catalog={catalog}
+          urlFor={(g) => origin + kioskPath + "?g=" + encodeURIComponent(g.id)}
+          onClose={() => setShowTagSheet(false)}
         />
       )}
       {qrGarment && (
@@ -512,6 +526,129 @@ function QRModal({ garment, url, crossDevice, onClose }: { garment: Garment; url
             <a className="ph-btn" href={qr} download={"peeq-qr-" + garment.id + ".png"}
               style={{ flex: 2, background: "var(--forest)", color: "var(--cream)", padding: 13, fontSize: 12, letterSpacing: ".12em", textDecoration: "none", borderRadius: "var(--radius-btn)", fontWeight: 500, textAlign: "center" }}>download PNG</a>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- batch QR hanger-tag sheet: pick garments, print 4 tags per A4
+   page (cut lines between). Uses a print window so the vendor saves it as a
+   PDF from the system dialog — no PDF library needed. ---------- */
+function TagSheetModal({ catalog, urlFor, onClose }: {
+  catalog: Garment[];
+  urlFor: (g: Garment) => string;
+  onClose: () => void;
+}) {
+  const [checked, setChecked] = useState<Set<string>>(new Set(catalog.map((g) => g.id)));
+  const [busy, setBusy] = useState(false);
+  const count = checked.size;
+  const pages = Math.ceil(count / 4);
+
+  const toggle = (id: string) =>
+    setChecked((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+
+  const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+
+  const printSheet = async () => {
+    setBusy(true);
+    const items = catalog.filter((g) => checked.has(g.id));
+    const qrs = await Promise.all(items.map((g) =>
+      QRCode.toDataURL(urlFor(g), { width: 480, margin: 1, color: { dark: "#1A1714", light: "#ffffff" } })
+    ));
+    const chunks: { g: Garment; qr: string }[][] = [];
+    for (let i = 0; i < items.length; i += 4) {
+      chunks.push(items.slice(i, i + 4).map((g, j) => ({ g, qr: qrs[i + j] })));
+    }
+    /* DISCLAIMER: item codes aren't implemented yet — when garments get an
+       item code field, print it on the ITEM CODE line below (replacing the
+       blank write-in line). For now vendors write codes by hand; the faint
+       garment name under the footer maps each tag to its piece. */
+    const tag = (x: { g: Garment; qr: string }) => `
+      <div class="tag">
+        <div class="row">
+          <div class="left">
+            <div class="wm">p<span>ee</span>q</div>
+            <div class="head">KASTO DEKHCHA<br/><em>TA MALAI?</em> <span class="eyes">👀</span></div>
+            <div class="scan">SCAN WITH YOUR CAMERA</div>
+            <div class="waist">Use a <b>waist-up photo</b>, not a close-up selfie.</div>
+          </div>
+          <div class="qrwrap"><i class="c1"></i><i class="c2"></i><i class="c3"></i><i class="c4"></i><img src="${x.qr}" alt=""/></div>
+        </div>
+        <div class="foot"><span>ITEM CODE <span class="line"></span></span><span class="site">PEEQ.APP</span></div>
+        <div class="which">${esc(x.g.name)}</div>
+      </div>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>peeq qr tags</title>
+      <link href="https://fonts.googleapis.com/css2?family=Anton&family=Baloo+2:wght@800&family=Mukta:wght@400;600;700&display=swap" rel="stylesheet">
+      <style>
+        * { box-sizing: border-box; margin: 0; }
+        @page { size: A4; margin: 8mm; }
+        body { font-family: 'Mukta', sans-serif; background: #fff; }
+        .sheet { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; width: 100%; height: 96vh; page-break-after: always; position: relative; }
+        .sheet::before, .sheet::after { content: "✂"; position: absolute; color: #b7ac9c; font-size: 11px; }
+        .sheet::before { left: 50%; top: -2px; transform: translateX(-50%) rotate(90deg); }
+        .sheet::after { left: -2px; top: 50%; transform: translateY(-50%); }
+        .cell { padding: 7mm; border: 1px dashed #cfc6b6; }
+        .tag { height: 100%; background: #FAF6F0; border: 1px solid #e6dfd1; border-radius: 14px; padding: 6mm 6mm 4mm; display: flex; flex-direction: column; }
+        .row { display: flex; align-items: center; gap: 5mm; flex: 1; min-height: 0; }
+        .left { flex: 1; text-align: left; }
+        .wm { font-family: 'Baloo 2', cursive; font-weight: 800; font-size: 21px; letter-spacing: -0.03em; color: #1A1714; }
+        .wm span { color: #C9A94E; }
+        .head { font-family: 'Anton', sans-serif; font-size: 25px; line-height: 1.05; color: #1A1714; margin-top: 2.5mm; letter-spacing: .01em; }
+        .head em { font-style: normal; color: #C9A94E; }
+        .eyes { font-size: 16px; }
+        .qrwrap { position: relative; padding: 4mm; flex-shrink: 0; }
+        .qrwrap img { width: 36mm; height: 36mm; display: block; }
+        .qrwrap i { position: absolute; width: 6mm; height: 6mm; border: 1.2mm solid #C9A94E; }
+        .qrwrap .c1 { top: 0; left: 0; border-right: none; border-bottom: none; border-top-left-radius: 2.5mm; }
+        .qrwrap .c2 { top: 0; right: 0; border-left: none; border-bottom: none; border-top-right-radius: 2.5mm; }
+        .qrwrap .c3 { bottom: 0; left: 0; border-right: none; border-top: none; border-bottom-left-radius: 2.5mm; }
+        .qrwrap .c4 { bottom: 0; right: 0; border-left: none; border-top: none; border-bottom-right-radius: 2.5mm; }
+        .scan { font-weight: 700; font-size: 11.5px; letter-spacing: .18em; color: #1A1714; margin-top: 3.5mm; }
+        .waist { font-size: 10.5px; color: #5c564c; margin-top: 1mm; }
+        .which { text-align: center; }
+        .foot { width: 100%; display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid #e6dfd1; margin-top: auto; padding-top: 2.5mm; font-size: 9px; font-weight: 700; letter-spacing: .12em; color: #1A1714; }
+        .foot .line { display: inline-block; width: 16mm; border-bottom: 1.5px solid #1A1714; }
+        .foot .site { color: #C9A94E; }
+        .which { font-size: 7px; color: #b7ac9c; margin-top: 1.5mm; letter-spacing: .08em; text-transform: uppercase; }
+      </style></head><body>
+      ${chunks.map((c) => `<div class="sheet">${c.map((x) => `<div class="cell">${tag(x)}</div>`).join("")}${"<div class=\"cell\"></div>".repeat(4 - c.length)}</div>`).join("")}
+      <script>window.onload = () => setTimeout(() => window.print(), 500);</script>
+      </body></html>`;
+    const w = window.open("", "_blank");
+    if (!w) { alert("Allow pop-ups for this site to print the tag sheet."); setBusy(false); return; }
+    w.document.write(html);
+    w.document.close();
+    setBusy(false);
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="fade-up"
+        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 440, maxWidth: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column", padding: "22px 22px 18px" }}>
+        <div className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>print qr hanger tags</div>
+        <div style={{ fontSize: 13, color: "var(--mut)", margin: "4px 0 14px" }}>
+          {count} tag{count !== 1 ? "s" : ""} selected · {pages} page{pages !== 1 ? "s" : ""} of 4 — cut along the dashed lines.
+        </div>
+        <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 6, flex: 1, minHeight: 0 }}>
+          {catalog.map((g) => (
+            <label key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, cursor: "pointer", padding: "4px 2px" }}>
+              <input type="checkbox" checked={checked.has(g.id)} onChange={() => toggle(g.id)} style={{ accentColor: "var(--violet)" }} />
+              <img src={g.image} alt="" style={{ width: 30, height: 38, objectFit: "cover", borderRadius: 6 }} />
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</span>
+            </label>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
+          <button className="ph-btn" onClick={onClose} style={{ color: "var(--mut)", fontSize: 13, padding: "10px 14px" }}>cancel</button>
+          <button className="ph-btn btn-solid" disabled={count === 0 || busy} onClick={printSheet}
+            style={{ padding: "11px 24px", fontSize: 13, opacity: count === 0 || busy ? 0.5 : 1 }}>
+            {busy ? "building…" : "print tag sheet"}
+          </button>
         </div>
       </div>
     </div>

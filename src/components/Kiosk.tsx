@@ -285,6 +285,9 @@ function CaptureScreen({ onPhoto, loggedIn }: { onPhoto: (dataUrl: string, remem
       <div className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(19px, 3vw, 24px)", textAlign: "center", color: "var(--ink)" }}>
         {mode === "upload" ? t.uploadTitle : t.standBack}
       </div>
+      <div style={{ marginTop: 6, fontSize: 12.5, fontWeight: 600, color: "var(--ink)", background: "var(--butter)", borderRadius: 999, padding: "5px 14px" }}>
+        {t.waistUpNote}
+      </div>
 
       {mode === "upload" ? (
         /* upload-first: the whole box is the file picker — no camera

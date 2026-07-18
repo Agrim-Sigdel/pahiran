@@ -39,6 +39,7 @@ const en = {
   useCameraInstead: "or take one with the camera",
 
   standBack: "stand back so we can see you fully",
+  waistUpNote: "use a waist-up photo — not a close-up selfie",
   cameraUnavailable: "Camera isn't available here.",
   tapAnywhere: "Tap anywhere in this box",
   uploadInstead: "to upload a full-body photo instead.",
@@ -150,6 +151,7 @@ const ne: typeof en = {
   useCameraInstead: "वा क्यामेराले खिच्नुहोस्",
 
   standBack: "पूरै देखिने गरी अलि पर उभिनुहोस्",
+  waistUpNote: "कम्मरदेखि माथिको फोटो — नजिकको सेल्फी होइन",
   cameraUnavailable: "यहाँ क्यामेरा उपलब्ध छैन।",
   tapAnywhere: "यो बाकसभित्र जहाँसुकै ट्याप गर्नुहोस्",
   uploadInstead: "र पूरा शरीर देखिने फोटो अपलोड गर्नुहोस्।",
