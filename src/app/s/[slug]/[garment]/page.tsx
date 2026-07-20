@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import ProductClient from "./ProductClient";
-import { fetchGarmentMeta } from "@/lib/storefront-server";
+import { fetchGarmentMeta, fetchStorefront, isServerSupabaseConfigured } from "@/lib/storefront-server";
 import { npr } from "@/lib/constants";
 
 /* Server wrapper — per-garment metadata so a pasted product link renders a
@@ -38,6 +39,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default function ProductPage() {
-  return <ProductClient />;
+export default async function ProductPage({ params }: { params: Promise<{ slug: string; garment: string }> }) {
+  const { slug, garment } = await params;
+  const data = await fetchStorefront(slug);
+
+  if (isServerSupabaseConfigured()) {
+    const id = decodeURIComponent(garment);
+    // no such shop, or no such piece in it -> a real 404 rather than a 200
+    // that would get dead product links indexed
+    if (!data || !data.catalog.some((g) => g.id === id)) notFound();
+  }
+
+  return <ProductClient initialShop={data?.shop ?? null} initialCatalog={data?.catalog ?? null} />;
 }

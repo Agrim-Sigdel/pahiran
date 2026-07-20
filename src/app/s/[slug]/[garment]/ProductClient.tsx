@@ -15,13 +15,20 @@ import type { Garment, Shop } from "@/lib/types";
    (/s/[slug]/[garment]). Pick a size, choose quantity, add to the bag, or see
    it on you first. Replaces the old quick-view modal. */
 
-export default function ProductClient() {
+export default function ProductClient({
+  initialShop = null,
+  initialCatalog = null,
+}: {
+  initialShop?: Shop | null;
+  initialCatalog?: Garment[] | null;
+}) {
   const params = useParams<{ slug: string; garment: string }>();
   const slug = params.slug;
   const garmentId = decodeURIComponent(params.garment);
 
-  const [shop, setShop] = useState<Shop | null>(null);
-  const [catalog, setCatalog] = useState<Garment[] | null>(null);
+  // Supabase mode ships shop + catalog in the HTML; local mode self-fetches.
+  const [shop, setShop] = useState<Shop | null>(initialShop);
+  const [catalog, setCatalog] = useState<Garment[] | null>(initialCatalog);
   const [notFound, setNotFound] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
 
@@ -35,13 +42,14 @@ export default function ProductClient() {
   }, [user]);
 
   useEffect(() => {
+    if (initialShop && initialCatalog) return; // server already rendered it
     (async () => {
       const s = await getShopBySlug(slug);
       if (!s) { setNotFound(true); return; }
       setShop(s);
       setCatalog(await loadCatalog(s.id));
     })();
-  }, [slug]);
+  }, [slug, initialShop, initialCatalog]);
 
   const garment = useMemo(
     () => (catalog ? catalog.find((g) => g.id === garmentId) ?? null : null),
