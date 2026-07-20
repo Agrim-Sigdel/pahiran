@@ -1,6 +1,13 @@
 -- Pahiran — Phase 1 schema (run in the Supabase SQL editor)
 -- Multi-tenant: one shop per vendor account, RLS keeps catalogs isolated,
 -- storefronts get public read access.
+--
+-- CONSOLIDATED SNAPSHOT. This file already folds in every migration up to and
+-- including 20260719000100_admin_and_limits.sql. To bootstrap a fresh project,
+-- run this file and then ONLY the migrations dated after that one — replaying
+-- the folded ones fails, because `create policy` has no `if not exists` form.
+-- When you fold a new migration in here, bump the date on the line above.
+-- Full bootstrap procedure: docs/environments.md
 
 create table shops (
   id uuid primary key default gen_random_uuid(),
