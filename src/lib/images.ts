@@ -25,6 +25,18 @@ export function fileToCompressedDataURL(
   });
 }
 
+/* Blob → data URL. The inverse of dataURLToBlob, for pulling an image back out
+   of Storage: /api/tryon only accepts data URLs, so anything fetched from a
+   signed URL has to be inlined before it can be sent for a try-on. */
+export function blobToDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read image"));
+    reader.readAsDataURL(blob);
+  });
+}
+
 /* data URL → Blob for uploads to Supabase Storage */
 export function dataURLToBlob(dataUrl: string): Blob {
   const [head, b64] = dataUrl.split(",");

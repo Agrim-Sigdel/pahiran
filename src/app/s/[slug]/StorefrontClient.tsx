@@ -10,6 +10,8 @@ import { useCart, useWishlist } from "@/lib/cart";
 import { useAccount, getContact } from "@/lib/account";
 import AccountMenu from "@/components/AccountMenu";
 import { ShopCard, CartDrawer } from "@/components/storefront";
+import GarmentImage from "@/components/GarmentImage";
+import Icon from "@/components/Icon";
 import type { Garment, Shop } from "@/lib/types";
 
 /* Public storefront — a traditional shopping experience: browse, save, pick a
@@ -19,10 +21,18 @@ import type { Garment, Shop } from "@/lib/types";
 
 type Sort = "featured" | "new" | "price-asc" | "price-desc";
 
-export default function StorefrontClient() {
+export default function StorefrontClient({
+  initialShop = null,
+  initialCatalog = null,
+}: {
+  initialShop?: Shop | null;
+  initialCatalog?: Garment[] | null;
+}) {
   const { slug } = useParams<{ slug: string }>();
-  const [shop, setShop] = useState<Shop | null>(null);
-  const [catalog, setCatalog] = useState<Garment[] | null>(null);
+  // Supabase mode hands us the shop + catalog from the server, already in the
+  // HTML. Local mode has no server data, so we fall back to fetching on mount.
+  const [shop, setShop] = useState<Shop | null>(initialShop);
+  const [catalog, setCatalog] = useState<Garment[] | null>(initialCatalog);
   const [notFound, setNotFound] = useState(false);
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
@@ -41,13 +51,14 @@ export default function StorefrontClient() {
   }, [user]);
 
   useEffect(() => {
+    if (initialShop && initialCatalog) return; // server already rendered it
     (async () => {
       const s = await getShopBySlug(slug);
       if (!s) { setNotFound(true); return; }
       setShop(s);
       setCatalog(await loadCatalog(s.id));
     })();
-  }, [slug]);
+  }, [slug, initialShop, initialCatalog]);
 
   const cats = useMemo(
     () => (catalog ? Array.from(new Set(catalog.map((g) => g.category))) : []),
@@ -79,10 +90,14 @@ export default function StorefrontClient() {
   let shown = savedOnly ? catalog.filter((g) => wish.has(g.id)) : (filter === "All" ? catalog : catalog.filter((g) => g.category === filter));
   const q = query.trim().toLowerCase();
   if (q) shown = shown.filter((g) => g.name.toLowerCase().includes(q) || g.category.toLowerCase().includes(q));
-  shown = [...shown];
-  if (sort === "new") shown.reverse();
-  else if (sort === "price-asc") shown.sort((a, b) => a.price - b.price);
-  else if (sort === "price-desc") shown.sort((a, b) => b.price - a.price);
+  // catalog arrives newest-first, so "new" is the natural order — sorting it
+  // is a no-op and reversing it would show the oldest stock first. Sold-out
+  // pieces stay browsable but sink below everything buyable.
+  const bySort =
+    sort === "price-asc" ? (a: Garment, b: Garment) => a.price - b.price
+    : sort === "price-desc" ? (a: Garment, b: Garment) => b.price - a.price
+    : () => 0;
+  shown = [...shown].sort((a, b) => Number(b.inStock) - Number(a.inStock) || bySort(a, b));
 
   const askWa = shop.whatsapp
     ? waLink(shop.whatsapp, ask.trim() ? `Namaste! ${ask.trim()} (via ${shop.name || "your"} peeq storefront)` : `Namaste! I have a question about your collection.`)
@@ -95,8 +110,9 @@ export default function StorefrontClient() {
     document.getElementById("collection")?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const card = (g: Garment) => (
-    <ShopCard key={g.id} g={g} slug={slug}
+  // first row is above the fold on most screens — let it load eagerly
+  const card = (g: Garment, i: number) => (
+    <ShopCard key={g.id} g={g} slug={slug} priority={i < 2}
       saved={wish.has(g.id)} onToggleSave={() => wish.toggle(g.id)} onAdd={() => cart.add(g, g.sizes[0] || "")} />
   );
 
@@ -125,7 +141,7 @@ export default function StorefrontClient() {
         <div className="nav-tools">
           {wish.count > 0 && (
             <button className="ph-btn" onClick={openCollectionSaved} aria-label="Saved pieces" style={{ color: "var(--violet)", fontWeight: 600 }}>
-              ♥ saved ({wish.count})
+              <Icon name="heart-filled" /> saved ({wish.count})
             </button>
           )}
           {contactWa && (
@@ -134,7 +150,7 @@ export default function StorefrontClient() {
           <AccountMenu />
           <button className="ph-btn" onClick={() => setCartOpen(true)} aria-label={`Bag, ${cart.count} item${cart.count !== 1 ? "s" : ""}`}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--ink)", fontWeight: 600 }}>
-             bag
+             <Icon name="bag" /> bag
             {cart.count > 0 && (
               <span style={{ background: "var(--violet)", color: "#fff", fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, borderRadius: 999, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
                 {cart.count}
@@ -160,8 +176,8 @@ export default function StorefrontClient() {
           </div>
         </div>
         {featured[0] && (
-          <Link href={`/s/${slug}/${encodeURIComponent(featured[0].id)}`} className="hero-visual" style={{ background: "var(--sage-mist)", display: "block" }}>
-            <img src={featured[0].image} alt={featured[0].name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          <Link href={`/s/${slug}/${encodeURIComponent(featured[0].id)}`} className="hero-visual" style={{ background: "var(--sage-mist)", display: "block", position: "relative" }}>
+            <GarmentImage src={featured[0].image} alt={featured[0].name} priority sizes="(max-width: 900px) 100vw, 50vw" />
           </Link>
         )}
       </div>
@@ -193,8 +209,8 @@ export default function StorefrontClient() {
             <div><Link href={tryonHref} className="btn-violet">see it on you</Link></div>
           </div>
           {featured[1] && (
-            <Link href={`/s/${slug}/${encodeURIComponent(featured[1].id)}`} style={{ minHeight: 220, background: "var(--sage-mist)", display: "block" }}>
-              <img src={featured[1].image} alt={featured[1].name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            <Link href={`/s/${slug}/${encodeURIComponent(featured[1].id)}`} style={{ minHeight: 220, background: "var(--sage-mist)", display: "block", position: "relative" }}>
+              <GarmentImage src={featured[1].image} alt={featured[1].name} sizes="(max-width: 900px) 100vw, 50vw" />
             </Link>
           )}
         </div>
@@ -229,7 +245,7 @@ export default function StorefrontClient() {
               <button key={c} className={"efc-chip " + (!savedOnly && filter === c ? "on" : "off")} onClick={() => { setSavedOnly(false); setFilter(c); }}>{c}</button>
             ))}
             {wish.count > 0 && (
-              <button className={"efc-chip " + (savedOnly ? "on" : "off")} onClick={() => setSavedOnly(true)}>♥ Saved</button>
+              <button className={"efc-chip " + (savedOnly ? "on" : "off")} onClick={() => setSavedOnly(true)}><Icon name="heart-filled" /> Saved</button>
             )}
           </div>
         )}

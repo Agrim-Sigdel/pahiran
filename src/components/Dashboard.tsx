@@ -7,6 +7,7 @@ import { fileToCompressedDataURL } from "@/lib/images";
 import { OverviewTab, LeadsTab, garmentTryCounts } from "@/components/Analytics";
 import LocationPicker from "@/components/LocationPicker";
 import PlanTab from "@/components/PlanTab";
+import Icon from "@/components/Icon";
 import type { Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 type Tab = "overview" | "leads" | "catalog" | "settings" | "plan";
@@ -150,7 +151,7 @@ export default function Dashboard({
                   {catalog.length > 0 && (
                     <button className="ph-btn" style={{ padding: "10px 18px", fontSize: 12, fontWeight: 600, border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", color: "var(--forest-deep)", background: "var(--cream)" }}
                       onClick={() => setShowTagSheet(true)}>
-                      🖨 qr tags
+                      <Icon name="print" /> qr tags
                     </button>
                   )}
                   <button className="ph-btn btn-solid" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => setShowForm(true)}>
@@ -207,7 +208,7 @@ export default function Dashboard({
                                 QR
                               </button>
                               <button className="ph-btn" onClick={() => toggleStock(g.id)}
-                                style={{ color: g.inStock ? "var(--mut)" : "var(--camel)", fontSize: 11, padding: "4px 5px", fontWeight: 500 }}>
+                                style={{ color: g.inStock ? "var(--mut)" : "var(--warn)", fontSize: 11, padding: "4px 5px", fontWeight: 500 }}>
                                 {g.inStock ? "In stock" : "Restock"}
                               </button>
                             </span>
@@ -337,7 +338,7 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
         <button className="ph-btn btn-solid" disabled={!dirty}
           onClick={() => { updateShop({ ...shop, name, area, whatsapp, listed, lat: pin.lat, lng: pin.lng }); setSaved(true); }}
           style={{ alignSelf: "flex-start", marginTop: 6, opacity: dirty ? 1 : 0.55 }}>
-          {saved && !dirty ? "saved ✓" : "save changes"}
+          {saved && !dirty ? <>saved <Icon name="check" /></> : "save changes"}
         </button>
       </div>
     </div>
@@ -354,7 +355,7 @@ function LinkBox({ url, children }: { url: string; children?: React.ReactNode })
       <button className="ph-btn"
         onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
         style={{ background: "var(--forest-deep)", color: "var(--cream)", padding: "11px 16px", fontSize: 11, letterSpacing: ".1em" }}>
-        {copied ? "copied ✓" : "copy"}
+        {copied ? <>copied <Icon name="check" /></> : "copy"}
       </button>
       {children}
     </div>
@@ -395,7 +396,7 @@ function SlugEditor({ slug, changeSlug }: { slug: string; changeSlug: (slug: str
         <input value={draft} autoFocus maxLength={40}
           onChange={(e) => { setDraft(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40)); setError(""); }}
           onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-          style={{ padding: "10px 13px", borderRadius: "var(--radius-btn)", border: "1px solid " + (valid ? "var(--line)" : "var(--camel)"), fontSize: 14, letterSpacing: 0, textTransform: "none", fontWeight: 400, width: 180, background: "#fff" }} />
+          style={{ padding: "10px 13px", borderRadius: "var(--radius-btn)", border: "1px solid " + (valid ? "var(--line)" : "var(--danger)"), fontSize: 14, letterSpacing: 0, textTransform: "none", fontWeight: 400, width: 180, background: "#fff" }} />
         <button className="ph-btn" disabled={!valid || busy} onClick={save}
           style={{ background: valid ? "var(--forest)" : "var(--line)", color: valid ? "var(--cream)" : "var(--mut)", padding: "10px 14px", fontSize: 11, letterSpacing: ".1em" }}>
           {busy ? "Saving…" : "Save"}
@@ -403,7 +404,7 @@ function SlugEditor({ slug, changeSlug }: { slug: string; changeSlug: (slug: str
         <button className="ph-btn" onClick={() => { setEditing(false); setDraft(slug); setError(""); }}
           style={{ color: "var(--mut)", padding: "10px 8px", fontSize: 11, letterSpacing: ".1em" }}>cancel</button>
       </div>
-      <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: error ? "var(--camel)" : "var(--mut)" }}>
+      <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: error ? "var(--danger)" : "var(--mut)" }}>
         {error || "Lowercase letters, numbers and dashes. Changing this breaks QR codes you've already printed."}
       </span>
     </div>
@@ -604,7 +605,7 @@ function TagSheetModal({ catalog, urlFor, onClose }: {
         <div class="row">
           <div class="left">
             <div class="wm">p<span>ee</span>q</div>
-            <div class="head">KASTO DEKHCHA<br/><em>TA MALAI?</em> <span class="eyes">👀</span></div>
+            <div class="head">KASTO DEKHCHA<br/><em>TA MALAI?</em> <span class="eyes"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg></span></div>
             <div class="scan">SCAN WITH YOUR CAMERA</div>
             <div class="waist">Use a <b>waist-up photo</b>, not a close-up selfie.</div>
           </div>
@@ -620,7 +621,7 @@ function TagSheetModal({ catalog, urlFor, onClose }: {
         @page { size: A4; margin: 8mm; }
         body { font-family: 'Mukta', sans-serif; background: #fff; }
         .sheet { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; width: 100%; height: 96vh; page-break-after: always; position: relative; }
-        .sheet::before, .sheet::after { content: "✂"; position: absolute; color: #b7ac9c; font-size: 11px; }
+        .sheet::before, .sheet::after { content: ""; position: absolute; width: 11px; height: 11px; background: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23b7ac9c%27 stroke-width=%271.75%27%3E%3Ccircle cx=%276%27 cy=%276%27 r=%272.5%27/%3E%3Ccircle cx=%276%27 cy=%2718%27 r=%272.5%27/%3E%3Cpath d=%27M8 7.5 19 18M19 6 8 16.5%27/%3E%3C/svg%3E") center/contain no-repeat; }
         .sheet::before { left: 50%; top: -2px; transform: translateX(-50%) rotate(90deg); }
         .sheet::after { left: -2px; top: 50%; transform: translateY(-50%); }
         .cell { padding: 7mm; border: 1px dashed #cfc6b6; }

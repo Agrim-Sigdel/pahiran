@@ -8,6 +8,7 @@ import { npr, waLink } from "@/lib/constants";
 import { useCart, useWishlist } from "@/lib/cart";
 import { useAccount, getContact } from "@/lib/account";
 import { ShopCard, CartDrawer, HeartButton } from "@/components/storefront";
+import Icon from "@/components/Icon";
 import type { Garment, Shop } from "@/lib/types";
 
 /* Product page — a real, linkable, shareable URL per garment
@@ -93,7 +94,7 @@ export default function ProductClient() {
           )}
           <button className="ph-btn" onClick={() => setCartOpen(true)} aria-label={`Bag, ${cart.count} items`}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--ink)", fontWeight: 600 }}>
-            bag
+            <Icon name="bag" /> bag
             {cart.count > 0 && (
               <span style={{ background: "var(--violet)", color: "#fff", fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, borderRadius: 999, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
                 {cart.count}

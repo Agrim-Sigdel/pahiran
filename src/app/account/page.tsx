@@ -9,6 +9,7 @@ import {
   deviceLooksCount, migrateDeviceLooksToCloud, type SavedLook,
 } from "@/lib/looks";
 import { npr } from "@/lib/constants";
+import Icon from "@/components/Icon";
 import { nameError, phoneError, fieldErrorStyle } from "@/lib/validate";
 
 /* Shopper account hub — your saved try-ons, contact details (for one-tap
@@ -151,18 +152,18 @@ function SignedIn({ email }: { email: string }) {
           <p style={{ fontSize: 13, color: "var(--stone)", margin: "0 0 14px" }}>Saved for one-tap checkout — never shown to other shoppers.</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
             <div>
-              <input style={{ ...input, borderColor: errors.name ? "var(--camel)" : "var(--line)" }} placeholder="Your name" maxLength={80} value={contact.name} aria-invalid={!!errors.name}
+              <input style={{ ...input, borderColor: errors.name ? "var(--danger)" : "var(--line)" }} placeholder="Your name" maxLength={80} value={contact.name} aria-invalid={!!errors.name}
                 onChange={(e) => { setContact((c) => ({ ...c, name: e.target.value })); if (errors.name) setErrors((x) => ({ ...x, name: undefined })); }} />
               {errors.name && <div style={{ ...fieldErrorStyle, marginTop: 4 }}>{errors.name}</div>}
             </div>
             <div>
-              <input style={{ ...input, borderColor: errors.phone ? "var(--camel)" : "var(--line)" }} placeholder="Phone number" maxLength={30} inputMode="tel" value={contact.phone} aria-invalid={!!errors.phone}
+              <input style={{ ...input, borderColor: errors.phone ? "var(--danger)" : "var(--line)" }} placeholder="Phone number" maxLength={30} inputMode="tel" value={contact.phone} aria-invalid={!!errors.phone}
                 onChange={(e) => { setContact((c) => ({ ...c, phone: e.target.value.replace(/[^0-9+ ]/g, "") })); if (errors.phone) setErrors((x) => ({ ...x, phone: undefined })); }} />
               {errors.phone && <div style={{ ...fieldErrorStyle, marginTop: 4 }}>{errors.phone}</div>}
             </div>
           </div>
           <button className="ph-btn btn-violet" onClick={saveInfo} style={{ marginTop: 14, padding: "10px 22px" }}>
-            {savedMsg ? "✓ saved" : "save details"}
+            {savedMsg ? <><Icon name="check" /> saved</> : "save details"}
           </button>
         </section>
 
@@ -189,7 +190,7 @@ function SignedIn({ email }: { email: string }) {
                   <img src={imgSrc(l)} alt={"You wearing " + l.garmentName} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                   <button className="ph-btn" onClick={async () => { await setLookFavorite(l.id, !l.favorite); refresh(); }}
                     style={{ position: "absolute", top: 8, right: 8, background: "rgba(255,255,255,.9)", color: l.favorite ? "var(--violet)" : "var(--stone)", fontSize: 15, padding: "5px 9px", borderRadius: 999 }}>
-                    {l.favorite ? "♥" : "♡"}
+                    <Icon name={l.favorite ? "heart-filled" : "heart"} />
                   </button>
                 </div>
                 <div style={{ padding: "10px 12px 12px", fontSize: 12.5 }}>

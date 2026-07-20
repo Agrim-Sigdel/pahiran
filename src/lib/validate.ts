@@ -21,5 +21,5 @@ export function phoneError(value: string, { required = true } = {}): string | nu
 
 /** Style for the inline message under an invalid field. */
 export const fieldErrorStyle: React.CSSProperties = {
-  fontSize: 12.5, color: "var(--camel)", textAlign: "left",
+  fontSize: 12.5, color: "var(--danger)", textAlign: "left",
 };

@@ -57,8 +57,10 @@ function KioskOwn() {
   }
 
   return (
+    /* The vendor's own kiosk is a shop tablet by definition — one shopper
+       after another — so it always runs in shared mode. */
     <Kiosk shop={shop} catalog={catalog} exit={() => router.push("/dashboard")}
-      initialGarmentId={params.get("g")} />
+      initialGarmentId={params.get("g")} shared />
   );
 }
 

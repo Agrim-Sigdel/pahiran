@@ -11,12 +11,20 @@
   --violet: #00372b;       /* interactive only: links, scan moments, active states */
   --butter: #F5DD90;       /* highlights, badges, empty states — small doses */
   --butter-deep: #C9A94E;  /* butter for light backgrounds (nav ee, badges on paper) */
-  --stone: #8A8378;        /* secondary text, captions, prices */
+  --stone: #6E675C;        /* secondary text, captions, prices — AA on paper (5.2:1) */
   --card: #FFFFFF;
   --line: rgba(26, 23, 20, .10);
   --paper-deep: #F1EAE0;   /* alternate section background */
   --whatsapp: #25D366;
   --scrim: rgba(26, 23, 20, .48);
+
+  /* semantic status colours — these carry *meaning*, so they must never be
+     aliased onto a neutral. Before these existed, --camel doubled as both the
+     error colour and the accent colour while resolving to the same grey as
+     --mut, which made every form error invisible. All AA on paper and white. */
+  --danger: #B3261E;       /* invalid fields, failures, destructive warnings */
+  --warn: #8A5D00;         /* low credits, past-due — attention, not failure */
+  --ok: #1F6B4A;           /* saved, sent, in stock */
 
   /* legacy aliases (sage-era inline styles inherit the new theme) */
   --forest: #1A1714;
@@ -24,8 +32,8 @@
   --sage: #FAF6F0;
   --sage-mist: #F1EAE0;
   --cream: #FFFFFF;
-  --camel: #8A8378;
-  --mut: #8A8378;
+  --camel: #6E675C;        /* accent emphasis (prices, item codes, chart hover) */
+  --mut: #6E675C;          /* hint / de-emphasised text */
   --plum: #1A1714;
   --rani: #1A1714;
   --rani-soft: #4A443B;
@@ -108,7 +116,12 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
   border-radius: 14px; padding: 12px 16px; font-size: 13.5px; font-weight: 600;
   animation: note-slide .35s ease-out;
 }
-.note-ok::before { content: "✓"; flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: #2FA968; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.note-ok::before {
+  /* the tick is a drawn SVG, not a dingbat glyph — a text checkmark picks up
+     whatever the system font does with it, which varies per platform */
+  content: ""; flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
+  background: #2FA968 url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27white%27 stroke-width=%273%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpath d=%27M5 12.5 10 17.5 19 7%27/%3E%3C/svg%3E") center/12px 12px no-repeat;
+}
 @keyframes note-slide {
   from { opacity: 0; transform: translateY(-12px); }
   to { opacity: 1; transform: none; }

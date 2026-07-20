@@ -62,8 +62,11 @@ function PublicKiosk() {
   }
 
   return (
+    /* Public link: normally a shopper's own phone (a QR scan), where
+       remembering their photo is the point. A vendor running this link on a
+       shop tablet appends ?shared=1 to get shared-device behaviour. */
     <Kiosk shop={shop} catalog={catalog} exit={() => router.push("/s/" + slug)}
-      initialGarmentId={params.get("g")} />
+      initialGarmentId={params.get("g")} shared={params.get("shared") === "1"} />
   );
 }
 

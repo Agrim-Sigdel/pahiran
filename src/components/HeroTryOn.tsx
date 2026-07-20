@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Icon from "@/components/Icon";
 
 /* Landing hero — a hands-on taste of the product. The rail shows the four
    outfits as flat-lay cards; picking one plays the ee "looking…" blink, then
@@ -63,13 +64,13 @@ export default function HeroTryOn() {
         )}
       </div>
       <div className="hero2-rail">
-        <span className="hero2-rail-hint">👇 tap a fit — see it on you</span>
+        <span className="hero2-rail-hint"><Icon name="point-down" /> tap a fit — see it on you</span>
         {FITS.map((f, i) => (
           <button key={f.fit} onClick={() => select(i)}
             className={"hero2-fitcard" + (i === active ? " on" : "") + (!touched && i !== active ? " nudge" : "")}
             aria-label={"try fit " + (i + 1)} aria-pressed={i === active}>
             <img src={f.fit} alt="" />
-            <span className="hero2-fitlabel">{i === active ? "on you ✓" : "fit 0" + (i + 1)}</span>
+            <span className="hero2-fitlabel">{i === active ? <>on you <Icon name="check" /></> : "fit 0" + (i + 1)}</span>
           </button>
         ))}
       </div>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import Icon from "@/components/Icon";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 /* Admin billing inbox — open plan/credit requests with one-click activate,
@@ -84,7 +85,7 @@ export default function AdminPage() {
 
         {status === "ready" && (
           reqs.length === 0 ? (
-            <Note>No open requests. 🎉</Note>
+            <Note>No open requests. <Icon name="party" /></Note>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {reqs.map((r) => (

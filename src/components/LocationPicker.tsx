@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import type { LeafletMouseEvent, Map as LeafletMap, Marker } from "leaflet";
+import Icon from "@/components/Icon";
 import { KATHMANDU, OSM_ATTRIBUTION, OSM_TILES, pinIcon } from "@/lib/osm";
 
 /* Vendor-side map pin picker (Onboarding + Settings). Tap the map or drag
@@ -129,7 +130,7 @@ export default function LocationPicker({ lat, lng, onChange }: {
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <button type="button" className="ph-btn" onClick={useMyLocation}
           style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--forest-deep)", padding: "8px 14px", fontSize: 11, letterSpacing: ".08em" }}>
-          ◎ use my location
+          <Icon name="locate" /> use my location
         </button>
         <span style={{ fontSize: 12, color: "var(--mut)", fontWeight: 400, letterSpacing: 0, textTransform: "none" }}>
           {hasPin ? `pinned ${lat!.toFixed(4)}, ${lng!.toFixed(4)}` : "no pin yet — tap the map"}

@@ -155,12 +155,12 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
 
   const input = (invalid: boolean): React.CSSProperties => ({
     padding: "13px 14px", borderRadius: "var(--radius-btn)",
-    border: "1px solid " + (invalid ? "var(--camel)" : "var(--line)"),
+    border: "1px solid " + (invalid ? "var(--danger)" : "var(--line)"),
     background: "#fff", color: "var(--ink)", fontSize: 15, width: "100%",
   });
 
   const fieldError: React.CSSProperties = {
-    fontSize: 12.5, color: "var(--camel)", textAlign: "left", marginTop: -6,
+    fontSize: 12.5, color: "var(--danger)", textAlign: "left", marginTop: -6,
   };
 
   return (
@@ -190,7 +190,7 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
         message.startsWith("Check your email") ? (
           <div className="note-ok" style={{ marginTop: 14 }}>{message}</div>
         ) : (
-          <div style={{ marginTop: 14, fontSize: 13, color: "var(--camel)" }}>{message}</div>
+          <div role="alert" style={{ marginTop: 14, fontSize: 13, color: "var(--danger)" }}>{message}</div>
         )
       )}
       <button className="ph-btn" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); setFieldErrors({}); }}

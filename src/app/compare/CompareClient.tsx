@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fileToCompressedDataURL } from "@/lib/images";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import Icon from "@/components/Icon";
 import { loadCatalog } from "@/lib/storage";
 
 /* Dev tool: run one person photo + one garment through all try-on providers
@@ -160,7 +161,7 @@ export default function CompareClient() {
           {started && !busy && (
             <button className="ph-btn btn-outline" onClick={() => fire("fal", runId.current)}
               style={{ padding: "11px 26px", fontSize: 14 }}>
-              reroll fal 🎲
+              reroll fal <Icon name="dice" />
             </button>
           )}
         </div>

@@ -87,7 +87,7 @@ export default function PlanTab({ shop }: { shop: Shop }) {
         <div className="panel-head" style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
           <span className="title">Current plan · {sub.plan.name}</span>
           <span style={{ fontSize: 12.5, color: "var(--mut)" }}>
-            {sub.status !== "active" ? <b style={{ color: "var(--camel)" }}>{sub.status} · </b> : null}
+            {sub.status !== "active" ? <b style={{ color: "var(--danger)" }}>{sub.status} · </b> : null}
             resets {resetLabel}
           </span>
         </div>
@@ -158,12 +158,12 @@ function Meter({ label, used, limit }: { label: string; used: number; limit: num
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
         <span style={{ fontSize: 13, color: "var(--ink)" }}>{label}</span>
-        <span style={{ fontSize: 12.5, color: low ? "var(--camel)" : "var(--mut)", fontWeight: low ? 600 : 400 }}>
+        <span style={{ fontSize: 12.5, color: low ? "var(--warn)" : "var(--mut)", fontWeight: low ? 600 : 400 }}>
           {left.toLocaleString("en-IN")} left
         </span>
       </div>
       <div style={{ height: 8, borderRadius: 999, background: "var(--line)", overflow: "hidden" }}>
-        <div style={{ width: pct + "%", height: "100%", background: low ? "var(--camel)" : "var(--forest)", transition: "width .3s" }} />
+        <div style={{ width: pct + "%", height: "100%", background: low ? "var(--warn)" : "var(--forest)", transition: "width .3s" }} />
       </div>
       <div style={{ fontSize: 11.5, color: "var(--mut)", marginTop: 4 }}>
         {used.toLocaleString("en-IN")} / {limit.toLocaleString("en-IN")} used

@@ -3,14 +3,23 @@
    client per request. Returns null in local mode (no Supabase), where there's
    no server-side data and pages fall back to the generic site metadata. */
 
+import { cache } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { rowToGarment, type Garment, type Shop, type ShopRow, type GarmentRow } from "@/lib/types";
 
+/** True when the server can read shop data at all. Lets callers tell "no such
+    shop" (→ 404) apart from "local mode, ask the browser instead". */
+export function isServerSupabaseConfigured(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
 function serverClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false } });
+  if (!isServerSupabaseConfigured()) return null;
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } }
+  );
 }
 
 function rowToShop(r: ShopRow): Shop {
@@ -21,22 +30,34 @@ function rowToShop(r: ShopRow): Shop {
   };
 }
 
+/** Shop + its whole catalog, newest first — same ordering as loadCatalog, so
+    the server-rendered grid and a later client refetch agree. This is the read
+    that makes the storefront indexable: the collection ships in the initial
+    HTML instead of appearing only after two client round-trips.
+
+    cache()d for the request, so generateMetadata and the page body share one
+    pair of queries rather than each running their own. */
+export const fetchStorefront = cache(
+  async (slug: string): Promise<{ shop: Shop; catalog: Garment[] } | null> => {
+    const sb = serverClient();
+    if (!sb) return null;
+    const { data: shopRow } = await sb.from("shops").select("*").eq("slug", slug).maybeSingle();
+    if (!shopRow) return null;
+    const shop = rowToShop(shopRow as ShopRow);
+    const { data } = await sb
+      .from("garments")
+      .select("*")
+      .eq("shop_id", shop.id)
+      .order("created_at", { ascending: false });
+    return { shop, catalog: ((data as GarmentRow[]) || []).map(rowToGarment) };
+  }
+);
+
 /** Shop + its first in-stock garment (for the collection OG image). */
 export async function fetchShopMeta(slug: string): Promise<{ shop: Shop; cover: Garment | null } | null> {
-  const sb = serverClient();
-  if (!sb) return null;
-  const { data: shopRow } = await sb.from("shops").select("*").eq("slug", slug).maybeSingle();
-  if (!shopRow) return null;
-  const shop = rowToShop(shopRow as ShopRow);
-  const { data: g } = await sb
-    .from("garments")
-    .select("*")
-    .eq("shop_id", shop.id)
-    .eq("in_stock", true)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return { shop, cover: g ? rowToGarment(g as GarmentRow) : null };
+  const found = await fetchStorefront(slug);
+  if (!found) return null;
+  return { shop: found.shop, cover: found.catalog.find((g) => g.inStock) ?? null };
 }
 
 /** A single garment plus its shop, for the product-page OG card. */

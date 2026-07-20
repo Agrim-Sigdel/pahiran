@@ -11,7 +11,7 @@
 
 import { currentUserId } from "@/lib/account";
 import { supabase } from "@/lib/supabase";
-import { dataURLToBlob } from "@/lib/images";
+import { blobToDataURL, dataURLToBlob } from "@/lib/images";
 
 export interface SavedLook {
   id: string;
@@ -250,12 +250,22 @@ async function cloudRememberPhoto(uid: string, dataUrl: string): Promise<void> {
   await sb.from("profiles").upsert({ id: uid, photo_path: path, updated_at: new Date().toISOString() }, { onConflict: "id" });
 }
 
+/* Returns a data URL, NOT a signed URL. The remembered photo feeds straight
+   into runTryOn, and /api/tryon rejects anything that isn't a data URL — the
+   device path (IndexedDB) has always returned one, so the cloud path has to
+   match or try-on breaks for signed-in shoppers only. Downloading the blob
+   also skips a signed-URL round trip on a bucket we can read directly. */
 async function cloudGetRememberedPhoto(uid: string): Promise<string | null> {
   const sb = supabase();
   const { data } = await sb.from("profiles").select("photo_path").eq("id", uid).maybeSingle();
   if (!data?.photo_path) return null;
-  const { data: signed } = await sb.storage.from(PHOTO_BUCKET).createSignedUrl(data.photo_path, SIGNED_TTL);
-  return signed?.signedUrl ?? null;
+  const { data: blob, error } = await sb.storage.from(PHOTO_BUCKET).download(data.photo_path);
+  if (error || !blob) return null;
+  try {
+    return await blobToDataURL(blob);
+  } catch {
+    return null;
+  }
 }
 
 async function cloudForgetPhoto(uid: string): Promise<void> {
@@ -314,6 +324,20 @@ export async function deleteLook(id: string): Promise<void> {
 export async function clearAllLooks(): Promise<void> {
   const uid = await currentUserId();
   return uid ? cloudClearAll(uid) : deviceClearAll();
+}
+
+/** Wipe this browser's copy of a shopper's looks and remembered photo, and
+    nothing else — cloud rows are never touched.
+
+    This is what a shared shop tablet needs at the end of a session. It must
+    NOT be clearAllLooks(): for a signed-in shopper that deletes their cloud
+    looks permanently, so tidying the tablet would destroy the looks they'd
+    expect to still find on their own phone. Handing the tablet to the next
+    shopper is a local concern, never a reason to delete someone's account
+    data. */
+export async function clearDeviceSession(): Promise<void> {
+  await deviceClearAll();
+  await deviceForgetPhoto();
 }
 
 /* ---------- device → account migration ---------- */

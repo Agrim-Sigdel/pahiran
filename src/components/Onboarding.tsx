@@ -67,21 +67,21 @@ export default function Onboarding({ shop, onComplete }: {
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <label className="field">Shop name
             <input value={name} autoFocus maxLength={60} placeholder="e.g. Juju Fashion House" aria-invalid={!!errors.name}
-              style={errors.name ? { borderColor: "var(--camel)" } : undefined}
+              style={errors.name ? { borderColor: "var(--danger)" } : undefined}
               onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((x) => ({ ...x, name: undefined })); }}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
             {errors.name && <span style={{ ...fieldErrorStyle, fontWeight: 400, letterSpacing: 0, textTransform: "none", marginTop: 4, display: "block" }}>{errors.name}</span>}
           </label>
           <label className="field">Area / city
             <input value={area} maxLength={80} placeholder="e.g. New Road, Kathmandu" aria-invalid={!!errors.area}
-              style={errors.area ? { borderColor: "var(--camel)" } : undefined}
+              style={errors.area ? { borderColor: "var(--danger)" } : undefined}
               onChange={(e) => { setArea(e.target.value); if (errors.area) setErrors((x) => ({ ...x, area: undefined })); }}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
             {errors.area && <span style={{ ...fieldErrorStyle, fontWeight: 400, letterSpacing: 0, textTransform: "none", marginTop: 4, display: "block" }}>{errors.area}</span>}
           </label>
           <label className="field">WhatsApp number
             <input value={whatsapp} maxLength={20} placeholder="e.g. 9779841000000" inputMode="tel" aria-invalid={!!errors.whatsapp}
-              style={errors.whatsapp ? { borderColor: "var(--camel)" } : undefined}
+              style={errors.whatsapp ? { borderColor: "var(--danger)" } : undefined}
               onChange={(e) => { setWhatsapp(e.target.value.replace(/[^0-9+ ]/g, "")); if (errors.whatsapp) setErrors((x) => ({ ...x, whatsapp: undefined })); }}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
             {errors.whatsapp && <span style={{ ...fieldErrorStyle, fontWeight: 400, letterSpacing: 0, textTransform: "none", marginTop: 4, display: "block" }}>{errors.whatsapp}</span>}
@@ -115,7 +115,7 @@ export default function Onboarding({ shop, onComplete }: {
             </span>
           </label>
 
-          {error && <div style={{ fontSize: 13, color: "var(--camel)" }}>{error}</div>}
+          {error && <div style={{ fontSize: 13, color: "var(--danger)" }}>{error}</div>}
 
           <button className="ph-btn btn-solid" disabled={busy} onClick={submit}
             style={{ marginTop: 4, opacity: busy ? 0.55 : 1 }}>

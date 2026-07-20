@@ -6,6 +6,8 @@ import { npr, waLink, CHECKOUT } from "@/lib/constants";
 import { submitLead } from "@/lib/storage";
 import { nameError, phoneError, fieldErrorStyle } from "@/lib/validate";
 import { useCart, type CartLine } from "@/lib/cart";
+import GarmentImage from "@/components/GarmentImage";
+import Icon from "@/components/Icon";
 import type { Garment, Shop } from "@/lib/types";
 
 /* Shared storefront building blocks — used by both the collection page
@@ -21,15 +23,16 @@ export function HeartButton({ saved, onClick }: { saved: boolean; onClick: () =>
     <button className="ph-btn" onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClick(); }}
       aria-label={saved ? "Remove from saved" : "Save for later"} aria-pressed={saved}
       style={{ position: "absolute", top: 8, right: 8, width: 34, height: 34, borderRadius: 999, background: "rgba(255,255,255,.9)", color: saved ? "var(--violet)" : "var(--stone)", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(0,0,0,.12)" }}>
-      {saved ? "♥" : "♡"}
+      <Icon name={saved ? "heart-filled" : "heart"} />
     </button>
   );
 }
 
 /* ---------- product card (links to the product page) ---------- */
 
-export function ShopCard({ g, slug, saved, onToggleSave, onAdd }: {
+export function ShopCard({ g, slug, saved, onToggleSave, onAdd, priority = false }: {
   g: Garment; slug: string; saved: boolean; onToggleSave: () => void; onAdd: () => void;
+  priority?: boolean; // above-the-fold cards skip lazy-loading
 }) {
   const [added, setAdded] = useState(false);
   const needsSize = g.sizes.length > 1; // pick a size on the product page first
@@ -45,8 +48,7 @@ export function ShopCard({ g, slug, saved, onToggleSave, onAdd }: {
     <div className="fade-up" style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", overflow: "hidden", opacity: g.inStock ? 1 : 0.6, display: "flex", flexDirection: "column" }}>
       <div style={{ position: "relative", aspectRatio: "3/4", background: "var(--sage-mist)" }}>
         <Link href={href} style={{ position: "absolute", inset: 0, display: "block" }}>
-          <img src={g.image} alt={g.name} loading="lazy"
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: g.inStock ? "none" : "grayscale(.7)" }} />
+          <GarmentImage src={g.image} alt={g.name} grayscale={!g.inStock} priority={priority} />
           {!g.inStock && (
             <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--ink)", color: "var(--paper)", fontSize: 11, fontWeight: 500, padding: "4px 12px", borderRadius: 999 }}>
               out of stock
@@ -68,7 +70,7 @@ export function ShopCard({ g, slug, saved, onToggleSave, onAdd }: {
             ) : (
               <button className="ph-btn" onClick={quickAdd}
                 style={{ background: "var(--violet)", color: "#fff", fontWeight: 700, fontFamily: "'Baloo 2', cursive", fontSize: 14, padding: "10px 0", borderRadius: 999, width: "100%" }}>
-                {added ? "✓ added" : "add to bag"}
+                {added ? <><Icon name="check" /> added</> : "add to bag"}
               </button>
             )
           ) : (
@@ -153,12 +155,12 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
           <span className="ph-display" style={{ fontSize: 20, fontWeight: 600, color: "var(--ink)" }}>
             {state === "done" ? "order sent" : `your bag (${cart.count})`}
           </span>
-          <button className="ph-btn" onClick={onClose} aria-label="Close" style={{ fontSize: 18, color: "var(--stone)", padding: 6 }}>✕</button>
+          <button className="ph-btn" onClick={onClose} aria-label="Close" style={{ fontSize: 18, color: "var(--stone)", padding: 6 }}><Icon name="close" /></button>
         </div>
 
         {state === "done" ? (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, textAlign: "center", padding: 28 }}>
-            <div style={{ fontSize: 44 }}>🛍</div>
+            <div style={{ color: "var(--stone)" }}><Icon name="bag" size={44} /></div>
             <div className="ph-display" style={{ fontSize: 22, fontWeight: 600, color: "var(--ink)" }}>the shop has your order</div>
             <p style={{ color: "var(--stone)", fontSize: 14, lineHeight: 1.6, maxWidth: 300, margin: 0 }}>
               {canWa
@@ -169,7 +171,7 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
           </div>
         ) : cart.lines.length === 0 ? (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, textAlign: "center", padding: 28 }}>
-            <div style={{ fontSize: 40, opacity: 0.5 }}>🛍</div>
+            <div style={{ opacity: 0.5, color: "var(--stone)" }}><Icon name="bag" size={40} /></div>
             <p style={{ color: "var(--stone)", fontSize: 14, margin: 0 }}>Your bag is empty.</p>
             <button className="ph-btn btn-violet" onClick={onKeepShopping}>browse the collection</button>
           </div>
@@ -195,11 +197,11 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <input value={name} maxLength={80} placeholder="Your name" aria-invalid={!!errors.name}
                   onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((x) => ({ ...x, name: undefined })); }}
-                  style={{ padding: "12px 15px", borderRadius: 14, border: "1px solid " + (errors.name ? "var(--camel)" : "var(--line)"), background: "#fff", color: "var(--ink)", fontSize: 15 }} />
+                  style={{ padding: "12px 15px", borderRadius: 14, border: "1px solid " + (errors.name ? "var(--danger)" : "var(--line)"), background: "#fff", color: "var(--ink)", fontSize: 15 }} />
                 {errors.name && <div style={{ ...fieldErrorStyle, marginTop: -4 }}>{errors.name}</div>}
                 <input value={phone} maxLength={30} inputMode="tel" placeholder="Phone number" aria-invalid={!!errors.phone}
                   onChange={(e) => { setPhone(e.target.value.replace(/[^0-9+ ]/g, "")); if (errors.phone) setErrors((x) => ({ ...x, phone: undefined })); }}
-                  style={{ padding: "12px 15px", borderRadius: 14, border: "1px solid " + (errors.phone ? "var(--camel)" : "var(--line)"), background: "#fff", color: "var(--ink)", fontSize: 15 }} />
+                  style={{ padding: "12px 15px", borderRadius: 14, border: "1px solid " + (errors.phone ? "var(--danger)" : "var(--line)"), background: "#fff", color: "var(--ink)", fontSize: 15 }} />
                 {errors.phone && <div style={{ ...fieldErrorStyle, marginTop: -4 }}>{errors.phone}</div>}
                 <button className="ph-btn" disabled={state === "sending"} onClick={checkout}
                   style={{ background: canWa ? "var(--whatsapp)" : "var(--violet)", color: "#fff", fontWeight: 700, fontFamily: "'Baloo 2', cursive", fontSize: 16, padding: "14px 0", borderRadius: 999, opacity: state === "sending" ? 0.6 : 1 }}>

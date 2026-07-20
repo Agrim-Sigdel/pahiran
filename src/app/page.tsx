@@ -231,9 +231,11 @@ export default async function Home() {
 function FeedCard({ g }: { g: FeedItem }) {
   return (
     <div className="feed-card">
-      <Link className="feed-img" href={"/k/" + g.shop.slug + "?g=" + encodeURIComponent(g.id)}>
+      {/* the piece's own page, not straight into the kiosk — the shopper gets
+          sizes, price and shop context first, and peeqs it from there */}
+      <Link className="feed-img" href={"/s/" + g.shop.slug + "/" + encodeURIComponent(g.id)}>
         <img src={g.image_url} alt={g.name} loading="lazy" />
-        <span className="feed-cta">peeq it · see it on you</span>
+        <span className="feed-cta">peeq it</span>
       </Link>
       <div className="feed-meta">
         <Link className="feed-shop" href={"/s/" + g.shop.slug}>

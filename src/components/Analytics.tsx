@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { npr, waLink } from "@/lib/constants";
+import Icon from "@/components/Icon";
 import type { Garment, Lead, TryOnEvent } from "@/lib/types";
 
 /* Vendor analytics, split into dashboard tabs:
@@ -276,7 +277,7 @@ export function LeadsTab({ leads, catalog, onLeadHandled, shopName }: {
                 )}
                 <button className="ph-btn" onClick={() => onLeadHandled(l.id, !l.handled)}
                   style={{ fontSize: 11, letterSpacing: ".08em", padding: "7px 12px", border: "1px solid var(--forest)", color: "var(--forest)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
-                  {l.handled ? "Reopen" : "Done ✓"}
+                  {l.handled ? "Reopen" : <>Done <Icon name="check" /></>}
                 </button>
               </div>
             </div>
