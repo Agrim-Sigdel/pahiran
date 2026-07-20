@@ -17,7 +17,7 @@ import type { Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [shop, setShop] = useState<Shop>({ id: null, slug: null, name: "", area: "", whatsapp: "", listed: false, lat: null, lng: null });
+  const [shop, setShop] = useState<Shop>({ id: null, slug: null, vendorCode: null, name: "", area: "", whatsapp: "", listed: false, lat: null, lng: null });
   const [catalog, setCatalog] = useState<Garment[]>([]);
   const [events, setEvents] = useState<TryOnEvent[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -54,7 +54,7 @@ export default function DashboardPage() {
     })();
   }, [router]);
 
-  const addGarment = async (g: Omit<Garment, "id">) => {
+  const addGarment = async (g: Omit<Garment, "id" | "itemCode">) => {
     try {
       const saved = await persistGarment(shop, g, catalog.map((x) => x.id));
       setCatalog((c) => [saved, ...c]);

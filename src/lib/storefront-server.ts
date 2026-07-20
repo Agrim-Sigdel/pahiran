@@ -15,7 +15,7 @@ function serverClient() {
 
 function rowToShop(r: ShopRow): Shop {
   return {
-    id: r.id, slug: r.slug, name: r.name, area: r.area ?? "",
+    id: r.id, slug: r.slug, vendorCode: r.vendor_code ?? null, name: r.name, area: r.area ?? "",
     whatsapp: r.whatsapp ?? "", listed: r.listed ?? false,
     lat: r.lat ?? null, lng: r.lng ?? null,
   };

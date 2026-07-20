@@ -16,7 +16,7 @@ interface DashboardProps {
   updateShop: (s: Shop) => void;
   changeSlug: ((slug: string) => Promise<string | null>) | null;
   catalog: Garment[];
-  addGarment: (g: Omit<Garment, "id">) => void;
+  addGarment: (g: Omit<Garment, "id" | "itemCode">) => void;
   editGarment: (g: Garment) => void;
   removeGarment: (id: string) => void;
   toggleStock: (id: string) => void;
@@ -36,12 +36,26 @@ export default function Dashboard({
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Garment | null>(null);
   const [filter, setFilter] = useState("All");
+  const [codeQuery, setCodeQuery] = useState("");
   const [qrGarment, setQrGarment] = useState<Garment | null>(null);
   const [showTagSheet, setShowTagSheet] = useState(false);
 
   const openLeads = leads.filter((l) => !l.handled).length;
   const tryCounts = useMemo(() => garmentTryCounts(events), [events]);
-  const filtered = filter === "All" ? catalog : catalog.filter((g) => g.category === filter);
+  /* Vendors reading a code off a hanger tag type just the digits ("14") as
+     often as the whole thing ("A7K2-0014"), so match on either. */
+  const filtered = useMemo(() => {
+    const byCategory = filter === "All" ? catalog : catalog.filter((g) => g.category === filter);
+    const q = codeQuery.trim().toUpperCase();
+    if (!q) return byCategory;
+    const digits = q.replace(/\D/g, "");
+    return byCategory.filter((g) => {
+      const code = g.itemCode ?? "";
+      if (code.includes(q)) return true;
+      if (digits && code.split("-")[1]?.replace(/^0+/, "") === digits.replace(/^0+/, "")) return true;
+      return g.name.toUpperCase().includes(q);
+    });
+  }, [catalog, filter, codeQuery]);
 
   const kioskPath = shop.slug ? "/k/" + shop.slug : "/kiosk";
   const origin = typeof window === "undefined" ? "" : window.location.origin;
@@ -122,6 +136,12 @@ export default function Dashboard({
                   <span style={{ color: "var(--mut)", marginLeft: 10, fontSize: 13 }}>{catalog.length} item{catalog.length !== 1 ? "s" : ""}</span>
                 </div>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <input
+                    value={codeQuery}
+                    onChange={(e) => setCodeQuery(e.target.value)}
+                    placeholder={shop.vendorCode ? `find ${shop.vendorCode}-0001 or a name…` : "search by name…"}
+                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 13, width: 210 }}
+                  />
                   <select value={filter} onChange={(e) => setFilter(e.target.value)}
                     style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 13 }}>
                     <option>All</option>
@@ -164,6 +184,9 @@ export default function Dashboard({
                           )}
                         </div>
                         <div style={{ padding: "13px 14px 14px" }}>
+                          {g.itemCode && (
+                            <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 10.5, letterSpacing: ".08em", color: "var(--camel)", marginBottom: 3 }}>{g.itemCode}</div>
+                          )}
                           <div style={{ fontWeight: 500, fontSize: 11.5, letterSpacing: ".12em", marginBottom: 4 }}>{g.name}</div>
                           {g.sizes.length > 0 && (
                             <div style={{ display: "flex", gap: 4, flexWrap: "wrap", margin: "4px 0 6px" }}>
@@ -291,6 +314,16 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
             <LinkBox url={storeUrl} />
           </div>
         )}
+        {shop.vendorCode && (
+          <div className="field">Vendor code
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
+              <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 20, letterSpacing: ".1em", color: "var(--forest-deep)" }}>{shop.vendorCode}</span>
+              <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--mut)" }}>
+                Every item you add is numbered {shop.vendorCode}-0001, {shop.vendorCode}-0002, and so on. This code is fixed — unlike your kiosk link, it can never change, so printed tags stay valid forever.
+              </span>
+            </div>
+          </div>
+        )}
         <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", fontSize: 13.5, color: "var(--ink)", lineHeight: 1.5 }}>
           <input type="checkbox" checked={listed} style={{ marginTop: 3, accentColor: "var(--forest)" }}
             onChange={(e) => { setListed(e.target.checked); setSaved(false); }} />
@@ -394,7 +427,7 @@ function EmptyState({ onAdd, anyItems }: { onAdd: () => void; anyItems: boolean 
 function GarmentModal({ initial, onClose, onSave, onRemove }: {
   initial?: Garment;
   onClose: () => void;
-  onSave: (g: Omit<Garment, "id">) => void;
+  onSave: (g: Omit<Garment, "id" | "itemCode">) => void;
   onRemove?: () => void;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
@@ -564,10 +597,8 @@ function TagSheetModal({ catalog, urlFor, onClose }: {
     for (let i = 0; i < items.length; i += 4) {
       chunks.push(items.slice(i, i + 4).map((g, j) => ({ g, qr: qrs[i + j] })));
     }
-    /* DISCLAIMER: item codes aren't implemented yet — when garments get an
-       item code field, print it on the ITEM CODE line below (replacing the
-       blank write-in line). For now vendors write codes by hand; the faint
-       garment name under the footer maps each tag to its piece. */
+    /* Garments created before the item-code migration, or anything made in
+       localStorage mode, have no code — those still get the write-in line. */
     const tag = (x: { g: Garment; qr: string }) => `
       <div class="tag">
         <div class="row">
@@ -579,7 +610,7 @@ function TagSheetModal({ catalog, urlFor, onClose }: {
           </div>
           <div class="qrwrap"><i class="c1"></i><i class="c2"></i><i class="c3"></i><i class="c4"></i><img src="${x.qr}" alt=""/></div>
         </div>
-        <div class="foot"><span>ITEM CODE <span class="line"></span></span><span class="site">PEEQ.APP</span></div>
+        <div class="foot"><span>ITEM CODE ${x.g.itemCode ? `<b class="code">${esc(x.g.itemCode)}</b>` : `<span class="line"></span>`}</span><span class="site">PEEQ.APP</span></div>
         <div class="which">${esc(x.g.name)}</div>
       </div>`;
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>peeq qr tags</title>
@@ -613,6 +644,7 @@ function TagSheetModal({ catalog, urlFor, onClose }: {
         .which { text-align: center; }
         .foot { width: 100%; display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid #e6dfd1; margin-top: auto; padding-top: 2.5mm; font-size: 9px; font-weight: 700; letter-spacing: .12em; color: #1A1714; }
         .foot .line { display: inline-block; width: 16mm; border-bottom: 1.5px solid #1A1714; }
+        .foot .code { font-size: 11px; letter-spacing: .06em; }
         .foot .site { color: #C9A94E; }
         .which { font-size: 7px; color: #b7ac9c; margin-top: 1.5mm; letter-spacing: .08em; text-transform: uppercase; }
       </style></head><body>

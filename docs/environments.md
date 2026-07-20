@@ -25,11 +25,12 @@ and including `20260719000100_admin_and_limits.sql` — all tables, the `plans` 
 `refund_tryon`, `incr_rate_limit`, `activate_plan`, `grant_credits` and
 `enforce_garment_limit` functions.
 
-In the SQL editor, run exactly these two files, in order:
+In the SQL editor, run exactly these three files, in order:
 
 ```
 supabase/schema.sql
 supabase/migrations/20260720000100_shopper_accounts.sql
+supabase/migrations/20260720000200_item_codes.sql
 ```
 
 Do **not** replay the other twelve migrations. Most of their statements are

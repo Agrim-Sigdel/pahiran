@@ -27,7 +27,7 @@ const lsSet = (k: string, v: string) => localStorage.setItem(PREFIX + k, v);
 const lsDel = (k: string) => localStorage.removeItem(PREFIX + k);
 
 function rowToShop(r: ShopRow): Shop {
-  return { id: r.id, slug: r.slug, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "", listed: r.listed ?? false, lat: r.lat ?? null, lng: r.lng ?? null };
+  return { id: r.id, slug: r.slug, vendorCode: r.vendor_code ?? null, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "", listed: r.listed ?? false, lat: r.lat ?? null, lng: r.lng ?? null };
 }
 
 /* ---------- vendor's own shop (auth-scoped in Supabase mode) ---------- */
@@ -36,7 +36,7 @@ export async function loadShop(): Promise<Shop | null> {
   if (!isSupabaseConfigured()) {
     try {
       const s = lsGet("shop:profile");
-      return s ? { id: null, slug: null, whatsapp: "", listed: false, lat: null, lng: null, ...JSON.parse(s) } : null;
+      return s ? { id: null, slug: null, vendorCode: null, whatsapp: "", listed: false, lat: null, lng: null, ...JSON.parse(s) } : null;
     } catch {
       return null;
     }
@@ -129,6 +129,7 @@ export async function loadCatalog(shopId?: string | null): Promise<Garment[]> {
         if (!g) continue;
         const parsed = JSON.parse(g);
         items.push({
+          itemCode: null, // codes are server-assigned; localStorage mode has none
           sizes: [],
           inStock: true,
           tryonEnabled: true,
@@ -151,14 +152,31 @@ export async function loadCatalog(shopId?: string | null): Promise<Garment[]> {
   return ((data as GarmentRow[]) || []).map(rowToGarment);
 }
 
+/** Look up one garment by its printed item code ("A7K2-0014").
+    Codes are globally unique, but pass shopId on shop-scoped surfaces (kiosk,
+    storefront) so a code from another vendor can't resolve there. */
+export async function getGarmentByItemCode(
+  code: string,
+  shopId?: string | null
+): Promise<Garment | null> {
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return null;
+  if (!isSupabaseConfigured()) return null; // no codes in localStorage mode
+  let q = supabase().from("garments").select("*").eq("item_code", normalized);
+  if (shopId) q = q.eq("shop_id", shopId);
+  const { data } = await q.maybeSingle();
+  return data ? rowToGarment(data as GarmentRow) : null;
+}
+
 /** Persist a new garment; returns it with its final id + image URL. */
 export async function addGarment(
   shop: Shop | null,
-  garment: Omit<Garment, "id"> & { id?: string },
+  // itemCode is assigned by the DB trigger, never by the caller
+  garment: Omit<Garment, "id" | "itemCode"> & { id?: string },
   existingIds: string[]
 ): Promise<Garment> {
   if (!isSupabaseConfigured()) {
-    const g: Garment = { ...garment, id: garment.id || Date.now().toString(36) };
+    const g: Garment = { ...garment, itemCode: null, id: garment.id || Date.now().toString(36) };
     lsSet("garment:" + g.id, JSON.stringify(g));
     lsSet("garments:index", JSON.stringify([g.id, ...existingIds]));
     return g;

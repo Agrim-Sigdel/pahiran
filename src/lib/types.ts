@@ -4,6 +4,7 @@
 export interface Shop {
   id: string | null; // null until persisted (localStorage mode has no id)
   slug: string | null; // pahiran.app/k/{slug}; null in localStorage mode
+  vendorCode: string | null; // immutable 4-char tag prefix; null in localStorage mode
   name: string;
   area: string;
   whatsapp: string; // digits for wa.me links; "" = no order button
@@ -14,6 +15,7 @@ export interface Shop {
 
 export interface Garment {
   id: string;
+  itemCode: string | null; // "{vendorCode}-0001", printed on tags; null in localStorage mode
   name: string;
   category: string;
   price: number; // NPR
@@ -73,6 +75,7 @@ export interface ShopRow {
   id: string;
   owner: string;
   slug: string;
+  vendor_code: string | null;
   name: string;
   area: string | null;
   whatsapp: string | null;
@@ -84,6 +87,7 @@ export interface ShopRow {
 export interface GarmentRow {
   id: string;
   shop_id: string;
+  item_code: string | null;
   name: string;
   category: string;
   price_npr: number;
@@ -97,6 +101,7 @@ export interface GarmentRow {
 export function rowToGarment(r: GarmentRow): Garment {
   return {
     id: r.id,
+    itemCode: r.item_code ?? null,
     name: r.name,
     category: r.category,
     price: r.price_npr,
