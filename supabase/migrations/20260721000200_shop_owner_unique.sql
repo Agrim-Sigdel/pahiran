@@ -12,6 +12,14 @@
 -- owner, (b) blank-named, and (c) carrying no vendor data whatsoever. A
 -- duplicate that someone actually used is left alone for a human to look at —
 -- the unique index below will fail loudly rather than delete it.
+--
+-- Every shop_id FK is `on delete cascade`, so anything still attached to a row
+-- deleted here goes with it. That is why payments and plan_requests are in the
+-- guard despite a blank shop realistically never having either: they are the
+-- one class of record that can't be reconstructed afterwards.
+-- shop_subscriptions is deliberately NOT checked — the shops_subscription
+-- trigger creates one for every shop, so it's present on blank rows too and
+-- would veto every deletion.
 with keepers as (
   select distinct on (owner) id, owner
   from shops
@@ -22,7 +30,9 @@ where coalesce(s.name, '') = ''
   and s.id not in (select id from keepers)
   and not exists (select 1 from garments g where g.shop_id = s.id)
   and not exists (select 1 from tryon_events e where e.shop_id = s.id)
-  and not exists (select 1 from leads l where l.shop_id = s.id);
+  and not exists (select 1 from leads l where l.shop_id = s.id)
+  and not exists (select 1 from payments p where p.shop_id = s.id)
+  and not exists (select 1 from plan_requests r where r.shop_id = s.id);
 
 -- ── Prevent it recurring ────────────────────────────────────────────────────
 -- If this fails with a uniqueness violation, two non-blank shops share an owner

@@ -76,8 +76,26 @@ export async function loadShop(): Promise<Shop | null> {
     .insert({ owner: auth.user.id, slug, name: "", area: "" })
     .select()
     .single();
-  if (error) throw error;
-  return rowToShop(created as ShopRow);
+  if (!error) return rowToShop(created as ShopRow);
+
+  /* 23505 = we lost a race. Two provisions can run at once — a double-invoked
+     effect, or two tabs — and with shops_owner_key in place the loser's insert
+     is rejected rather than quietly making a duplicate. Re-read instead of
+     throwing: the winner's row is the answer, and throwing here would strand
+     the dashboard on "Loading your shop…" forever.
+
+     A unique violation on `slug` lands here too; the retry re-reads by owner,
+     which is what we want either way. */
+  if (error.code === "23505") {
+    const { data: raced } = await sb
+      .from("shops")
+      .select("*")
+      .eq("owner", auth.user.id)
+      .order("created_at", { ascending: true })
+      .limit(1);
+    if (raced && raced.length > 0) return rowToShop(raced[0] as ShopRow);
+  }
+  throw error;
 }
 
 export async function saveShop(profile: Shop): Promise<void> {
