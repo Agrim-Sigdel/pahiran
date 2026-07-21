@@ -33,7 +33,7 @@ export function appOrigin(req: Request): string {
 
 /** Admin allowlist (comma-separated ADMIN_EMAILS, defaults to the founder). */
 export function adminEmails(): string[] {
-  return (process.env.ADMIN_EMAILS || "siliconpeaksvc@gmail.com")
+  return (process.env.ADMIN_EMAILS || "contact@agrimsigdel.com.np")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);

@@ -10,7 +10,7 @@ import Link from "next/link";
    own device. */
 
 type Lang = "en" | "ne";
-const EMAIL = "siliconpeaksvc@gmail.com";
+const EMAIL = "contact@agrimsigdel.com.np";
 const ul = (items: React.ReactNode[]): React.ReactNode => (
   <ul style={{ paddingLeft: 20, margin: "8px 0", display: "flex", flexDirection: "column", gap: 8 }}>
     {items.map((it, i) => <li key={i}>{it}</li>)}

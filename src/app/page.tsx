@@ -98,17 +98,20 @@ export default async function Home() {
   const pinned = shops.filter((s): s is ListedShop & MapShop => s.lat != null && s.lng != null);
   return (
     <main style={{ minHeight: "100vh", background: "var(--paper)" }}>
-      {/* nav */}
+      {/* nav — three columns: destinations left, wordmark centred, account right.
+          "for store owners" sits with the other destinations rather than in
+          nav-tools, so the right-hand side is only ever the shopper's own
+          account. It's a navigation link, not a tool. */}
       <nav className="efc-nav">
         <div className="nav-links">
           <a href="#how">how it works</a>
           {shops.length > 0 && <a href="#shops">shops</a>}
+          <Link href="/owner" style={{ color: "var(--violet)" }}>for store owners</Link>
         </div>
         <div className="nav-logo">
           <div className="wordmark" style={{ fontSize: "clamp(22px, 5vw, 28px)" }}>p<span className="ee">ee</span>q</div>
         </div>
         <div className="nav-tools" style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <Link href="/owner" style={{ color: "var(--violet)" }}>for store owners</Link>
           <AccountMenu />
         </div>
       </nav>

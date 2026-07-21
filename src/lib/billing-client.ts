@@ -9,7 +9,7 @@ import { npr } from "@/lib/constants";
    activates the plan / tops up by hand. Swap this for startCheckout() against
    /api/billing once Khalti/eSewa go live. */
 
-export const ADMIN_EMAIL = "siliconpeaksvc@gmail.com";
+export const ADMIN_EMAIL = "contact@agrimsigdel.com.np";
 
 export interface RequestShop {
   id: string | null;
