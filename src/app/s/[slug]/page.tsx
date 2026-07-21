@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import StorefrontClient from "./StorefrontClient";
-import { fetchStorefront, fetchShopMeta, isServerSupabaseConfigured } from "@/lib/storefront-server";
+import { fetchStorefront, fetchShopMeta, fetchTryOnAvailability, isServerSupabaseConfigured } from "@/lib/storefront-server";
 
 /* Server wrapper — per-shop metadata / OG cards *and* the catalog itself, so
    the collection is in the initial HTML (indexable, and no spinner on a slow
@@ -47,10 +47,21 @@ export default async function StorefrontPage({ params }: { params: Promise<{ slu
   // (a 200 gets dead shop URLs indexed).
   if (!data && isServerSupabaseConfigured()) notFound();
 
+  /* Resolved server-side so the try-on CTA renders in its final state in the
+     initial HTML — a button that starts live and greys out a beat later is
+     worse than one that was never offered. */
+  const tryOn = data
+    ? await fetchTryOnAvailability(data.shop.id, data.shop.type)
+    : { enabled: true, left: 1 };
+
   return (
     <>
       {data && <StorefrontJsonLd slug={slug} data={data} />}
-      <StorefrontClient initialShop={data?.shop ?? null} initialCatalog={data?.catalog ?? null} />
+      <StorefrontClient
+        initialShop={data?.shop ?? null}
+        initialCatalog={data?.catalog ?? null}
+        tryOn={tryOn}
+      />
     </>
   );
 }

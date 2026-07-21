@@ -3,7 +3,7 @@
 import { useState } from "react";
 import LocationPicker from "@/components/LocationPicker";
 import { nameError, phoneError, fieldErrorStyle } from "@/lib/validate";
-import type { Shop } from "@/lib/types";
+import type { Shop, ShopType } from "@/lib/types";
 
 /* First-login setup: shown instead of the dashboard until the shop has a
    name. The name becomes the public /k/{slug} and /s/{slug} links. */
@@ -18,12 +18,13 @@ export function slugify(name: string): string {
 
 export default function Onboarding({ shop, onComplete }: {
   shop: Shop;
-  onComplete: (info: { name: string; area: string; whatsapp: string; listed: boolean; lat: number | null; lng: number | null }) => Promise<void>;
+  onComplete: (info: { name: string; area: string; whatsapp: string; listed: boolean; type: ShopType; lat: number | null; lng: number | null }) => Promise<void>;
 }) {
   const [name, setName] = useState(shop.name);
   const [area, setArea] = useState(shop.area);
   const [whatsapp, setWhatsapp] = useState(shop.whatsapp);
   const [listed, setListed] = useState(shop.listed);
+  const [type, setType] = useState<ShopType>(shop.type);
   const [pin, setPin] = useState<{ lat: number | null; lng: number | null }>({ lat: shop.lat, lng: shop.lng });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -37,7 +38,9 @@ export default function Onboarding({ shop, onComplete }: {
     const next = {
       name: nameError(name, "Shop name") ?? undefined,
       area: nameError(area, "Area / city") ?? undefined,
-      whatsapp: phoneError(whatsapp, { required: false }) ?? undefined,
+      /* Required, not optional: verification happens over a phone call, so a
+         shop with no number can't be reviewed and would sit pending forever. */
+      whatsapp: phoneError(whatsapp, { required: true }) ?? undefined,
     };
     setErrors(next);
     return !next.name && !next.area && !next.whatsapp;
@@ -48,7 +51,7 @@ export default function Onboarding({ shop, onComplete }: {
     setBusy(true);
     setError("");
     try {
-      await onComplete({ name: name.trim(), area: area.trim(), whatsapp: whatsapp.trim(), listed, lat: pin.lat, lng: pin.lng });
+      await onComplete({ name: name.trim(), area: area.trim(), whatsapp: whatsapp.trim(), listed, type, lat: pin.lat, lng: pin.lng });
     } catch (e: any) {
       setError(e?.message || "Could not save. Please try again.");
       setBusy(false);
@@ -61,7 +64,8 @@ export default function Onboarding({ shop, onComplete }: {
         <div className="wordmark" style={{ fontSize: 18, marginBottom: 18 }}>p<span className="ee" style={{ color: "var(--butter-deep)" }}>ee</span>q</div>
         <div className="ph-display" style={{ fontSize: 26, color: "var(--forest-deep)", marginBottom: 6 }}>set up your shop</div>
         <p style={{ fontSize: 13.5, color: "var(--mut)", lineHeight: 1.6, margin: "0 0 20px" }}>
-          Your shop name becomes your kiosk and storefront link.
+          Your shop name becomes your kiosk and storefront link. We review every new
+          vendor and will give you a call to confirm before your shop goes live.
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -79,14 +83,36 @@ export default function Onboarding({ shop, onComplete }: {
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
             {errors.area && <span style={{ ...fieldErrorStyle, fontWeight: 400, letterSpacing: 0, textTransform: "none", marginTop: 4, display: "block" }}>{errors.area}</span>}
           </label>
-          <label className="field">WhatsApp number
+          {/* Drives whether this shop ever sees try-on. Asked at signup rather
+              than inferred, because it changes what the vendor is buying. */}
+          <div className="field">What do you sell?
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              {([
+                { key: "apparel", label: "Clothing & accessories", hint: "Catalog + AI try-on" },
+                { key: "general", label: "Something else", hint: "Catalog only" },
+              ] as const).map((opt) => (
+                <button key={opt.key} type="button" onClick={() => setType(opt.key)}
+                  style={{
+                    flex: 1, textAlign: "left", cursor: "pointer", padding: "10px 12px",
+                    borderRadius: "var(--radius-btn)", lineHeight: 1.4,
+                    border: "1px solid " + (type === opt.key ? "var(--forest)" : "var(--line)"),
+                    background: type === opt.key ? "var(--sage)" : "var(--cream)",
+                  }}>
+                  <span style={{ display: "block", fontSize: 13, fontWeight: 600, letterSpacing: 0, textTransform: "none", color: "var(--ink)" }}>{opt.label}</span>
+                  <span style={{ display: "block", fontSize: 11.5, fontWeight: 400, letterSpacing: 0, textTransform: "none", color: "var(--mut)", marginTop: 2 }}>{opt.hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="field">WhatsApp number <span style={{ color: "var(--danger)" }}>*</span>
             <input value={whatsapp} maxLength={20} placeholder="e.g. 9779841000000" inputMode="tel" aria-invalid={!!errors.whatsapp}
               style={errors.whatsapp ? { borderColor: "var(--danger)" } : undefined}
               onChange={(e) => { setWhatsapp(e.target.value.replace(/[^0-9+ ]/g, "")); if (errors.whatsapp) setErrors((x) => ({ ...x, whatsapp: undefined })); }}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
             {errors.whatsapp && <span style={{ ...fieldErrorStyle, fontWeight: 400, letterSpacing: 0, textTransform: "none", marginTop: 4, display: "block" }}>{errors.whatsapp}</span>}
             <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--mut)", marginTop: 4, display: "block" }}>
-              Orders arrive here. You can add or change it later in Settings.
+              Orders arrive here, and it's the number we'll call to verify your shop.
             </span>
           </label>
           <div className="field">Pin your shop on the map
@@ -119,7 +145,7 @@ export default function Onboarding({ shop, onComplete }: {
 
           <button className="ph-btn btn-solid" disabled={busy} onClick={submit}
             style={{ marginTop: 4, opacity: busy ? 0.55 : 1 }}>
-            {busy ? "setting up…" : "open my dashboard"}
+            {busy ? "submitting…" : "submit for review"}
           </button>
         </div>
       </div>

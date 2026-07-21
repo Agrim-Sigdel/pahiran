@@ -30,7 +30,7 @@ function rowToShop(r: ShopRow): Shop {
   // status falls back to 'approved' when the column isn't there yet (admin
   // console migration unapplied) — same fail-soft stance as listed/lat/lng, so
   // an un-migrated database doesn't lock every vendor out of their catalog.
-  return { id: r.id, slug: r.slug, vendorCode: r.vendor_code ?? null, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "", listed: r.listed ?? false, status: (r.status as Shop["status"]) ?? "approved", statusNote: r.status_note ?? null, lat: r.lat ?? null, lng: r.lng ?? null };
+  return { id: r.id, slug: r.slug, vendorCode: r.vendor_code ?? null, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "", listed: r.listed ?? false, status: (r.status as Shop["status"]) ?? "approved", statusNote: r.status_note ?? null, type: (r.type as Shop["type"]) ?? "apparel", lat: r.lat ?? null, lng: r.lng ?? null };
 }
 
 /* ---------- vendor's own shop (auth-scoped in Supabase mode) ---------- */
@@ -39,7 +39,7 @@ export async function loadShop(): Promise<Shop | null> {
   if (!isSupabaseConfigured()) {
     try {
       const s = lsGet("shop:profile");
-      return s ? { id: null, slug: null, vendorCode: null, whatsapp: "", listed: false, status: "approved" as const, statusNote: null, lat: null, lng: null, ...JSON.parse(s) } : null;
+      return s ? { id: null, slug: null, vendorCode: null, whatsapp: "", listed: false, status: "approved" as const, statusNote: null, type: "apparel" as const, lat: null, lng: null, ...JSON.parse(s) } : null;
     } catch {
       return null;
     }
@@ -47,8 +47,23 @@ export async function loadShop(): Promise<Shop | null> {
   const sb = supabase();
   const { data: auth } = await sb.auth.getUser();
   if (!auth.user) return null;
-  const { data } = await sb.from("shops").select("*").eq("owner", auth.user.id).maybeSingle();
-  if (data) return rowToShop(data as ShopRow);
+  /* Deliberately not maybeSingle(): shops.owner has no unique constraint, and
+     maybeSingle() *errors* on more than one row. Swallowing that error made a
+     duplicate look like "no shop yet", so the next line provisioned another
+     empty shop and the vendor was shown the setup form again — which then made
+     a third row, and so on. Read the rows, pick the real one, and only
+     provision when there genuinely isn't one. */
+  const { data: rows, error: readError } = await sb
+    .from("shops")
+    .select("*")
+    .eq("owner", auth.user.id)
+    .order("created_at", { ascending: true });
+  if (readError) throw readError; // a failed read must never provision
+  if (rows && rows.length > 0) {
+    // A set-up shop beats a blank one; oldest wins as the tie-break.
+    const best = rows.find((r) => (r.name ?? "").trim() !== "") ?? rows[0];
+    return rowToShop(best as ShopRow);
+  }
   // first login: provision the shop row with a stable slug
   const base = (auth.user.email?.split("@")[0] || "shop")
     .toLowerCase()
@@ -70,7 +85,7 @@ export async function saveShop(profile: Shop): Promise<void> {
     try {
       lsSet("shop:profile", JSON.stringify({
         name: profile.name, area: profile.area, whatsapp: profile.whatsapp, listed: profile.listed,
-        lat: profile.lat, lng: profile.lng,
+        type: profile.type, lat: profile.lat, lng: profile.lng,
       }));
     } catch {}
     return;
@@ -79,13 +94,13 @@ export async function saveShop(profile: Shop): Promise<void> {
   const sb = supabase();
   const fields = { name: profile.name, area: profile.area, whatsapp: profile.whatsapp || null };
   const { error } = await sb.from("shops")
-    .update({ ...fields, listed: profile.listed, lat: profile.lat, lng: profile.lng })
+    .update({ ...fields, listed: profile.listed, lat: profile.lat, lng: profile.lng, type: profile.type })
     .eq("id", profile.id);
   if (!error) return;
   if (error.code === "42703") {
-    // shops.listed / lat / lng don't exist yet (20260714_shop_listed.sql or
-    // 20260715_shop_location.sql not applied) — still persist the core
-    // profile so settings keep working.
+    // shops.listed / lat / lng / type don't exist yet (20260714_shop_listed.sql,
+    // 20260715_shop_location.sql or 20260721000300_shop_type.sql not applied) —
+    // still persist the core profile so settings keep working.
     const { error: retryError } = await sb.from("shops").update(fields).eq("id", profile.id);
     if (retryError) throw retryError;
     return;

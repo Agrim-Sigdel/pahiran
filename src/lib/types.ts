@@ -6,6 +6,12 @@
    Local (no-Supabase) mode has no admin, so it treats every shop as approved. */
 export type ShopStatus = "pending" | "approved" | "rejected" | "suspended";
 
+/* What the shop sells, which decides whether try-on applies at all. 'general'
+   shops (electronics, grocery, hardware…) use peeq as a catalog + kiosk + QR
+   tags and never see try-on UI. Separate from the credit balance: a general
+   shop has no try-on entitlement to spend in the first place. */
+export type ShopType = "apparel" | "general";
+
 export interface Shop {
   id: string | null; // null until persisted (localStorage mode has no id)
   slug: string | null; // pahiran.app/k/{slug}; null in localStorage mode
@@ -16,6 +22,7 @@ export interface Shop {
   listed: boolean; // opt-in: show on the landing page directory
   status: ShopStatus; // admin approval gate; 'approved' in local mode
   statusNote: string | null; // admin's reason, shown to the vendor on reject/suspend
+  type: ShopType; // 'general' shops get the catalog without try-on
   lat: number | null; // OSM map pin; null = not placed yet
   lng: number | null;
 }
@@ -89,6 +96,7 @@ export interface ShopRow {
   listed: boolean | null;
   status: string | null; // absent until 20260721000100_admin_console.sql is applied
   status_note: string | null;
+  type: string | null; // absent until 20260721000300_shop_type.sql is applied
   lat: number | null;
   lng: number | null;
 }

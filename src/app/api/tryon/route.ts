@@ -336,10 +336,21 @@ export async function POST(req: Request): Promise<Response> {
          pending, rejected or suspended. Mostly reached by a vendor testing
          their own kiosk before approval — public traffic can't see the shop
          at all, since RLS hides unapproved shops from anon reads. */
+      /* A catalog-only shop has no try-on at all. The storefront never offers
+         the button, so reaching this means a hand-typed /k/ URL. */
+      if (res.reason === "tryon_not_enabled") {
+        return Response.json(
+          {
+            error: "This shop doesn't offer try-on — browse the catalog instead.",
+            reason: res.reason,
+          },
+          { status: 403 }
+        );
+      }
       if (res.reason === "not_approved") {
         return Response.json(
           {
-            error: "This shop isn't open for try-ons yet — it's awaiting approval.",
+            error: "This shop isn't open for try-ons yet — it's awaiting approval. We'll call the owner once it's approved.",
             reason: res.reason,
           },
           { status: 403 }

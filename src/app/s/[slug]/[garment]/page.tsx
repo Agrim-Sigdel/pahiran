@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import ProductClient from "./ProductClient";
-import { fetchGarmentMeta, fetchStorefront, isServerSupabaseConfigured } from "@/lib/storefront-server";
+import { fetchGarmentMeta, fetchStorefront, fetchTryOnAvailability, isServerSupabaseConfigured } from "@/lib/storefront-server";
 import { npr } from "@/lib/constants";
 
 /* Server wrapper — per-garment metadata so a pasted product link renders a
@@ -50,5 +50,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     if (!data || !data.catalog.some((g) => g.id === id)) notFound();
   }
 
-  return <ProductClient initialShop={data?.shop ?? null} initialCatalog={data?.catalog ?? null} />;
+  const tryOn = data
+    ? await fetchTryOnAvailability(data.shop.id, data.shop.type)
+    : { enabled: true, left: 1 };
+
+  return <ProductClient initialShop={data?.shop ?? null} initialCatalog={data?.catalog ?? null} tryOn={tryOn} />;
 }

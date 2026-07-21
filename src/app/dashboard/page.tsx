@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Dashboard from "@/components/Dashboard";
 import Onboarding, { slugify } from "@/components/Onboarding";
+import PendingReview from "@/components/PendingReview";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import {
   loadShop, saveShop, loadCatalog, addGarment as persistGarment,
@@ -17,7 +18,7 @@ import type { Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [shop, setShop] = useState<Shop>({ id: null, slug: null, vendorCode: null, name: "", area: "", whatsapp: "", listed: false, status: "approved", statusNote: null, lat: null, lng: null });
+  const [shop, setShop] = useState<Shop>({ id: null, slug: null, vendorCode: null, name: "", area: "", whatsapp: "", listed: false, status: "approved", statusNote: null, type: "apparel", lat: null, lng: null });
   const [catalog, setCatalog] = useState<Garment[]>([]);
   const [events, setEvents] = useState<TryOnEvent[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -64,7 +65,7 @@ export default function DashboardPage() {
          arrive as raw Postgres exception text. Translate them — the vendor
          should never see 'shop_not_approved' spelled that way. */
       if (msg.includes("shop_not_approved")) {
-        alert("Your shop is still awaiting approval, so the catalog is locked for now. See the notice at the top of your dashboard.");
+        alert("Your shop is still awaiting approval, so the catalog is locked for now. We'll call you once you're approved.");
         return;
       }
       if (msg.includes("garment_limit_reached")) {
@@ -124,7 +125,7 @@ export default function DashboardPage() {
 
   /* First login: save the profile, then point /k and /s links at a slug
      built from the shop name (falling back to name-2 … if taken). */
-  const completeOnboarding = async (info: { name: string; area: string; whatsapp: string; listed: boolean; lat: number | null; lng: number | null }) => {
+  const completeOnboarding = async (info: { name: string; area: string; whatsapp: string; listed: boolean; type: Shop["type"]; lat: number | null; lng: number | null }) => {
     let next: Shop = { ...shop, ...info };
     await saveShop(next);
     if (next.id) {
@@ -154,8 +155,16 @@ export default function DashboardPage() {
     ? async () => { await supabase().auth.signOut(); router.replace("/login"); }
     : null;
 
+  /* Two gates before the dashboard proper: fill in the profile, then wait for
+     approval. An unapproved shop can't add garments or run try-ons — the
+     database refuses both — so the dashboard would only offer controls that
+     fail on use. */
   if (!loading && !shop.name.trim()) {
     return <Onboarding shop={shop} onComplete={completeOnboarding} />;
+  }
+
+  if (!loading && shop.status !== "approved") {
+    return <PendingReview shop={shop} signOut={signOut} />;
   }
 
   return (

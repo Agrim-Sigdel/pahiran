@@ -11,6 +11,7 @@ export type ConsumeReason =
   | "studio_limit"
   | "subscription_inactive"
   | "not_approved" // shop is pending/rejected/suspended — the outer approval gate
+  | "tryon_not_enabled" // catalog-only shop (shops.type = 'general')
   | "error";
 
 export interface ConsumeResult {

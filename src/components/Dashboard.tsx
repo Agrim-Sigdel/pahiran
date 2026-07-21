@@ -84,16 +84,26 @@ export default function Dashboard({
             <button className="ph-btn" onClick={signOut}
               style={{ color: "var(--mut)", fontSize: 12, letterSpacing: ".1em" }}>sign out</button>
           )}
-          <button
-            className="ph-btn btn-solid"
-            onClick={() => {
-              if (catalog.length === 0) {
-                alert("Add at least one garment to your catalog first — the kiosk needs something to show shoppers.");
-                setTab("catalog");
-                return;
-              }
-              launchKiosk();
-            }}>launch kiosk</button>
+          {/* The kiosk is the try-on flow, so a catalog-only shop has no use
+              for it — their storefront link is the thing to share. */}
+          {shop.type === "apparel" ? (
+            <button
+              className="ph-btn btn-solid"
+              onClick={() => {
+                if (catalog.length === 0) {
+                  alert("Add at least one garment to your catalog first — the kiosk needs something to show shoppers.");
+                  setTab("catalog");
+                  return;
+                }
+                launchKiosk();
+              }}>launch kiosk</button>
+          ) : (
+            shop.slug && (
+              <a className="ph-btn btn-solid" href={"/s/" + shop.slug} target="_blank" rel="noopener noreferrer">
+                view storefront
+              </a>
+            )
+          )}
         </div>
       </header>
 
@@ -106,8 +116,6 @@ export default function Dashboard({
           </button>
         ))}
       </div>
-
-      {!loading && shop.status !== "approved" && <ApprovalBanner shop={shop} />}
 
       {loading ? (
         <div style={{ color: "var(--mut)", padding: 40, textAlign: "center" }}>Loading your shop…</div>
@@ -263,47 +271,6 @@ export default function Dashboard({
           crossDevice={Boolean(shop.slug)}
           onClose={() => setQrGarment(null)}
         />
-      )}
-    </div>
-  );
-}
-
-/* ── Approval gate notice ──
-   A vendor whose shop isn't approved can still sign in, edit settings and look
-   around — but adding garments and running try-ons will be refused by the
-   database, and the public can't see the shop at all. Saying so up front beats
-   letting them discover it as a failed save. */
-function ApprovalBanner({ shop }: { shop: Shop }) {
-  const copy: Record<string, { tone: string; title: string; body: string }> = {
-    pending: {
-      tone: "var(--camel)",
-      title: "Your shop is awaiting approval",
-      body: "We review every new vendor before the shop goes live. You can fill in your settings now — adding garments and running try-ons unlock once you're approved. This usually takes a day.",
-    },
-    rejected: {
-      tone: "var(--rust, #b4432c)",
-      title: "Your shop wasn't approved",
-      body: "Your shop isn't visible to shoppers and can't run try-ons. Reply to our email if you'd like this reviewed again.",
-    },
-    suspended: {
-      tone: "var(--rust, #b4432c)",
-      title: "Your shop is suspended",
-      body: "Your storefront is hidden and try-ons are paused. Your catalog is safe — get in touch to sort this out.",
-    },
-  };
-  const c = copy[shop.status];
-  if (!c) return null;
-
-  return (
-    <div className="panel" style={{ padding: "14px 18px", margin: "0 0 18px", borderLeft: "3px solid " + c.tone }}>
-      <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-        <b style={{ color: c.tone, fontSize: 14 }}>{c.title}</b>
-      </div>
-      <div style={{ fontSize: 13.5, color: "var(--stone)", marginTop: 5, lineHeight: 1.5 }}>{c.body}</div>
-      {shop.statusNote && (
-        <div style={{ fontSize: 13, color: "var(--mut)", marginTop: 8, fontStyle: "italic" }}>
-          Note from the team: {shop.statusNote}
-        </div>
       )}
     </div>
   );

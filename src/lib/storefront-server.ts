@@ -27,8 +27,28 @@ function rowToShop(r: ShopRow): Shop {
     id: r.id, slug: r.slug, vendorCode: r.vendor_code ?? null, name: r.name, area: r.area ?? "",
     whatsapp: r.whatsapp ?? "", listed: r.listed ?? false,
     status: (r.status as Shop["status"]) ?? "approved", statusNote: r.status_note ?? null,
+    type: (r.type as Shop["type"]) ?? "apparel",
     lat: r.lat ?? null, lng: r.lng ?? null,
   };
+}
+
+/** Whether the storefront should offer try-on at all, and how many are left in
+    the current period. Reads through shop_tryon_availability() rather than
+    shop_subscriptions directly — anon has no business seeing a shop's plan or
+    usage history, only whether the button works. Fails open on an un-migrated
+    database so an unapplied migration doesn't silently strip try-on. */
+export async function fetchTryOnAvailability(
+  shopId: string | null,
+  shopType: Shop["type"],
+): Promise<{ enabled: boolean; left: number }> {
+  if (shopType !== "apparel") return { enabled: false, left: 0 };
+  const sb = serverClient();
+  if (!sb || !shopId) return { enabled: true, left: 1 };
+  const { data, error } = await sb.rpc("shop_tryon_availability", { p_shop_id: shopId });
+  if (error) return { enabled: true, left: 1 }; // migration not applied yet
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return { enabled: true, left: 1 };
+  return { enabled: !!row.tryon_enabled, left: row.tryons_left ?? 0 };
 }
 
 /** Shop + its whole catalog, newest first — same ordering as loadCatalog, so

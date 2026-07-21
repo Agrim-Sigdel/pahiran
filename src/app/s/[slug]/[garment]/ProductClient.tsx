@@ -8,6 +8,7 @@ import { npr, waLink } from "@/lib/constants";
 import { useCart, useWishlist } from "@/lib/cart";
 import { useAccount, getContact } from "@/lib/account";
 import { ShopCard, CartDrawer, HeartButton } from "@/components/storefront";
+import TryOnCta, { type TryOnState } from "@/components/TryOnCta";
 import Icon from "@/components/Icon";
 import type { Garment, Shop } from "@/lib/types";
 
@@ -18,9 +19,11 @@ import type { Garment, Shop } from "@/lib/types";
 export default function ProductClient({
   initialShop = null,
   initialCatalog = null,
+  tryOn = { enabled: true, left: 1 },
 }: {
   initialShop?: Shop | null;
   initialCatalog?: Garment[] | null;
+  tryOn?: TryOnState;
 }) {
   const params = useParams<{ slug: string; garment: string }>();
   const slug = params.slug;
@@ -132,7 +135,7 @@ export default function ProductClient({
         </div>
 
         <BuyPanel
-          garment={garment} slug={slug} shop={shop}
+          garment={garment} slug={slug} shop={shop} tryOn={tryOn}
           onAdd={(size, qty) => { cart.add(garment, size, qty); setCartOpen(true); }}
         />
       </div>
@@ -167,8 +170,9 @@ export default function ProductClient({
   );
 }
 
-function BuyPanel({ garment, slug, shop, onAdd }: {
-  garment: Garment; slug: string; shop: Shop; onAdd: (size: string, qty: number) => void;
+function BuyPanel({ garment, slug, shop, tryOn, onAdd }: {
+  garment: Garment; slug: string; shop: Shop; tryOn: TryOnState;
+  onAdd: (size: string, qty: number) => void;
 }) {
   const hasSizes = garment.sizes.length > 0;
   const [size, setSize] = useState(garment.sizes.length === 1 ? garment.sizes[0] : "");
@@ -238,9 +242,10 @@ function BuyPanel({ garment, slug, shop, onAdd }: {
           </button>
         )}
         {garment.inStock && (
-          <Link href={`/k/${slug}?g=${encodeURIComponent(garment.id)}`} className="btn-outline" style={{ width: "100%" }}>
+          <TryOnCta shop={shop} state={tryOn} href={`/k/${slug}?g=${encodeURIComponent(garment.id)}`}
+            className="btn-outline" style={{ width: "100%", textAlign: "center" }}>
             see it on you first
-          </Link>
+          </TryOnCta>
         )}
         {wa && (
           <a href={wa} target="_blank" rel="noopener noreferrer" className="btn-wa" style={{ width: "100%" }}>

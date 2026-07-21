@@ -11,6 +11,7 @@ import { useAccount, getContact } from "@/lib/account";
 import AccountMenu from "@/components/AccountMenu";
 import { ShopCard, CartDrawer } from "@/components/storefront";
 import GarmentImage from "@/components/GarmentImage";
+import TryOnCta, { offersTryOn, type TryOnState } from "@/components/TryOnCta";
 import Icon from "@/components/Icon";
 import type { Garment, Shop } from "@/lib/types";
 
@@ -24,9 +25,11 @@ type Sort = "featured" | "new" | "price-asc" | "price-desc";
 export default function StorefrontClient({
   initialShop = null,
   initialCatalog = null,
+  tryOn = { enabled: true, left: 1 },
 }: {
   initialShop?: Shop | null;
   initialCatalog?: Garment[] | null;
+  tryOn?: TryOnState;
 }) {
   const { slug } = useParams<{ slug: string }>();
   // Supabase mode hands us the shop + catalog from the server, already in the
@@ -112,7 +115,7 @@ export default function StorefrontClient({
 
   // first row is above the fold on most screens — let it load eagerly
   const card = (g: Garment, i: number) => (
-    <ShopCard key={g.id} g={g} slug={slug} priority={i < 2}
+    <ShopCard key={g.id} g={g} slug={slug} priority={i < 2} shop={shop} tryOn={tryOn}
       saved={wish.has(g.id)} onToggleSave={() => wish.toggle(g.id)} onAdd={() => cart.add(g, g.sizes[0] || "")} />
   );
 
@@ -168,11 +171,13 @@ export default function StorefrontClient({
             look first,<br />then buy
           </h1>
           <p style={{ color: "var(--stone)", fontSize: 15.5, maxWidth: 360, lineHeight: 1.7, margin: 0 }}>
-            Browse the collection, add your pieces to the bag, and order in one message — or take a photo and see anything on you first.
+            {offersTryOn(shop)
+              ? "Browse the collection, add your pieces to the bag, and order in one message — or take a photo and see anything on you first."
+              : "Browse the collection, add what you want to the bag, and order in one message."}
           </p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <a href="#collection" className="btn-violet">shop the collection</a>
-            <Link href={tryonHref} className="btn-outline">see it on you</Link>
+            <TryOnCta shop={shop} state={tryOn} href={tryonHref} className="btn-outline" />
           </div>
         </div>
         {featured[0] && (
@@ -195,7 +200,9 @@ export default function StorefrontClient({
         </section>
       )}
 
-      {/* try-on promo */}
+      {/* try-on promo — the whole section is about a feature a general shop
+          doesn't have, so it goes rather than greys out. */}
+      {offersTryOn(shop) && (
       <section className="section-pad" style={{ background: "var(--sage-mist)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
           <div style={{ padding: "40px 36px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 14 }}>
@@ -206,7 +213,7 @@ export default function StorefrontClient({
             <p style={{ color: "var(--stone)", fontSize: 14.5, lineHeight: 1.7, margin: 0 }}>
               No queue, no changing room. Take one photo, see the piece on you, then add it to your bag with a tap.
             </p>
-            <div><Link href={tryonHref} className="btn-violet">see it on you</Link></div>
+            <div><TryOnCta shop={shop} state={tryOn} href={tryonHref} className="btn-violet" /></div>
           </div>
           {featured[1] && (
             <Link href={`/s/${slug}/${encodeURIComponent(featured[1].id)}`} style={{ minHeight: 220, background: "var(--sage-mist)", display: "block", position: "relative" }}>
@@ -215,6 +222,7 @@ export default function StorefrontClient({
           )}
         </div>
       </section>
+      )}
 
       {/* full collection */}
       <section id="collection" className="section-pad">
@@ -283,7 +291,8 @@ export default function StorefrontClient({
           <div>
             <h4 className="ph-display" style={{ fontSize: 19, marginBottom: 12, color: "var(--paper)", fontWeight: 600 }}>shop</h4>
             <a href="#collection" style={{ fontSize: 13, color: "rgba(250,246,240,.65)", lineHeight: 1.8, textDecoration: "none", display: "block" }}>browse the collection</a>
-            <Link href={tryonHref} style={{ fontSize: 13, color: "rgba(250,246,240,.65)", lineHeight: 1.8, textDecoration: "none", display: "block" }}>see it on you</Link>
+            <TryOnCta shop={shop} state={tryOn} href={tryonHref}
+              style={{ fontSize: 13, color: "rgba(250,246,240,.65)", lineHeight: 1.8, textDecoration: "none", display: "block" }} />
             <button className="ph-btn" onClick={() => setCartOpen(true)} style={{ fontSize: 13, color: "rgba(250,246,240,.65)", lineHeight: 1.8, display: "block" }}>your bag ({cart.count})</button>
           </div>
           {askWa && (

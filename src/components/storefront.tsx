@@ -7,6 +7,7 @@ import { submitLead } from "@/lib/storage";
 import { nameError, phoneError, fieldErrorStyle } from "@/lib/validate";
 import { useCart, type CartLine } from "@/lib/cart";
 import GarmentImage from "@/components/GarmentImage";
+import TryOnCta, { type TryOnState } from "@/components/TryOnCta";
 import Icon from "@/components/Icon";
 import type { Garment, Shop } from "@/lib/types";
 
@@ -30,9 +31,13 @@ export function HeartButton({ saved, onClick }: { saved: boolean; onClick: () =>
 
 /* ---------- product card (links to the product page) ---------- */
 
-export function ShopCard({ g, slug, saved, onToggleSave, onAdd, priority = false }: {
+export function ShopCard({ g, slug, saved, onToggleSave, onAdd, priority = false, tryOn, shop }: {
   g: Garment; slug: string; saved: boolean; onToggleSave: () => void; onAdd: () => void;
   priority?: boolean; // above-the-fold cards skip lazy-loading
+  /* Optional so existing callers keep working; omitted means "offer try-on",
+     which is the historical behaviour for every apparel shop. */
+  tryOn?: TryOnState;
+  shop?: Pick<Shop, "type"> | null;
 }) {
   const [added, setAdded] = useState(false);
   const needsSize = g.sizes.length > 1; // pick a size on the product page first
@@ -79,10 +84,11 @@ export function ShopCard({ g, slug, saved, onToggleSave, onAdd, priority = false
             </button>
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Link href={`/k/${slug}?g=${encodeURIComponent(g.id)}`}
+            <TryOnCta shop={shop ?? { type: "apparel" }} state={tryOn ?? { enabled: true, left: 1 }}
+              href={`/k/${slug}?g=${encodeURIComponent(g.id)}`}
               style={{ textDecoration: "underline", textUnderlineOffset: 4, fontSize: 12.5, fontWeight: 600, color: "var(--violet)" }}>
               see it on you →
-            </Link>
+            </TryOnCta>
             <Link href={href} className="ph-btn" style={{ color: "var(--stone)", fontSize: 12, textDecoration: "none" }}>
               details
             </Link>
