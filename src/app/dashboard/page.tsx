@@ -17,7 +17,7 @@ import type { Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [shop, setShop] = useState<Shop>({ id: null, slug: null, vendorCode: null, name: "", area: "", whatsapp: "", listed: false, lat: null, lng: null });
+  const [shop, setShop] = useState<Shop>({ id: null, slug: null, vendorCode: null, name: "", area: "", whatsapp: "", listed: false, status: "approved", statusNote: null, lat: null, lng: null });
   const [catalog, setCatalog] = useState<Garment[]>([]);
   const [events, setEvents] = useState<TryOnEvent[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -60,6 +60,13 @@ export default function DashboardPage() {
       setCatalog((c) => [saved, ...c]);
     } catch (e: any) {
       const msg = String(e?.message || e);
+      /* Both of these are raised by the enforce_garment_limit trigger, so they
+         arrive as raw Postgres exception text. Translate them — the vendor
+         should never see 'shop_not_approved' spelled that way. */
+      if (msg.includes("shop_not_approved")) {
+        alert("Your shop is still awaiting approval, so the catalog is locked for now. See the notice at the top of your dashboard.");
+        return;
+      }
       if (msg.includes("garment_limit_reached")) {
         alert("You've reached your plan's garment limit. Upgrade in the Plan tab to add more.");
         return;

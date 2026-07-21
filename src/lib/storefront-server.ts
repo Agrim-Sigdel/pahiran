@@ -26,6 +26,7 @@ function rowToShop(r: ShopRow): Shop {
   return {
     id: r.id, slug: r.slug, vendorCode: r.vendor_code ?? null, name: r.name, area: r.area ?? "",
     whatsapp: r.whatsapp ?? "", listed: r.listed ?? false,
+    status: (r.status as Shop["status"]) ?? "approved", statusNote: r.status_note ?? null,
     lat: r.lat ?? null, lng: r.lng ?? null,
   };
 }

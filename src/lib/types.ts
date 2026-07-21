@@ -1,6 +1,11 @@
 /* Shared domain types. The storage adapter maps DB rows (snake_case)
    to these app-facing shapes, so components never see raw rows. */
 
+/* Admin approval state. Only 'approved' shops can add catalog items, run
+   try-ons, or be read by the public — see 20260721000100_admin_console.sql.
+   Local (no-Supabase) mode has no admin, so it treats every shop as approved. */
+export type ShopStatus = "pending" | "approved" | "rejected" | "suspended";
+
 export interface Shop {
   id: string | null; // null until persisted (localStorage mode has no id)
   slug: string | null; // pahiran.app/k/{slug}; null in localStorage mode
@@ -9,6 +14,8 @@ export interface Shop {
   area: string;
   whatsapp: string; // digits for wa.me links; "" = no order button
   listed: boolean; // opt-in: show on the landing page directory
+  status: ShopStatus; // admin approval gate; 'approved' in local mode
+  statusNote: string | null; // admin's reason, shown to the vendor on reject/suspend
   lat: number | null; // OSM map pin; null = not placed yet
   lng: number | null;
 }
@@ -80,6 +87,8 @@ export interface ShopRow {
   area: string | null;
   whatsapp: string | null;
   listed: boolean | null;
+  status: string | null; // absent until 20260721000100_admin_console.sql is applied
+  status_note: string | null;
   lat: number | null;
   lng: number | null;
 }

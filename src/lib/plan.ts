@@ -10,6 +10,7 @@ export type ConsumeReason =
   | "tryon_limit"
   | "studio_limit"
   | "subscription_inactive"
+  | "not_approved" // shop is pending/rejected/suspended — the outer approval gate
   | "error";
 
 export interface ConsumeResult {

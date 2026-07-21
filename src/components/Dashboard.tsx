@@ -107,6 +107,8 @@ export default function Dashboard({
         ))}
       </div>
 
+      {!loading && shop.status !== "approved" && <ApprovalBanner shop={shop} />}
+
       {loading ? (
         <div style={{ color: "var(--mut)", padding: 40, textAlign: "center" }}>Loading your shop…</div>
       ) : (
@@ -261,6 +263,47 @@ export default function Dashboard({
           crossDevice={Boolean(shop.slug)}
           onClose={() => setQrGarment(null)}
         />
+      )}
+    </div>
+  );
+}
+
+/* ── Approval gate notice ──
+   A vendor whose shop isn't approved can still sign in, edit settings and look
+   around — but adding garments and running try-ons will be refused by the
+   database, and the public can't see the shop at all. Saying so up front beats
+   letting them discover it as a failed save. */
+function ApprovalBanner({ shop }: { shop: Shop }) {
+  const copy: Record<string, { tone: string; title: string; body: string }> = {
+    pending: {
+      tone: "var(--camel)",
+      title: "Your shop is awaiting approval",
+      body: "We review every new vendor before the shop goes live. You can fill in your settings now — adding garments and running try-ons unlock once you're approved. This usually takes a day.",
+    },
+    rejected: {
+      tone: "var(--rust, #b4432c)",
+      title: "Your shop wasn't approved",
+      body: "Your shop isn't visible to shoppers and can't run try-ons. Reply to our email if you'd like this reviewed again.",
+    },
+    suspended: {
+      tone: "var(--rust, #b4432c)",
+      title: "Your shop is suspended",
+      body: "Your storefront is hidden and try-ons are paused. Your catalog is safe — get in touch to sort this out.",
+    },
+  };
+  const c = copy[shop.status];
+  if (!c) return null;
+
+  return (
+    <div className="panel" style={{ padding: "14px 18px", margin: "0 0 18px", borderLeft: "3px solid " + c.tone }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+        <b style={{ color: c.tone, fontSize: 14 }}>{c.title}</b>
+      </div>
+      <div style={{ fontSize: 13.5, color: "var(--stone)", marginTop: 5, lineHeight: 1.5 }}>{c.body}</div>
+      {shop.statusNote && (
+        <div style={{ fontSize: 13, color: "var(--mut)", marginTop: 8, fontStyle: "italic" }}>
+          Note from the team: {shop.statusNote}
+        </div>
       )}
     </div>
   );

@@ -27,7 +27,10 @@ const lsSet = (k: string, v: string) => localStorage.setItem(PREFIX + k, v);
 const lsDel = (k: string) => localStorage.removeItem(PREFIX + k);
 
 function rowToShop(r: ShopRow): Shop {
-  return { id: r.id, slug: r.slug, vendorCode: r.vendor_code ?? null, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "", listed: r.listed ?? false, lat: r.lat ?? null, lng: r.lng ?? null };
+  // status falls back to 'approved' when the column isn't there yet (admin
+  // console migration unapplied) — same fail-soft stance as listed/lat/lng, so
+  // an un-migrated database doesn't lock every vendor out of their catalog.
+  return { id: r.id, slug: r.slug, vendorCode: r.vendor_code ?? null, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "", listed: r.listed ?? false, status: (r.status as Shop["status"]) ?? "approved", statusNote: r.status_note ?? null, lat: r.lat ?? null, lng: r.lng ?? null };
 }
 
 /* ---------- vendor's own shop (auth-scoped in Supabase mode) ---------- */
@@ -36,7 +39,7 @@ export async function loadShop(): Promise<Shop | null> {
   if (!isSupabaseConfigured()) {
     try {
       const s = lsGet("shop:profile");
-      return s ? { id: null, slug: null, vendorCode: null, whatsapp: "", listed: false, lat: null, lng: null, ...JSON.parse(s) } : null;
+      return s ? { id: null, slug: null, vendorCode: null, whatsapp: "", listed: false, status: "approved" as const, statusNote: null, lat: null, lng: null, ...JSON.parse(s) } : null;
     } catch {
       return null;
     }
