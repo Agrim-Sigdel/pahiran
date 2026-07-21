@@ -12,6 +12,33 @@ export const CATEGORIES = [
 
 export const SIZES = ["XS", "S", "M", "L", "XL", "XXL", "Free size"] as const;
 
+/* What a shop sells. Descriptive, and it decides the shop's try-on
+   entitlement: the try-on model renders worn garments (tops / bottoms /
+   one-pieces — see mapCategory above), so clothing is the only category that
+   can actually produce a result. Footwear and jewellery are deliberately
+   'general' rather than optimistic — offering try-on that can't work is worse
+   than not offering it.
+
+   `type` here is the default at signup; an admin can override shops.type
+   afterwards without changing what the shop says it sells. */
+export const SHOP_CATEGORIES = [
+  { id: "clothing",    label: "Clothing & apparel",     type: "apparel" },
+  { id: "footwear",    label: "Footwear",               type: "general" },
+  { id: "jewellery",   label: "Jewellery & accessories", type: "general" },
+  { id: "beauty",      label: "Beauty & cosmetics",     type: "general" },
+  { id: "electronics", label: "Electronics",            type: "general" },
+  { id: "home",        label: "Home & furniture",       type: "general" },
+  { id: "grocery",     label: "Grocery & daily needs",  type: "general" },
+  { id: "sports",      label: "Sports & outdoor",       type: "general" },
+  { id: "books",       label: "Books & stationery",     type: "general" },
+  { id: "other",       label: "Something else",         type: "general" },
+] as const;
+
+/** The try-on entitlement a category implies at signup. */
+export function typeForCategory(id: string): "apparel" | "general" {
+  return SHOP_CATEGORIES.find((c) => c.id === id)?.type ?? "general";
+}
+
 // FASHN expects: "tops" | "bottoms" | "one-pieces" | "auto"
 export function mapCategory(cat: string): string {
   if (["Sari", "Lehenga", "Dress"].includes(cat)) return "one-pieces";

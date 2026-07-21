@@ -1,5 +1,6 @@
 "use client";
 
+import { SHOP_CATEGORIES } from "@/lib/constants";
 import type { Shop } from "@/lib/types";
 
 /* Shown instead of the dashboard once the shop profile is filled in but the
@@ -53,6 +54,8 @@ export default function PendingReview({ shop, signOut }: {
           <div style={{ fontSize: 10.5, letterSpacing: ".14em", color: "var(--mut)" }}>What we have on file</div>
           <Row label="Shop name" value={shop.name} />
           <Row label="Area / city" value={shop.area} />
+          <Row label="Sells" value={SHOP_CATEGORIES.find((c) => c.id === shop.category)?.label ?? shop.category} />
+          <Row label="AI try-on" value={shop.type === "apparel" ? "Included" : "Not included"} />
           <Row label="WhatsApp" value={shop.whatsapp || "— not set —"} />
           <Row label="Listed on peeq" value={shop.listed ? "Yes" : "No"} />
           <Row label="Map pin" value={shop.lat != null && shop.lng != null ? "Placed" : "— not placed —"} />

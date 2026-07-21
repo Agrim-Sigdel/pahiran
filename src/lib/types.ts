@@ -12,6 +12,13 @@ export type ShopStatus = "pending" | "approved" | "rejected" | "suspended";
    shop has no try-on entitlement to spend in the first place. */
 export type ShopType = "apparel" | "general";
 
+/* What the shop sells — descriptive, and the source of the default ShopType at
+   signup (see SHOP_CATEGORIES in constants.ts). Kept separate from `type` so an
+   admin can grant or revoke try-on without rewriting what the shop is. */
+export type ShopCategory =
+  | "clothing" | "footwear" | "jewellery" | "beauty" | "electronics"
+  | "home" | "grocery" | "sports" | "books" | "other";
+
 export interface Shop {
   id: string | null; // null until persisted (localStorage mode has no id)
   slug: string | null; // pahiran.app/k/{slug}; null in localStorage mode
@@ -23,6 +30,7 @@ export interface Shop {
   status: ShopStatus; // admin approval gate; 'approved' in local mode
   statusNote: string | null; // admin's reason, shown to the vendor on reject/suspend
   type: ShopType; // 'general' shops get the catalog without try-on
+  category: ShopCategory; // what they sell; sets `type` at signup
   lat: number | null; // OSM map pin; null = not placed yet
   lng: number | null;
 }
@@ -97,6 +105,7 @@ export interface ShopRow {
   status: string | null; // absent until 20260721000100_admin_console.sql is applied
   status_note: string | null;
   type: string | null; // absent until 20260721000300_shop_type.sql is applied
+  category: string | null; // absent until 20260721000500_shop_category.sql is applied
   lat: number | null;
   lng: number | null;
 }

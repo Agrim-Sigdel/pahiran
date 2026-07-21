@@ -30,7 +30,7 @@ function rowToShop(r: ShopRow): Shop {
   // status falls back to 'approved' when the column isn't there yet (admin
   // console migration unapplied) — same fail-soft stance as listed/lat/lng, so
   // an un-migrated database doesn't lock every vendor out of their catalog.
-  return { id: r.id, slug: r.slug, vendorCode: r.vendor_code ?? null, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "", listed: r.listed ?? false, status: (r.status as Shop["status"]) ?? "approved", statusNote: r.status_note ?? null, type: (r.type as Shop["type"]) ?? "apparel", lat: r.lat ?? null, lng: r.lng ?? null };
+  return { id: r.id, slug: r.slug, vendorCode: r.vendor_code ?? null, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "", listed: r.listed ?? false, status: (r.status as Shop["status"]) ?? "approved", statusNote: r.status_note ?? null, type: (r.type as Shop["type"]) ?? "apparel", category: (r.category as Shop["category"]) ?? "clothing", lat: r.lat ?? null, lng: r.lng ?? null };
 }
 
 /* ---------- vendor's own shop (auth-scoped in Supabase mode) ---------- */
@@ -39,7 +39,7 @@ export async function loadShop(): Promise<Shop | null> {
   if (!isSupabaseConfigured()) {
     try {
       const s = lsGet("shop:profile");
-      return s ? { id: null, slug: null, vendorCode: null, whatsapp: "", listed: false, status: "approved" as const, statusNote: null, type: "apparel" as const, lat: null, lng: null, ...JSON.parse(s) } : null;
+      return s ? { id: null, slug: null, vendorCode: null, whatsapp: "", listed: false, status: "approved" as const, statusNote: null, type: "apparel" as const, category: "clothing" as const, lat: null, lng: null, ...JSON.parse(s) } : null;
     } catch {
       return null;
     }
@@ -85,7 +85,7 @@ export async function saveShop(profile: Shop): Promise<void> {
     try {
       lsSet("shop:profile", JSON.stringify({
         name: profile.name, area: profile.area, whatsapp: profile.whatsapp, listed: profile.listed,
-        type: profile.type, lat: profile.lat, lng: profile.lng,
+        type: profile.type, category: profile.category, lat: profile.lat, lng: profile.lng,
       }));
     } catch {}
     return;
@@ -94,7 +94,7 @@ export async function saveShop(profile: Shop): Promise<void> {
   const sb = supabase();
   const fields = { name: profile.name, area: profile.area, whatsapp: profile.whatsapp || null };
   const { error } = await sb.from("shops")
-    .update({ ...fields, listed: profile.listed, lat: profile.lat, lng: profile.lng, type: profile.type })
+    .update({ ...fields, listed: profile.listed, lat: profile.lat, lng: profile.lng, type: profile.type, category: profile.category })
     .eq("id", profile.id);
   if (!error) return;
   if (error.code === "42703") {

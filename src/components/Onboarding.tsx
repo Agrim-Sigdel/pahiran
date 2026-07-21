@@ -3,7 +3,8 @@
 import { useState } from "react";
 import LocationPicker from "@/components/LocationPicker";
 import { nameError, phoneError, fieldErrorStyle } from "@/lib/validate";
-import type { Shop, ShopType } from "@/lib/types";
+import { SHOP_CATEGORIES, typeForCategory } from "@/lib/constants";
+import type { Shop, ShopCategory } from "@/lib/types";
 
 /* First-login setup: shown instead of the dashboard until the shop has a
    name. The name becomes the public /k/{slug} and /s/{slug} links. */
@@ -18,13 +19,13 @@ export function slugify(name: string): string {
 
 export default function Onboarding({ shop, onComplete }: {
   shop: Shop;
-  onComplete: (info: { name: string; area: string; whatsapp: string; listed: boolean; type: ShopType; lat: number | null; lng: number | null }) => Promise<void>;
+  onComplete: (info: { name: string; area: string; whatsapp: string; listed: boolean; type: Shop["type"]; category: ShopCategory; lat: number | null; lng: number | null }) => Promise<void>;
 }) {
   const [name, setName] = useState(shop.name);
   const [area, setArea] = useState(shop.area);
   const [whatsapp, setWhatsapp] = useState(shop.whatsapp);
   const [listed, setListed] = useState(shop.listed);
-  const [type, setType] = useState<ShopType>(shop.type);
+  const [category, setCategory] = useState<ShopCategory>(shop.category);
   const [pin, setPin] = useState<{ lat: number | null; lng: number | null }>({ lat: shop.lat, lng: shop.lng });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -51,7 +52,7 @@ export default function Onboarding({ shop, onComplete }: {
     setBusy(true);
     setError("");
     try {
-      await onComplete({ name: name.trim(), area: area.trim(), whatsapp: whatsapp.trim(), listed, type, lat: pin.lat, lng: pin.lng });
+      await onComplete({ name: name.trim(), area: area.trim(), whatsapp: whatsapp.trim(), listed, type: typeForCategory(category), category, lat: pin.lat, lng: pin.lng });
     } catch (e: any) {
       setError(e?.message || "Could not save. Please try again.");
       setBusy(false);
@@ -83,27 +84,22 @@ export default function Onboarding({ shop, onComplete }: {
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
             {errors.area && <span style={{ ...fieldErrorStyle, fontWeight: 400, letterSpacing: 0, textTransform: "none", marginTop: 4, display: "block" }}>{errors.area}</span>}
           </label>
-          {/* Drives whether this shop ever sees try-on. Asked at signup rather
-              than inferred, because it changes what the vendor is buying. */}
-          <div className="field">What do you sell?
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              {([
-                { key: "apparel", label: "Clothing & accessories", hint: "Catalog + AI try-on" },
-                { key: "general", label: "Something else", hint: "Catalog only" },
-              ] as const).map((opt) => (
-                <button key={opt.key} type="button" onClick={() => setType(opt.key)}
-                  style={{
-                    flex: 1, textAlign: "left", cursor: "pointer", padding: "10px 12px",
-                    borderRadius: "var(--radius-btn)", lineHeight: 1.4,
-                    border: "1px solid " + (type === opt.key ? "var(--forest)" : "var(--line)"),
-                    background: type === opt.key ? "var(--sage)" : "var(--cream)",
-                  }}>
-                  <span style={{ display: "block", fontSize: 13, fontWeight: 600, letterSpacing: 0, textTransform: "none", color: "var(--ink)" }}>{opt.label}</span>
-                  <span style={{ display: "block", fontSize: 11.5, fontWeight: 400, letterSpacing: 0, textTransform: "none", color: "var(--mut)", marginTop: 2 }}>{opt.hint}</span>
-                </button>
+          {/* Drives whether this shop ever sees try-on, via typeForCategory.
+              Asked at signup rather than inferred, because it changes what the
+              vendor is buying. */}
+          <label className="field">What do you sell?
+            <select value={category} onChange={(e) => setCategory(e.target.value as ShopCategory)}
+              style={{ width: "100%", marginTop: 6, padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 14, color: "var(--ink)" }}>
+              {SHOP_CATEGORIES.map((c) => (
+                <option key={c.id} value={c.id}>{c.label}</option>
               ))}
-            </div>
-          </div>
+            </select>
+            <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--mut)", marginTop: 6, display: "block", lineHeight: 1.5 }}>
+              {typeForCategory(category) === "apparel"
+                ? "You'll get the catalog, kiosk and AI try-on."
+                : "You'll get the catalog, kiosk and QR tags. AI try-on only works on worn clothing, so it isn't part of this plan."}
+            </span>
+          </label>
 
           <label className="field">WhatsApp number <span style={{ color: "var(--danger)" }}>*</span>
             <input value={whatsapp} maxLength={20} placeholder="e.g. 9779841000000" inputMode="tel" aria-invalid={!!errors.whatsapp}

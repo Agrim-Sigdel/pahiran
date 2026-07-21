@@ -25,8 +25,42 @@ interface Shop {
   ownerEmail: string;
   garmentCount: number;
   plan: string;
+  planName: string | null;
+  planStatus: "active" | "past_due" | "canceled";
   tryonsUsed: number;
+  studioUsed: number;
+  tryonLimit: number | null;
+  studioLimit: number | null;
+  maxGarments: number | null; // null = unlimited
+  listedAllowed: boolean;
   periodEnd: string | null;
+  type: "apparel" | "general";
+  category: string;
+  vendorCode: string | null;
+  pinned: boolean;
+}
+
+const CATEGORY_LABEL: Record<string, string> = {
+  clothing: "Clothing & apparel",
+  footwear: "Footwear",
+  jewellery: "Jewellery & accessories",
+  beauty: "Beauty & cosmetics",
+  electronics: "Electronics",
+  home: "Home & furniture",
+  grocery: "Grocery & daily needs",
+  sports: "Sports & outdoor",
+  books: "Books & stationery",
+  other: "Something else",
+};
+
+/** "240/300" with the limit, or a bare count when the plan is unknown. */
+function usage(used: number, limit: number | null): string {
+  return limit == null ? String(used) : `${used}/${limit}`;
+}
+
+/** Flags a shop that has burned most of its allowance, so it stands out. */
+function short(used: number, limit: number | null): boolean {
+  return limit != null && limit > 0 && used / limit >= 0.8;
 }
 
 const TABS = ["pending", "approved", "suspended", "rejected", ""] as const;
@@ -65,6 +99,9 @@ function ShopsTable() {
   // Reject/suspend ask for a reason first — the vendor is shown it verbatim.
   const [noting, setNoting] = useState<{ id: string; status: Shop["status"] } | null>(null);
   const [noteText, setNoteText] = useState("");
+  // Type / category live behind a Manage toggle — the row is dense enough.
+  const [managing, setManaging] = useState<string | null>(null);
+  const [typeNote, setTypeNote] = useState("");
 
   const load = useCallback(async () => {
     setShops(null);
@@ -174,13 +211,37 @@ function ShopsTable() {
                     </span>
                     <Pill tone={TONE[s.status]}>{s.status}</Pill>
                     {s.listed && <Pill tone="mute">listed</Pill>}
+                    {/* The single flag deciding whether this shop gets try-on
+                        at all — worth a pill, not a buried field. */}
+                    <Pill tone={s.type === "apparel" ? "good" : "mute"}>
+                      {s.type === "apparel" ? "try-on" : "catalog only"}
+                    </Pill>
+                    {s.planStatus !== "active" && <Pill tone="bad">{s.planStatus}</Pill>}
                   </div>
                   <div style={{ fontSize: 12, color: "var(--mut)", marginTop: 4 }}>
                     /{s.slug} · {s.ownerEmail || "unknown owner"} {s.area ? "· " + s.area : ""}
+                    {s.vendorCode ? " · " + s.vendorCode : ""}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--mut)", marginTop: 3 }}>
+                    {CATEGORY_LABEL[s.category] || s.category}
+                    {s.whatsapp ? (
+                      <> · <a href={"tel:" + s.whatsapp} style={{ color: "var(--violet)" }}>{s.whatsapp}</a></>
+                    ) : (
+                      <span style={{ color: "#9b3232" }}> · no phone number</span>
+                    )}
+                    {" · "}{s.pinned ? "pin placed" : "no map pin"}
                   </div>
                   <div style={{ fontSize: 12, color: "var(--stone)", marginTop: 4 }}>
-                    {s.garmentCount} garment{s.garmentCount === 1 ? "" : "s"} · plan{" "}
-                    <b style={{ color: "var(--violet)" }}>{s.plan}</b> · {s.tryonsUsed} try-ons used this period
+                    {usage(s.garmentCount, s.maxGarments)} garment{s.garmentCount === 1 ? "" : "s"} · plan{" "}
+                    <b style={{ color: "var(--violet)" }}>{s.planName || s.plan}</b> ·{" "}
+                    <b style={{ color: short(s.tryonsUsed, s.tryonLimit) ? "#9b3232" : "inherit" }}>
+                      {usage(s.tryonsUsed, s.tryonLimit)} try-ons
+                    </b>
+                    {" · "}
+                    <span style={{ color: short(s.studioUsed, s.studioLimit) ? "#9b3232" : "inherit" }}>
+                      {usage(s.studioUsed, s.studioLimit)} studio
+                    </span>
+                    {s.periodEnd && <> · renews {when(s.periodEnd)}</>}
                   </div>
                   {s.statusNote && (
                     <div style={{ fontSize: 12, color: "var(--mut)", marginTop: 4, fontStyle: "italic" }}>
@@ -228,6 +289,58 @@ function ShopsTable() {
                 </div>
               )}
 
+              {managing === s.id && (
+                <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(0,0,0,.03)", borderRadius: "var(--radius-btn)", display: "flex", flexDirection: "column", gap: 12 }}>
+                  {/* Category is descriptive and changes nothing else, so it
+                      saves on pick. Try-on entitlement is a money question, so
+                      it needs a reason and an explicit apply. */}
+                  <label style={{ fontSize: 12, color: "var(--mut)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    Sells
+                    <select
+                      value={s.category}
+                      disabled={busy === s.id + ":category"}
+                      onChange={(e) => act(s, { action: "category", category: e.target.value }, "category")}
+                      style={{ padding: "8px 10px", fontSize: 12, borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)" }}
+                    >
+                      {Object.entries(CATEGORY_LABEL).map(([id, label]) => (
+                        <option key={id} value={id}>{label}</option>
+                      ))}
+                    </select>
+                    <span style={{ color: "var(--mut)" }}>descriptive only — does not change try-on</span>
+                  </label>
+
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, color: "var(--mut)" }}>
+                      Try-on is <b>{s.type === "apparel" ? "on" : "off"}</b> — turn it{" "}
+                      {s.type === "apparel" ? "off" : "on"}?
+                    </span>
+                    <Field
+                      maxLength={200}
+                      placeholder="reason (recorded in the audit trail)"
+                      value={typeNote}
+                      onChange={(e) => setTypeNote(e.target.value)}
+                      style={{ flex: 1, minWidth: 200 }}
+                    />
+                    <Btn
+                      busy={busy === s.id + ":type" || !typeNote.trim()}
+                      onClick={() => act(
+                        s,
+                        { action: "type", type: s.type === "apparel" ? "general" : "apparel", note: typeNote },
+                        "type",
+                      )}
+                    >
+                      Turn try-on {s.type === "apparel" ? "off" : "on"}
+                    </Btn>
+                  </div>
+
+                  {!s.listedAllowed && (
+                    <div style={{ fontSize: 12, color: "var(--mut)" }}>
+                      The {s.plan} plan does not permit directory listing.
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
                 {s.status !== "approved" && (
                   <Btn solid busy={busy === s.id + ":approved"} onClick={() => setStatus(s, "approved")}>
@@ -244,11 +357,23 @@ function ShopsTable() {
                     Reject
                   </Btn>
                 )}
-                {s.listed && (
+                {s.listed ? (
                   <Btn busy={busy === s.id + ":unlist"} onClick={() => act(s, { action: "unlist" }, "unlist")}>
                     Unlist
                   </Btn>
+                ) : (
+                  /* Only offered when it could actually succeed — the server
+                     enforces both conditions too, this just avoids a button
+                     that always errors. */
+                  s.status === "approved" && s.listedAllowed && (
+                    <Btn busy={busy === s.id + ":list"} onClick={() => act(s, { action: "list" }, "list")}>
+                      List
+                    </Btn>
+                  )
                 )}
+                <Btn onClick={() => { setManaging(managing === s.id ? null : s.id); setTypeNote(""); }}>
+                  {managing === s.id ? "Close" : "Manage"}
+                </Btn>
                 <a
                   href={"/s/" + s.slug}
                   target="_blank"

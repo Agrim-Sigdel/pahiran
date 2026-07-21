@@ -18,7 +18,7 @@ import type { Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [shop, setShop] = useState<Shop>({ id: null, slug: null, vendorCode: null, name: "", area: "", whatsapp: "", listed: false, status: "approved", statusNote: null, type: "apparel", lat: null, lng: null });
+  const [shop, setShop] = useState<Shop>({ id: null, slug: null, vendorCode: null, name: "", area: "", whatsapp: "", listed: false, status: "approved", statusNote: null, type: "apparel", category: "clothing", lat: null, lng: null });
   const [catalog, setCatalog] = useState<Garment[]>([]);
   const [events, setEvents] = useState<TryOnEvent[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -125,7 +125,7 @@ export default function DashboardPage() {
 
   /* First login: save the profile, then point /k and /s links at a slug
      built from the shop name (falling back to name-2 … if taken). */
-  const completeOnboarding = async (info: { name: string; area: string; whatsapp: string; listed: boolean; type: Shop["type"]; lat: number | null; lng: number | null }) => {
+  const completeOnboarding = async (info: { name: string; area: string; whatsapp: string; listed: boolean; type: Shop["type"]; category: Shop["category"]; lat: number | null; lng: number | null }) => {
     let next: Shop = { ...shop, ...info };
     await saveShop(next);
     if (next.id) {
