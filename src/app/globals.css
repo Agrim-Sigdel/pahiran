@@ -49,6 +49,12 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+html, body {
+  /* one overflowing row must never put a horizontal scrollbar on the page —
+     clip (not hidden) so no new scroll container is created */
+  overflow-x: clip;
+}
+
 body {
   margin: 0;
   font-family: 'Mukta', sans-serif;
@@ -161,12 +167,30 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--stone); font-weight: 600; }
 .field input { padding: 12px 15px; border-radius: 14px; border: 1px solid var(--line); font-size: 15px; background: #fff; color: var(--ink); font-weight: 400; letter-spacing: 0; text-transform: none; }
 
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 22px; overflow-x: auto; }
-.tabs button { font-family: 'Baloo 2', cursive; padding: 12px 20px; font-size: 15px; font-weight: 600; color: var(--stone); border: none; border-bottom: 2px solid transparent; white-space: nowrap; background: none; cursor: pointer; }
-.tabs button.on { color: var(--ink); border-bottom-color: var(--violet); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 22px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button { font-family: 'Baloo 2', cursive; padding: 12px 20px; font-size: 15px; font-weight: 600; color: var(--stone); border: none; white-space: nowrap; background: none; cursor: pointer; position: relative; }
+.tabs button.on { color: var(--ink); }
+/* the indicator: a short rounded bar sitting right on the hairline, drawn as
+   a pseudo-element so it can't double up with the container border */
+.tabs button.on::after { content: ""; position: absolute; left: 18px; right: 18px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--violet); }
 .tabs .badge { background: var(--butter); color: var(--ink); font-size: 11px; font-weight: 700; border-radius: 10px; padding: 1px 8px; margin-left: 6px; }
 
 .garment-rail::-webkit-scrollbar { height: 0; }
+
+/* dashboard catalog toolbar: title + tools on one row on desktop; on phones
+   the search takes its own row, filter + qr share one, add garment goes full
+   width. Widths live here (not inline) so the media query can win. */
+.cat-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.cat-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.cat-tools .cat-search { width: 210px; }
+@media (max-width: 640px) {
+  .cat-tools { width: 100%; }
+  .cat-tools .cat-search { width: 100%; flex: 1 1 100%; }
+  .cat-tools select { flex: 1 1 0; min-width: 0; }
+  .cat-tools .cat-qr { flex: 1 1 0; white-space: nowrap; }
+  .cat-tools .cat-add { flex: 1 1 100%; }
+}
 
 /* ── responsive layout primitives ─────────────────────────────── */
 
