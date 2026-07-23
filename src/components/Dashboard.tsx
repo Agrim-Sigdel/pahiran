@@ -141,17 +141,18 @@ export default function Dashboard({
 
           {tab === "catalog" && (
             <div className="fade-up">
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+              <div className="cat-bar">
                 <div>
                   <span className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>catalog</span>
                   <span style={{ color: "var(--mut)", marginLeft: 10, fontSize: 13 }}>{catalog.length} item{catalog.length !== 1 ? "s" : ""}</span>
                 </div>
-                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <div className="cat-tools">
                   <input
+                    className="cat-search"
                     value={codeQuery}
                     onChange={(e) => setCodeQuery(e.target.value)}
                     placeholder={shop.vendorCode ? `find ${shop.vendorCode}-0001 or a name…` : "search by name…"}
-                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 13, width: 210 }}
+                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 13 }}
                   />
                   <select value={filter} onChange={(e) => setFilter(e.target.value)}
                     style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 13 }}>
@@ -159,12 +160,12 @@ export default function Dashboard({
                     {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
                   {catalog.length > 0 && (
-                    <button className="ph-btn" style={{ padding: "10px 18px", fontSize: 12, fontWeight: 600, border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", color: "var(--forest-deep)", background: "var(--cream)" }}
+                    <button className="ph-btn cat-qr" style={{ padding: "10px 18px", fontSize: 12, fontWeight: 600, border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", color: "var(--forest-deep)", background: "var(--cream)" }}
                       onClick={() => setShowTagSheet(true)}>
                       <Icon name="print" /> qr tags
                     </button>
                   )}
-                  <button className="ph-btn btn-solid" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => setShowForm(true)}>
+                  <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => setShowForm(true)}>
                     + add garment
                   </button>
                 </div>
