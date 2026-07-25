@@ -14,8 +14,11 @@ export function getKioskSessionId(): string | null {
   }
 }
 
-/* Client → our own /api/tryon proxy. The fal key never reaches the browser.
-   shopId/garmentId ride along so the server can cache + log analytics. */
+/* Client → our own /api/tryon proxy. Provider keys never reach the browser.
+   shopId/garmentId ride along so the server can cache + log analytics.
+   Every try-on runs the studio finish now; the server still quietly falls
+   back to quick when no OpenAI key is configured or the studio quota is
+   spent, so the shopper always gets a result. */
 export type TryOnFinish = "quick" | "studio";
 
 export async function runTryOn(
@@ -23,7 +26,7 @@ export async function runTryOn(
   garmentImage: string,
   category: string,
   ids?: { shopId?: string | null; garmentId?: string | null },
-  finish: TryOnFinish = "quick"
+  finish: TryOnFinish = "studio"
 ): Promise<string> {
   const res = await fetch("/api/tryon", {
     method: "POST",

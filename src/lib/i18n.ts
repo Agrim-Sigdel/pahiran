@@ -51,14 +51,8 @@ const en = {
   notSavedNote: "Your photo stays on this screen — it is never saved.",
   couldNotReadPhoto: "Could not read that photo.",
 
-  genMessages: ["taking a peeq…", "draping the fabric…", "matching the light…", "stitching the details…", "final touches…"],
-  genFooter: "usually 15–30 seconds",
-  genFooterStudio: "the studio takes about a minute — worth it",
-
-  finishQuick: "quick peeq",
-  finishQuickSub: "a look in seconds",
-  finishStudio: "studio peeq",
-  finishStudioSub: "our finest look · ~1 min",
+  genMessages: ["Peeq gardai... 👀", "Lighting milaudai...", "Kapada ramrari fit gardai...", "Pose milaudai...", "Sana sana details milaudai...", "Almost tayar!", "La, sakinai lagyo, ahha la daami cha"],
+  genFooter: "ek minute jati laagchha, tara worth it chha hai",
 
   pickAPiece: "pick a piece below",
   sizes: "sizes:",
@@ -167,13 +161,7 @@ const ne: typeof en = {
   couldNotReadPhoto: "फोटो पढ्न सकिएन।",
 
   genMessages: ["एक झलक हेर्दै…", "कपडा ओढाउँदै…", "उज्यालो मिलाउँदै…", "बुट्टा सिलाउँदै…", "अन्तिम टच…"],
-  genFooter: "प्रायः १५–३० सेकेन्ड",
-  genFooterStudio: "स्टुडियो फिनिशलाई एक मिनेट जति लाग्छ — तर लायकको छ",
-
-  finishQuick: "quick peeq",
-  finishQuickSub: "सेकेन्डमै एक झलक",
-  finishStudio: "studio peeq",
-  finishStudioSub: "सबैभन्दा राम्रो लुक · ~१ मिनेट",
+  genFooter: "एक मिनेट जति लाग्छ, तर लायकको छ है",
 
   pickAPiece: "तलबाट एउटा लुगा छान्नुहोस्",
   sizes: "साइज:",
