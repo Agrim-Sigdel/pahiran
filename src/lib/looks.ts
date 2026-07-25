@@ -414,3 +414,20 @@ export async function shareImage(image: Blob | string, garmentName: string, shop
 export async function shareLook(look: SavedLook): Promise<void> {
   return shareImage(look.image, look.garmentName, look.shopName);
 }
+
+/* Save an image as a file on the shopper's device. Takes a Blob, a signed
+   URL or a data URL — works for saved looks and fresh results alike. */
+export async function downloadImage(image: Blob | string, garmentName: string): Promise<void> {
+  const blob = image instanceof Blob ? image : await (await fetch(image)).blob();
+  const ext = blob.type.includes("png") ? "png" : "jpg";
+  const slug = garmentName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "look";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "peeq-" + slug + "." + ext;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+export async function downloadLook(look: SavedLook): Promise<void> {
+  return downloadImage(look.image, look.garmentName);
+}

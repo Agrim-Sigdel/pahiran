@@ -180,7 +180,10 @@ export default function Dashboard({
                     return (
                       <div key={g.id} className="fade-up" style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)", opacity: g.inStock ? 1 : 0.6 }}>
                         <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--sage-mist)" }}>
-                          <img src={g.image} alt={g.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: g.inStock ? "none" : "grayscale(.7)" }} />
+                          <button onClick={() => setQrGarment(g)} title={"QR code for " + g.name}
+                            style={{ display: "block", width: "100%", height: "100%", padding: 0, border: "none", background: "none", cursor: "pointer" }}>
+                            <img src={g.image} alt={g.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: g.inStock ? "none" : "grayscale(.7)" }} />
+                          </button>
                           <span style={{ position: "absolute", top: 10, left: 10, background: "var(--cream)", color: "var(--forest-deep)", fontSize: 10, fontWeight: 600, letterSpacing: ".1em", padding: "4px 10px", borderRadius: 2 }}>
                             {g.category}
                           </span>
@@ -536,11 +539,22 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
 
 function QRModal({ garment, url, crossDevice, onClose }: { garment: Garment; url: string; crossDevice: boolean; onClose: () => void }) {
   const [qr, setQr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   useEffect(() => {
     QRCode.toDataURL(url, { width: 480, margin: 2, color: { dark: "#1A1714", light: "#ffffff" } })
       .then(setQr)
       .catch(() => setQr(null));
   }, [url]);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // clipboard blocked (http / permissions) — leave the button as-is
+    }
+  };
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
@@ -558,7 +572,16 @@ function QRModal({ garment, url, crossDevice, onClose }: { garment: Garment; url
             Generating…
           </div>
         )}
-        <code style={{ display: "block", fontSize: 11, color: "var(--mut)", margin: "12px 0", wordBreak: "break-all" }}>{url}</code>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center", margin: "12px 0" }}>
+          <a className="ph-btn" href={url} target="_blank" rel="noopener noreferrer"
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, color: "var(--forest-deep)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px", textDecoration: "none" }}>
+            <Icon name="open" /> open link
+          </a>
+          <button className="ph-btn" onClick={copyLink}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, color: copied ? "var(--forest)" : "var(--forest-deep)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
+            <Icon name={copied ? "check" : "copy"} /> {copied ? "copied" : "copy link"}
+          </button>
+        </div>
         {!crossDevice && (
           <div style={{ fontSize: 12, color: "var(--camel)", background: "var(--sage)", borderRadius: 6, padding: "8px 12px", marginBottom: 12 }}>
             Local mode: this link only works on this device until you connect Supabase and deploy.
