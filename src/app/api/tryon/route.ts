@@ -180,7 +180,7 @@ async function runStudio(personImage: string, garmentImage: string, category: st
   const form = new FormData();
   form.append("model", "gpt-image-2");
   form.append("size", "1024x1536");
-  form.append("quality", "medium");
+  form.append("quality", "low");
   form.append(
     "prompt",
     `Virtual try-on. Take off the ${category || "clothing"} the person in the first image is currently wearing ` +
