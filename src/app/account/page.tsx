@@ -10,6 +10,7 @@ import {
 } from "@/lib/looks";
 import { npr } from "@/lib/constants";
 import Icon from "@/components/Icon";
+import LookViewer from "@/components/LookViewer";
 import { nameError, phoneError, fieldErrorStyle } from "@/lib/validate";
 
 /* Shopper account hub — your saved try-ons, contact details (for one-tap
@@ -57,6 +58,7 @@ function SignedIn({ email }: { email: string }) {
   const [contact, setContact] = useState({ name: "", phone: "" });
   const [savedMsg, setSavedMsg] = useState(false);
   const [looks, setLooks] = useState<SavedLook[] | null>(null);
+  const [viewing, setViewing] = useState<SavedLook | null>(null);
   const [pendingLooks, setPendingLooks] = useState(0); // device looks to offer up
   const [merging, setMerging] = useState(false);
   const urls = useRef<Map<string, string>>(new Map());
@@ -187,7 +189,10 @@ function SignedIn({ email }: { email: string }) {
             {sorted.map((l) => (
               <div key={l.id} style={{ background: "var(--cream)", borderRadius: 16, overflow: "hidden", border: "1px solid " + (l.favorite ? "var(--violet)" : "var(--line)") }}>
                 <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--sage-mist)" }}>
-                  <img src={imgSrc(l)} alt={"You wearing " + l.garmentName} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  <button onClick={() => setViewing(l)} title={l.garmentName}
+                    style={{ display: "block", width: "100%", height: "100%", padding: 0, border: "none", background: "none", cursor: "zoom-in" }}>
+                    <img src={imgSrc(l)} alt={"You wearing " + l.garmentName} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  </button>
                   <button className="ph-btn" onClick={async () => { await setLookFavorite(l.id, !l.favorite); refresh(); }}
                     style={{ position: "absolute", top: 8, right: 8, background: "rgba(255,255,255,.9)", color: l.favorite ? "var(--violet)" : "var(--stone)", fontSize: 15, padding: "5px 9px", borderRadius: 999 }}>
                     <Icon name={l.favorite ? "heart-filled" : "heart"} />
@@ -209,6 +214,8 @@ function SignedIn({ email }: { email: string }) {
           </div>
         )}
       </div>
+
+      {viewing && <LookViewer look={viewing} src={imgSrc(viewing)} onClose={() => setViewing(null)} />}
     </main>
   );
 }

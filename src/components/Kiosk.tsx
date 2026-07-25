@@ -9,7 +9,7 @@ import { reportError } from "@/lib/logging";
 import {
   getRememberedPhoto, rememberPhoto, forgetPhoto,
   saveLook, listLooks, setLookFavorite, deleteLook, clearAllLooks, clearDeviceSession,
-  lookImageURL, shareLook, shareImage, type SavedLook,
+  lookImageURL, shareLook, shareImage, downloadImage, type SavedLook,
 } from "@/lib/looks";
 import { getProfile, saveProfile, forgetProfile, type Profile } from "@/lib/profile";
 import { useAccount, getContact, signOut } from "@/lib/account";
@@ -19,6 +19,7 @@ import { recommendSize, HEIGHT_MIN, HEIGHT_MAX, WEIGHT_MIN, WEIGHT_MAX, type Gen
 import { LangContext, STRINGS, useLangState, useT } from "@/lib/i18n";
 import type { Garment, Shop } from "@/lib/types";
 import Icon from "@/components/Icon";
+import LookViewer from "@/components/LookViewer";
 
 /* Kiosk — light, touch-first shopper flow:
    attract (saved-photo fast path) → capture (consent inline) → try on.
@@ -55,7 +56,7 @@ function useImageAspect(src: string | null): number | null {
 }
 
 /* the ee — blinks while the app is "looking" (replaces spinners) */
-function EeMark({ size, looking, color }: { size: number; looking?: boolean; color?: string }) {
+function EeMark({ size, looking, color }: { size: number | string; looking?: boolean; color?: string }) {
   return (
     <span className={"ee-mark " + (looking ? "ee-looking" : "ee-blink")}
       style={{ fontSize: size, color: color || "var(--violet)" }}>
@@ -507,23 +508,26 @@ function GeneratingOverlay({ garment }: { garment: Garment | null }) {
     return () => clearInterval(timer);
   }, [tau]);
 
+  /* Column layout, not two absolute layers: the ee centers in whatever space
+     is left ABOVE the text block, so on a short mobile stage they can never
+     overlap. All sizes clamp with the viewport. */
   return (
-    <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
-      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <EeMark size={64} looking color="#fff" />
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <EeMark size="clamp(38px, 12vw, 64px)" looking color="#fff" />
       </div>
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "40px 18px 16px", background: "linear-gradient(transparent, rgba(26,23,20,.9) 55%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
+      <div style={{ padding: "26px 14px 14px", background: "linear-gradient(transparent, rgba(26,23,20,.9) 45%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 9, textAlign: "center" }}>
         {garment && (
-          <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.16)", borderRadius: 999, padding: "5px 14px 5px 5px" }}>
-            <img src={garment.image} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", display: "block" }} />
-            <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,.9)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{garment.name}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.16)", borderRadius: 999, padding: "5px 14px 5px 5px", maxWidth: "88%" }}>
+            <img src={garment.image} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", display: "block", flexShrink: 0 }} />
+            <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,.9)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{garment.name}</span>
           </div>
         )}
-        <div key={msg} className="peek ph-display" style={{ fontSize: 18, fontWeight: 600, color: "#fff" }}>{t.genMessages[msg % t.genMessages.length]}</div>
+        <div key={msg} className="peek ph-display" style={{ fontSize: "clamp(15px, 4.4vw, 18px)", lineHeight: 1.35, fontWeight: 600, color: "#fff", maxWidth: 340, padding: "0 6px" }}>{t.genMessages[msg % t.genMessages.length]}</div>
         <div style={{ width: "72%", maxWidth: 300, height: 5, borderRadius: 5, background: "rgba(255,255,255,.2)", overflow: "hidden" }}>
           <div style={{ height: "100%", width: progress + "%", borderRadius: 5, background: "var(--violet)", transition: "width .3s linear" }} />
         </div>
-        <div style={{ color: "rgba(255,255,255,.55)", fontSize: 12 }}>{progress}% · {t.genFooter}</div>
+        <div style={{ color: "rgba(255,255,255,.55)", fontSize: 11.5, lineHeight: 1.5, maxWidth: 320, padding: "0 8px" }}>{progress}% · {t.genFooter}</div>
       </div>
     </div>
   );
@@ -533,6 +537,7 @@ function GeneratingOverlay({ garment }: { garment: Garment | null }) {
 function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCountChange: (n: number) => void }) {
   const t = useT();
   const [looks, setLooks] = useState<SavedLook[] | null>(null);
+  const [viewing, setViewing] = useState<SavedLook | null>(null);
   const urls = useRef<Map<string, string>>(new Map());
 
   const refresh = async () => {
@@ -591,7 +596,10 @@ function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCount
           {sorted.map((l) => (
             <div key={l.id} className="peek" style={{ background: "var(--card)", borderRadius: 18, overflow: "hidden", border: "1px solid " + (l.favorite ? "var(--violet)" : "var(--line)") }}>
               <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--paper-deep)" }}>
-                <img src={imgSrc(l)} alt={"You wearing " + l.garmentName} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                <button onClick={() => setViewing(l)} title={l.garmentName}
+                  style={{ display: "block", width: "100%", height: "100%", padding: 0, border: "none", background: "none", cursor: "zoom-in" }}>
+                  <img src={imgSrc(l)} alt={"You wearing " + l.garmentName} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                </button>
                 <button className="ph-btn"
                   onClick={async () => { await setLookFavorite(l.id, !l.favorite); refresh(); }}
                   style={{ position: "absolute", top: 8, right: 8, background: "var(--card)", color: l.favorite ? "var(--violet)" : "var(--stone)", fontSize: 15, padding: "5px 9px", borderRadius: 999 }}>
@@ -617,6 +625,11 @@ function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCount
             </div>
           ))}
         </div>
+      )}
+
+      {viewing && (
+        <LookViewer look={viewing} src={imgSrc(viewing)} onClose={() => setViewing(null)}
+          labels={{ save: t.saveImage, share: t.share }} />
       )}
     </div>
   );
@@ -896,6 +909,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
   const [bagState, setBagState] = useState<"idle" | "pick" | "added">("idle");
   const [lookState, setLookState] = useState<"idle" | "saving" | "saved">("idle");
   const [shareState, setShareState] = useState<"idle" | "sharing">("idle");
+  const [downloading, setDownloading] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false); // hold-to-compare
   const [history, setHistory] = useState<{ garment: Garment; url: string }[]>([]); // this session's generated looks
   const savedIds = useRef<Set<string>>(new Set()); // garments already saved to My Looks this session
@@ -1118,6 +1132,16 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
               }}
               style={{ border: "1px solid var(--line)", color: "var(--ink)", padding: "9px 18px", fontSize: 13.5, fontWeight: 600, borderRadius: 999, background: "transparent", opacity: shareState === "sharing" ? 0.6 : 1 }}>
               {shareState === "sharing" ? t.sharing : t.share}
+            </button>
+            <button className="ph-btn" disabled={downloading}
+              onClick={async () => {
+                if (!resultImage) return;
+                setDownloading(true);
+                try { await downloadImage(resultImage, selected.name); } catch {}
+                setDownloading(false);
+              }}
+              style={{ border: "1px solid var(--line)", color: "var(--ink)", padding: "9px 18px", fontSize: 13.5, fontWeight: 600, borderRadius: 999, background: "transparent", opacity: downloading ? 0.6 : 1 }}>
+              <Icon name="point-down" /> {t.saveImage}
             </button>
             <button className="ph-btn" disabled={lookState !== "idle"}
               onClick={async () => {

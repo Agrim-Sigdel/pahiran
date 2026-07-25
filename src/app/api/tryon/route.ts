@@ -183,15 +183,27 @@ async function runStudio(personImage: string, garmentImage: string, category: st
   form.append("quality", "low");
   form.append(
     "prompt",
-    `Virtual try-on. Take off the ${category || "clothing"} the person in the first image is currently wearing ` +
-      `and dress them in the exact garment from the second image instead — the old garment must be fully gone, ` +
-      `not visible underneath or through the new one.
+    `Virtual try-on photo edit. Remove the ${category || "clothing"} the person in the first image is currently wearing ` +
+      `and dress them in the exact garment from the second image instead. The old garment must be completely gone, ` +
+      `never visible underneath or through the new one.
 
-Guardrails:
-- Same person: identical face, hair, skin tone, body shape, pose, camera angle and background as the first image.
-- Exact outfit: the garment's color, pattern, neckline, sleeves and details must match the second image precisely — do not redesign it.
-- No glitches: no warped or extra limbs, hands and fingers intact, no floating or melted fabric, no double garments, no added people, text or watermarks.
-- Result must look like a real photograph of this person wearing this garment, nothing else changed.`
+Identity lock (most important rule): the face must be carried over from the first image completely unchanged. ` +
+      `Do not retouch, beautify, slim, relight or regenerate it. Keep the identical facial features, expression, ` +
+      `skin tone and texture, hairstyle, facial hair, and any glasses or jewellery. Keep the same body shape, height, ` +
+      `pose, hand positions, camera angle, framing and background. Everything the new garment does not cover must ` +
+      `stay pixel-identical to the first image.
+
+Garment fidelity: reproduce the second image's garment exactly. Match its color and shade, fabric and texture, ` +
+      `pattern placement and scale, neckline, collar, sleeve length, hem length, buttons, zips, prints, logos, ` +
+      `embroidery and trims. Do not invent, remove, recolor or restyle any element. Fit it naturally to this ` +
+      `person's body in this pose, with realistic draping, folds, and shadows that match the scene's existing lighting.
+
+Strictly forbidden: warped or extra limbs, deformed hands or fingers, floating or melted fabric, double garments, ` +
+      `an altered face or hair, added people, added text or watermarks, background changes, framing or aspect changes, ` +
+      `and any stylization or illustration look.
+
+The result must look like an unedited real photograph of this exact person wearing this exact garment, ` +
+      `with nothing else changed.`
   );
   form.append("image[]", await toFile(personImage, "person.jpg"));
   form.append("image[]", await toFile(garmentImage, "garment.jpg"));

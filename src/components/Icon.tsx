@@ -14,7 +14,8 @@
 export type IconName =
   | "bag" | "check" | "heart" | "heart-filled" | "close" | "print" | "ruler"
   | "phone" | "locate" | "reset" | "star" | "edit" | "bolt" | "sparkle"
-  | "person" | "eye" | "dice" | "party" | "point-down" | "swap" | "scissors";
+  | "person" | "eye" | "dice" | "party" | "point-down" | "swap" | "scissors"
+  | "copy" | "open";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   bag: <><path d="M4 8h16l-1.2 11.2a2 2 0 0 1-2 1.8H7.2a2 2 0 0 1-2-1.8L4 8Z" /><path d="M8.5 8V6a3.5 3.5 0 0 1 7 0v2" /></>,
@@ -38,6 +39,8 @@ const PATHS: Record<IconName, React.ReactNode> = {
   "point-down": <><path d="M12 4v13" /><path d="m6.5 11.5 5.5 5.5 5.5-5.5" /></>,
   swap: <><path d="M4 8h15l-3.5-3.5" /><path d="M20 16H5l3.5 3.5" /></>,
   scissors: <><circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" /><path d="M8 7.5 19 18M19 6 8 16.5" /></>,
+  copy: <><rect x="8.5" y="8.5" width="12" height="12" rx="2.5" /><path d="M5.5 15.5H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8.5a2 2 0 0 1 2 2v.5" /></>,
+  open: <><path d="M13.5 4H20v6.5" /><path d="M20 4 10.5 13.5" /><path d="M18.5 13.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7.5a2 2 0 0 1 2-2h4.5" /></>,
 };
 
 export default function Icon({
