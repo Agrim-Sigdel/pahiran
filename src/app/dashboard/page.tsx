@@ -224,8 +224,8 @@ export default function DashboardPage() {
   /* The counter spends without writing anything, so unlike composeFabric there
      is nothing to reload afterwards — the result lives in the panel until the
      vendor decides to keep it. */
-  const runCounter = (input: CounterInput): Promise<CounterRun> =>
-    runCounterOnServer(shop.id, input);
+  const runCounter = (input: CounterInput, onStitched?: (garmentUrl: string) => void): Promise<CounterRun> =>
+    runCounterOnServer(shop.id, input, onStitched);
 
   /* Keeping one does write: a fabric, a cut of the shop's own, and the
      composition joining them. All three lists move at once so the Fabrics tab

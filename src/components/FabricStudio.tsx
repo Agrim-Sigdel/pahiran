@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { FAMILIES, npr, fabricPrice, familyLabel } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
 import EeMark from "@/components/EeMark";
@@ -313,7 +314,7 @@ export default function FabricStudio({
    Exported because the counter waits on the same machines for the same cloth
    and deserves the same wait; it passes its own copy and its own step count. */
 export function StitchingOverlay({
-  image, caption, steps, messages = STITCH_MESSAGES, footer = STITCH_FOOTER,
+  image, caption, steps, messages = STITCH_MESSAGES, footer = STITCH_FOOTER, preview,
 }: {
   image: string;
   caption: string;
@@ -321,6 +322,9 @@ export function StitchingOverlay({
   steps: number;
   messages?: string[];
   footer?: string;
+  /** A finished intermediate render to show in the clear while the next step
+      runs — the counter passes the stitched piece here during the fitting. */
+  preview?: string;
 }) {
   const [msg, setMsg] = useState(0);
   const [progress, setProgress] = useState(4);
@@ -363,8 +367,13 @@ export function StitchingOverlay({
       <img src={image} alt="" aria-hidden
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(26px) brightness(.42) saturate(1.1)", transform: "scale(1.15)" }} />
 
-      <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <EeMark size="clamp(38px, 12vw, 64px)" looking color="#fff" />
+      <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: preview ? "22px 16px 8px" : 0 }}>
+        {preview ? (
+          <img src={preview} alt="The stitched piece" className="fade-up"
+            style={{ maxWidth: "min(78%, 340px)", maxHeight: "100%", objectFit: "contain", borderRadius: 12, boxShadow: "0 14px 44px rgba(0,0,0,.45)" }} />
+        ) : (
+          <EeMark size="clamp(38px, 12vw, 64px)" looking color="#fff" />
+        )}
       </div>
 
       <div style={{ position: "relative", padding: "26px 14px 30px", background: "linear-gradient(transparent, rgba(26,23,20,.9) 45%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 9, textAlign: "center" }}>
@@ -402,6 +411,7 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
   const c = composition;
   const [price, setPrice] = useState(String(c.price || ""));
   const [note, setNote] = useState(c.note);
+  const [zoom, setZoom] = useState(false);
   const styleName = style?.name ?? "Cut";
   const why = staleReason(c, style);
   const stale = why !== null;
@@ -410,7 +420,10 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
     <div style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid " + (c.published ? "var(--forest)" : "var(--line)") }}>
       <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--sage-mist)", display: "flex", alignItems: "center", justifyContent: "center" }}>
         {c.status === "ready" && c.image ? (
-          <img src={c.image} alt={styleName} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          <button type="button" onClick={() => setZoom(true)} title="View larger"
+            style={{ display: "block", width: "100%", height: "100%", padding: 0, border: "none", background: "none", cursor: "zoom-in" }}>
+            <img src={c.image} alt={styleName} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          </button>
         ) : c.status === "failed" ? (
           <div style={{ padding: 16, textAlign: "center", color: "var(--warn)", fontSize: 12, lineHeight: 1.6 }}>
             Didn&apos;t come out.<br />
@@ -486,7 +499,33 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
             style={{ fontSize: 11, padding: "4px 6px", fontWeight: 500, color: "var(--mut)" }}>Delete</button>
         )}
       </div>
+      {zoom && c.image && <ImageZoom src={c.image} alt={styleName} onClose={() => setZoom(false)} />}
     </div>
+  );
+}
+
+/* ── tap a preview, see it big ──
+   Portalled to <body>: rendered in place it would sit inside the studio
+   modal's .fade-up dialog, whose transform animation cages position: fixed.
+   Exported for the counter, which zooms its recent fitting the same way. */
+export function ImageZoom({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(26,23,20,.7)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, cursor: "zoom-out" }}>
+      <button className="ph-btn" onClick={onClose} aria-label="Close"
+        style={{ position: "absolute", top: 14, right: 14, background: "rgba(255,255,255,.14)", color: "#fff", fontSize: 15, padding: "9px 11px", borderRadius: 999 }}>
+        <Icon name="close" />
+      </button>
+      <img src={src} alt={alt} className="fade-up"
+        style={{ maxWidth: "94%", maxHeight: "94%", objectFit: "contain", borderRadius: 12, boxShadow: "0 22px 64px rgba(0,0,0,.5)" }} />
+    </div>,
+    document.body
   );
 }
 
@@ -494,9 +533,13 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
    The database requires at least one of the two (styles_describable), because a
    cut with neither tells the compose step nothing. A photographed sample is the
    strongest input a vendor can give — it's their real tailoring rather than our
-   description of a generic one — so it leads. */
-function CutModal({ family, mode, initial, onClose, onSave }: {
+   description of a generic one — so it leads.
+
+   Exported for the dashboard's designs tab, which opens it without a fabric in
+   hand — `pickFamily` adds the family choice the fabric would otherwise carry. */
+export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }: {
   family: StyleFamily;
+  pickFamily?: boolean;
   mode: "new" | "edit" | "copy";
   initial?: Style;
   onClose: () => void;
@@ -508,6 +551,7 @@ function CutModal({ family, mode, initial, onClose, onSave }: {
     refImage: string | null;
   }) => Promise<void>;
 }) {
+  const [fam, setFam] = useState<StyleFamily>(initial?.family ?? family);
   /* A copy opens on the original's wording so the vendor tweaks rather than
      retypes — the point of copying is usually one changed thing. */
   const [name, setName] = useState(
@@ -534,7 +578,7 @@ function CutModal({ family, mode, initial, onClose, onSave }: {
     setBusy(true);
     setError(null);
     try {
-      await onSave({ name: name.trim(), family, hint: hint.trim(), coverage, refImage: image });
+      await onSave({ name: name.trim(), family: fam, hint: hint.trim(), coverage, refImage: image });
     } catch (e: any) {
       setError(e?.message || "Could not save this cut.");
       setBusy(false);
@@ -551,7 +595,9 @@ function CutModal({ family, mode, initial, onClose, onSave }: {
         <div style={{ fontSize: 12.5, color: "var(--mut)", marginBottom: mode === "new" ? 18 : 12, lineHeight: 1.6 }}>
           {mode === "copy"
             ? `“${initial?.name}” is a peeq library cut, shared by every shop, so it can't be changed directly. This saves your own version of it — the original stays where it is.`
-            : `For ${familyLabel(family)}. Show us a photo of one you've stitched, describe it in words, or both — whatever you have.`}
+            : pickFamily
+            ? "Show us a photo of one you've stitched, describe it in words, or both — whatever you have."
+            : `For ${familyLabel(fam)}. Show us a photo of one you've stitched, describe it in words, or both — whatever you have.`}
         </div>
         {/* Editing the wording or the pieces changes what this cut means, and
             anything already stitched from it was made under the old meaning. */}
@@ -560,6 +606,17 @@ function CutModal({ family, mode, initial, onClose, onSave }: {
             Anything already stitched from this cut will be marked as needing a re-stitch —
             those pictures were made from the old wording. Renaming it alone is free.
           </div>
+        )}
+
+        {/* Opened from the fabric studio the family is the cloth's and fixed;
+            opened from the designs tab there is no cloth, so it's asked here. */}
+        {pickFamily && mode === "new" && (
+          <label className="field" style={{ marginBottom: 14 }}>Which family is this cut for?
+            <select value={fam} onChange={(e) => setFam(e.target.value as StyleFamily)}
+              style={{ width: "100%", padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "#fff", fontSize: 13.5 }}>
+              {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+            </select>
+          </label>
         )}
 
         {/* Real label elements throughout: `.field` wraps its control so the

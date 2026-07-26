@@ -757,10 +757,17 @@ export async function composeFabric(
 
 /** Stitch this cloth into this cut and put it on this person. Server-side for
     the same reasons compose is: provider keys stay off the browser and both
-    meters are charged where they can't be skipped. */
+    meters are charged where they can't be skipped.
+
+    The route streams NDJSON progress: a "stitched" event when the piece
+    exists, then "done" (or an error event). `onStitched` fires on the first,
+    so the panel can show the garment while the fitting still runs. Requests
+    refused before the stream starts (validation, meters) still come back as
+    plain JSON errors with a status code. */
 export async function runCounter(
   shopId: string | null,
-  input: CounterInput
+  input: CounterInput,
+  onStitched?: (garmentUrl: string) => void
 ): Promise<CounterRun> {
   if (!isSupabaseConfigured() || !shopId) {
     throw new Error("The counter needs Supabase mode");
@@ -774,15 +781,56 @@ export async function runCounter(
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
     body: JSON.stringify({ shopId, ...input }),
   });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
+
+  const streaming = (res.headers.get("content-type") || "").includes("ndjson");
+  if (!res.ok || !streaming || !res.body) {
+    const json = await res.json().catch(() => ({}));
     /* A failed try-on can still hand back the render the vendor paid for. Carry
        it on the error so the panel can show the piece beside the message. */
     const err = new Error(json?.error || "The counter couldn't finish (" + res.status + ")");
     (err as Error & { garmentUrl?: string }).garmentUrl = json?.garmentUrl;
     throw err;
   }
-  return { garmentUrl: json.garmentUrl, tryonUrl: json.tryonUrl };
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let stitchedUrl: string | undefined;
+  let done: CounterRun | null = null;
+
+  const handle = (line: string): void => {
+    if (!line.trim()) return;
+    let ev: any;
+    try { ev = JSON.parse(line); } catch { return; }
+    if (ev.error) {
+      const err = new Error(ev.error);
+      (err as Error & { garmentUrl?: string }).garmentUrl = ev.garmentUrl ?? stitchedUrl;
+      throw err;
+    }
+    if (ev.stage === "stitched" && typeof ev.garmentUrl === "string") {
+      stitchedUrl = ev.garmentUrl;
+      onStitched?.(ev.garmentUrl);
+    }
+    if (ev.stage === "done") done = { garmentUrl: ev.garmentUrl, tryonUrl: ev.tryonUrl };
+  };
+
+  for (;;) {
+    const { value, done: eof } = await reader.read();
+    if (eof) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) handle(line);
+  }
+  if (buffer.trim()) handle(buffer);
+
+  if (!done) {
+    /* The stream ended without a verdict — connection dropped mid-run. */
+    const err = new Error("The counter couldn't finish — please try again.");
+    (err as Error & { garmentUrl?: string }).garmentUrl = stitchedUrl;
+    throw err;
+  }
+  return done;
 }
 
 /** Keep a counter run: the cloth becomes a fabric, the cut becomes one of the

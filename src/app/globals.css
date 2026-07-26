@@ -224,7 +224,9 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
    sequence of three, so at any width they share the row evenly instead of
    leaving a phantom fourth column — and below ~800px they stack, which is the
    order the vendor works in anyway (cloth, cut, customer). */
-.counter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; align-items: start; }
+/* Cards stretch to one shared height per row — start-alignment leaves the
+   three steps ending at three different depths. */
+.counter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; align-items: stretch; }
 /* The finished fitting: the person at a readable size, the controls beside
    them on desktop and underneath on a phone. */
 .counter-result { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 18px; align-items: start; }

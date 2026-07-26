@@ -142,90 +142,118 @@ export async function POST(req: Request): Promise<Response> {
     return meterRefusal(tryon.reason, "tryon");
   }
 
-  /* ── 1. stitch the cloth into the cut ── */
-  const sources: ComposeSource[] = [{ image: fabricImage, role: "fabric" }];
-  if (styleImage) sources.push({ image: styleImage, role: "style-ref" });
+  /* ── both meters reserved; from here, progress streams ──
+     The stitch and the fit are two provider calls back to back, and a real
+     customer is standing at the counter through both. NDJSON events let the
+     panel show the stitched piece the moment it exists instead of one answer
+     after everything. Headers go out when the stream starts, so anything that
+     fails inside it travels as an error event rather than a status code —
+     the client treats those exactly like the old error responses. */
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (obj: Record<string, unknown>) =>
+        controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+      try {
+        /* ── 1. stitch the cloth into the cut ── */
+        const sources: ComposeSource[] = [{ image: fabricImage, role: "fabric" }];
+        if (styleImage) sources.push({ image: styleImage, role: "style-ref" });
 
-  let garmentDataUrl: string;
-  try {
-    garmentDataUrl = await composeGarment({
-      sources,
-      hint: stylePrompt,
-      family,
-      fabricNote: fabricNote || undefined,
-      coverage,
-    });
-  } catch (e: any) {
-    await refundCompose(sb, shopId);
-    await refundTryon(sb, shopId, true);
-    await logError(sb, "counter compose failed: " + (e?.message || e), { family, coverage }, shopId);
-    return Response.json({ error: "The cloth didn't come out — please try again." }, { status: 502 });
-  }
+        let garmentDataUrl: string;
+        try {
+          garmentDataUrl = await composeGarment({
+            sources,
+            hint: stylePrompt,
+            family,
+            fabricNote: fabricNote || undefined,
+            coverage,
+          });
+        } catch (e: any) {
+          await refundCompose(sb, shopId);
+          await refundTryon(sb, shopId, true);
+          await logError(sb, "counter compose failed: " + (e?.message || e), { family, coverage }, shopId);
+          send({ error: "The cloth didn't come out — please try again." });
+          return;
+        }
 
-  /* Stored before the try-on runs, not after: if the second half fails, the
-     vendor still has the stitched piece they paid for, and can send it through
-     again without spending another compose. */
-  let garmentUrl = garmentDataUrl;
-  const renderPath = shopId + "/counter/" + crypto.randomUUID() + ".png";
-  const { error: renderErr } = await sb.storage
-    .from(RENDERS_BUCKET)
-    .upload(renderPath, Buffer.from(garmentDataUrl.split(",")[1], "base64"), {
-      contentType: "image/png",
-    });
-  if (renderErr) {
-    // Not fatal — the render is in hand either way, it just isn't durable.
-    await logError(sb, "counter render upload failed: " + renderErr.message, {}, shopId);
-  } else {
-    garmentUrl = sb.storage.from(RENDERS_BUCKET).getPublicUrl(renderPath).data.publicUrl;
-  }
+        /* Stored before the try-on runs, not after: if the second half fails,
+           the vendor still has the stitched piece they paid for, and can send
+           it through again without spending another compose. */
+        let garmentUrl = garmentDataUrl;
+        const renderPath = shopId + "/counter/" + crypto.randomUUID() + ".png";
+        const { error: renderErr } = await sb.storage
+          .from(RENDERS_BUCKET)
+          .upload(renderPath, Buffer.from(garmentDataUrl.split(",")[1], "base64"), {
+            contentType: "image/png",
+          });
+        if (renderErr) {
+          // Not fatal — the render is in hand either way, it just isn't durable.
+          await logError(sb, "counter render upload failed: " + renderErr.message, {}, shopId);
+        } else {
+          garmentUrl = sb.storage.from(RENDERS_BUCKET).getPublicUrl(renderPath).data.publicUrl;
+        }
 
-  /* ── 2. put it on the customer ── */
-  let tryonDataUrl: string;
-  try {
-    tryonDataUrl = await runStudio(
-      personImage,
-      garmentDataUrl,
-      familyLabel(family),
-      coverageCategory(coverage),
-      coverage === "set"
-    );
-  } catch (e: any) {
-    await refundTryon(sb, shopId, true); // the compose stands — its render is returned below
-    await logError(sb, "counter try-on failed: " + (e?.message || e), { family, coverage }, shopId);
-    return Response.json(
-      {
-        error: "The stitched piece came out, but the try-on didn't. Try the customer photo again.",
-        garmentUrl,
-      },
-      { status: 502 }
-    );
-  }
+        /* The piece exists — say so now, while the fitting still runs. */
+        send({ stage: "stitched", garmentUrl });
 
-  /* A real person is in this one, so it goes where every other try-on goes: the
-     private bucket, reachable only through a short-lived signed URL. If storage
-     is unavailable the render is served once inline rather than lost. */
-  let tryonUrl = tryonDataUrl;
-  const resultPath = shopId + "/counter/" + crypto.randomUUID() + ".png";
-  const { error: resultErr } = await sb.storage
-    .from(RESULTS_BUCKET)
-    .upload(resultPath, Buffer.from(tryonDataUrl.split(",")[1], "base64"), {
-      contentType: "image/png",
-    });
-  if (resultErr) {
-    await logError(sb, "counter result upload failed: " + resultErr.message, {}, shopId);
-  } else {
-    const { data: signed } = await sb.storage
-      .from(RESULTS_BUCKET)
-      .createSignedUrl(resultPath, SIGNED_TTL_SEC);
-    if (signed?.signedUrl) tryonUrl = signed.signedUrl;
-  }
+        /* ── 2. put it on the customer ── */
+        let tryonDataUrl: string;
+        try {
+          tryonDataUrl = await runStudio(
+            personImage,
+            garmentDataUrl,
+            familyLabel(family),
+            coverageCategory(coverage),
+            coverage === "set",
+            /* Counter fittings all come out on the same white studio backdrop —
+               the shop wall behind the customer varies, the output shouldn't. */
+            { studioBackground: true }
+          );
+        } catch (e: any) {
+          await refundTryon(sb, shopId, true); // the compose stands — its render is returned below
+          await logError(sb, "counter try-on failed: " + (e?.message || e), { family, coverage }, shopId);
+          send({
+            error: "The stitched piece came out, but the try-on didn't. Try the customer photo again.",
+            garmentUrl,
+          });
+          return;
+        }
 
-  /* Deliberately no tryon_results row and no tryon_events row. The cache is
-     keyed on a catalog piece and this run has none; the events table is the
-     vendor's "what are shoppers reaching for" report, and a vendor demoing at
-     their own counter is not a shopper reaching for anything. Both meters were
-     already charged, so the spend is still accounted for. */
-  return Response.json({ garmentUrl, tryonUrl });
+        /* A real person is in this one, so it goes where every other try-on
+           goes: the private bucket, reachable only through a short-lived signed
+           URL. If storage is unavailable the render is served once inline
+           rather than lost. */
+        let tryonUrl = tryonDataUrl;
+        const resultPath = shopId + "/counter/" + crypto.randomUUID() + ".png";
+        const { error: resultErr } = await sb.storage
+          .from(RESULTS_BUCKET)
+          .upload(resultPath, Buffer.from(tryonDataUrl.split(",")[1], "base64"), {
+            contentType: "image/png",
+          });
+        if (resultErr) {
+          await logError(sb, "counter result upload failed: " + resultErr.message, {}, shopId);
+        } else {
+          const { data: signed } = await sb.storage
+            .from(RESULTS_BUCKET)
+            .createSignedUrl(resultPath, SIGNED_TTL_SEC);
+          if (signed?.signedUrl) tryonUrl = signed.signedUrl;
+        }
+
+        /* Deliberately no tryon_results row and no tryon_events row. The cache
+           is keyed on a catalog piece and this run has none; the events table
+           is the vendor's "what are shoppers reaching for" report, and a vendor
+           demoing at their own counter is not a shopper reaching for anything.
+           Both meters were already charged, so the spend is still accounted
+           for. */
+        send({ stage: "done", garmentUrl, tryonUrl });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store" },
+  });
 }
 
 /** Turn a meter's machine reason into something a tailor can act on. */

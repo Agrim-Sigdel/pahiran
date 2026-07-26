@@ -7,12 +7,13 @@ import { fileToCompressedDataURL } from "@/lib/images";
 import { OverviewTab, LeadsTab, garmentTryCounts } from "@/components/Analytics";
 import LocationPicker from "@/components/LocationPicker";
 import PlanTab from "@/components/PlanTab";
-import FabricStudio from "@/components/FabricStudio";
+import FabricStudio, { CutModal } from "@/components/FabricStudio";
 import CounterTryOn from "@/components/CounterTryOn";
 import Icon from "@/components/Icon";
+import { COVERAGES } from "@/lib/types";
 import type { Composition, CounterInput, CounterRun, Fabric, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
 
-type Tab = "overview" | "leads" | "catalog" | "fabrics" | "counter" | "settings" | "plan";
+type Tab = "overview" | "leads" | "catalog" | "fabrics" | "designs" | "counter" | "settings" | "plan";
 
 interface DashboardProps {
   shop: Shop;
@@ -37,8 +38,9 @@ interface DashboardProps {
   priceComposition: (id: string, price: number) => void;
   noteComposition: (id: string, note: string) => void;
   removeComposition: (id: string) => void;
-  /* The counter: a cloth and a customer that aren't catalog rows yet. */
-  runCounter: (input: CounterInput) => Promise<CounterRun>;
+  /* The counter: a cloth and a customer that aren't catalog rows yet.
+     `onStitched` fires when the piece exists, halfway through the run. */
+  runCounter: (input: CounterInput, onStitched?: (garmentUrl: string) => void) => Promise<CounterRun>;
   keepCounterRun: (
     input: CounterInput,
     garmentUrl: string,
@@ -68,6 +70,10 @@ export default function Dashboard({
   const [editingFabric, setEditingFabric] = useState<Fabric | null>(null);
   const [studioFabric, setStudioFabric] = useState<Fabric | null>(null);
   const [familyFilter, setFamilyFilter] = useState("All");
+  const [cutFamilyFilter, setCutFamilyFilter] = useState("All");
+  /* Same three jobs as the studio's form: new cut, edit a shop cut, copy a
+     library cut into one the shop owns. */
+  const [cutForm, setCutForm] = useState<{ mode: "new" | "edit" | "copy"; style?: Style } | null>(null);
   const [filter, setFilter] = useState("All");
   const [codeQuery, setCodeQuery] = useState("");
   const [qrGarment, setQrGarment] = useState<Garment | null>(null);
@@ -98,6 +104,15 @@ export default function Dashboard({
     [fabrics, familyFilter]
   );
 
+  /* The designs tab: every cut, the shop's own first within each family so
+     their tailoring sits above the library's. */
+  const visibleCuts = useMemo(() => {
+    const list = cutFamilyFilter === "All" ? styles : styles.filter((s) => s.family === cutFamilyFilter);
+    return [...list].sort((a, b) =>
+      Number(!!b.shopId) - Number(!!a.shopId) || a.sort - b.sort || a.name.localeCompare(b.name));
+  }, [styles, cutFamilyFilter]);
+  const yourCutCount = useMemo(() => visibleCuts.filter((s) => s.shopId).length, [visibleCuts]);
+
   /* Only ready renders count on the card — a failed or in-flight one isn't a
      cut the shop can sell yet. */
   const compCount = useMemo(() => {
@@ -116,7 +131,7 @@ export default function Dashboard({
     { key: "leads", label: "Leads", badge: openLeads || undefined },
     { key: "catalog", label: "Catalog" },
     ...(shop.type === "apparel"
-      ? [{ key: "fabrics" as Tab, label: "Fabrics" }, { key: "counter" as Tab, label: "Counter" }]
+      ? [{ key: "fabrics" as Tab, label: "Fabrics" }, { key: "designs" as Tab, label: "Designs" }, { key: "counter" as Tab, label: "Counter" }]
       : []),
     { key: "plan", label: "Plan" },
     { key: "settings", label: "Settings" },
@@ -308,12 +323,6 @@ export default function Dashboard({
                 </div>
               </div>
 
-              <div style={{ background: "var(--sage)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "12px 15px", marginBottom: 16, fontSize: 12.5, color: "var(--mut)", lineHeight: 1.65 }}>
-                A fabric is a listing on its own — the bolt, not a finished piece. Shoppers
-                will pick a fabric, then a cut, and see it stitched. Adding fabrics now
-                gets you ready; the cuts and the renders come next.
-              </div>
-
               {visibleFabrics.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--mut)" }}>
                   <div style={{ fontSize: 14, marginBottom: 6 }}>
@@ -384,9 +393,77 @@ export default function Dashboard({
             </div>
           )}
 
+          {tab === "designs" && (
+            <div className="fade-up">
+              <div className="cat-bar">
+                <div>
+                  <span className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>designs</span>
+                  <span style={{ color: "var(--mut)", marginLeft: 10, fontSize: 13 }}>
+                    {visibleCuts.length} cut{visibleCuts.length !== 1 ? "s" : ""}
+                    {yourCutCount > 0 ? ` · ${yourCutCount} yours` : ""}
+                  </span>
+                </div>
+                <div className="cat-tools">
+                  <select value={cutFamilyFilter} onChange={(e) => setCutFamilyFilter(e.target.value)}
+                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 13 }}>
+                    <option>All</option>
+                    {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                  </select>
+                  <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }}
+                    onClick={() => setCutForm({ mode: "new" })}>
+                    + add your own cut
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ fontSize: 12.5, color: "var(--mut)", margin: "-2px 0 18px", lineHeight: 1.65 }}>
+                Every cut a cloth can be stitched into. Library cuts come with peeq and are
+                shared by every shop; cuts marked yours belong to your shop alone, and only
+                you can change them.
+              </div>
+
+              {visibleCuts.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--mut)" }}>
+                  <div style={{ fontSize: 14, marginBottom: 18 }}>No cuts in that family yet.</div>
+                  <button className="ph-btn btn-solid" style={{ padding: "11px 22px", fontSize: 12 }}
+                    onClick={() => setCutForm({ mode: "new" })}>+ add your own cut</button>
+                </div>
+              ) : (
+                FAMILIES.filter((f) => cutFamilyFilter === "All" || f.id === cutFamilyFilter).map((f) => {
+                  const familyCuts = visibleCuts.filter((s) => s.family === f.id);
+                  if (familyCuts.length === 0) return null;
+                  /* Two different shapes of card, so two rows: putting a tall
+                     wireframe next to a three-line description in one grid
+                     leaves the text cards mostly white space. */
+                  const withImage = familyCuts.filter((c) => c.refImage);
+                  const textOnly = familyCuts.filter((c) => !c.refImage);
+                  const edit = (c: Style) => setCutForm({ mode: c.shopId ? "edit" : "copy", style: c });
+                  return (
+                    <div key={f.id} style={{ marginBottom: 30 }}>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: 10 }}>
+                        <span className="ph-display" style={{ fontSize: 16, color: "var(--forest-deep)" }}>{f.label.toLowerCase()}</span>
+                        <span style={{ fontSize: 11.5, color: "var(--mut)" }}>{familyCuts.length}</span>
+                      </div>
+                      {withImage.length > 0 && (
+                        <div className="card-grid" style={{ marginBottom: textOnly.length ? 12 : 0 }}>
+                          {withImage.map((c) => <CutCard key={c.id} cut={c} onEdit={() => edit(c)} />)}
+                        </div>
+                      )}
+                      {textOnly.length > 0 && (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 12 }}>
+                          {textOnly.map((c) => <TextCutCard key={c.id} cut={c} onEdit={() => edit(c)} />)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
           {tab === "counter" && (
             <div className="fade-up">
-              <CounterTryOn onRun={runCounter} onKeep={keepCounterRun} enabled={counterEnabled} />
+              <CounterTryOn onRun={runCounter} onKeep={keepCounterRun} enabled={counterEnabled} styles={styles} fabrics={fabrics} />
             </div>
           )}
 
@@ -442,6 +519,25 @@ export default function Dashboard({
           onRemove={removeComposition}
         />
       )}
+      {cutForm && (
+        <CutModal
+          family={cutForm.style?.family ?? FAMILIES[0].id}
+          pickFamily={cutForm.mode === "new"}
+          mode={cutForm.mode}
+          initial={cutForm.style}
+          onClose={() => setCutForm(null)}
+          onSave={async (s) => {
+            /* A copy saves as a new shop cut — the library one every other
+               shop sees stays untouched. */
+            if (cutForm.mode === "edit" && cutForm.style) {
+              await updateStyle({ ...cutForm.style, ...s });
+            } else {
+              await createStyle(s);
+            }
+            setCutForm(null);
+          }}
+        />
+      )}
       {showTagSheet && (
         <TagSheetModal
           catalog={catalog}
@@ -457,6 +553,92 @@ export default function Dashboard({
           onClose={() => setQrGarment(null)}
         />
       )}
+    </div>
+  );
+}
+
+/* ── cuts on the designs tab ──
+   A cut is words first and a picture second (see style-library.ts), so it gets
+   two card shapes: one led by the reference photo, and a compact text card for
+   cuts that are only words. They never share a grid row — a tall wireframe
+   next to a three-line description leaves the text card mostly empty. */
+
+const cutOwnerChip = (mine: boolean): React.CSSProperties => ({
+  fontSize: 9.5, fontWeight: 600, letterSpacing: ".09em", padding: "3px 8px",
+  borderRadius: 2, whiteSpace: "nowrap",
+  background: mine ? "var(--forest)" : "var(--sage-mist)",
+  color: mine ? "var(--cream)" : "var(--mut)",
+});
+
+const cutCoverageChip: React.CSSProperties = {
+  fontSize: 9.5, fontWeight: 600, letterSpacing: ".09em", padding: "3px 8px",
+  borderRadius: 2, textTransform: "uppercase", whiteSpace: "nowrap",
+  background: "var(--sage)", color: "var(--forest-deep)",
+};
+
+function CutEditButton({ mine, onEdit }: { mine: boolean; onEdit: () => void }) {
+  return (
+    <button className="ph-btn" onClick={onEdit}
+      title={mine ? "Change this cut" : "Library cut — take a copy you can change"}
+      style={{ color: "var(--forest-deep)", fontSize: 11, padding: "4px 5px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 }}>
+      <Icon name={mine ? "edit" : "copy"} /> {mine ? "Edit" : "Make it your own"}
+    </button>
+  );
+}
+
+function CutCard({ cut, onEdit }: { cut: Style; onEdit: () => void }) {
+  const mine = !!cut.shopId;
+  const cov = COVERAGES.find((x) => x.id === cut.coverage);
+  return (
+    <div className="fade-up" style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)", display: "flex", flexDirection: "column" }}>
+      {/* The image is absolutely placed so a tall wireframe scales down into
+          the frame instead of stretching the card (and the whole grid row). */}
+      <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--sage-mist)", overflow: "hidden" }}>
+        <img src={cut.refImage ?? undefined} alt={cut.name}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", padding: 10, boxSizing: "border-box" }} />
+        {cov && (
+          <span style={{ ...cutCoverageChip, position: "absolute", top: 10, left: 10, background: "var(--cream)" }}>
+            {cov.label}
+          </span>
+        )}
+        <span style={{ ...cutOwnerChip(mine), position: "absolute", top: 10, right: 10, background: mine ? "var(--forest)" : "rgba(26,23,20,.65)", color: "var(--cream)" }}>
+          {mine ? "YOURS" : "peeq library"}
+        </span>
+      </div>
+      <div style={{ padding: "11px 13px 12px", flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
+        <div style={{ fontWeight: 500, fontSize: 11.5, letterSpacing: ".12em" }}>{cut.name}</div>
+        {cut.hint && (
+          <div style={{ fontSize: 11, color: "var(--mut)", lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            {cut.hint}
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "auto", paddingTop: 3 }}>
+          <CutEditButton mine={mine} onEdit={onEdit} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Text-only cut: the chips sit in flow above the words, never over them. */
+function TextCutCard({ cut, onEdit }: { cut: Style; onEdit: () => void }) {
+  const mine = !!cut.shopId;
+  const cov = COVERAGES.find((x) => x.id === cut.coverage);
+  return (
+    <div className="fade-up" style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", border: "1px solid var(--line)", padding: "13px 14px 11px", display: "flex", flexDirection: "column", gap: 7 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        {cov && <span style={cutCoverageChip}>{cov.label}</span>}
+        <span style={cutOwnerChip(mine)}>{mine ? "YOURS" : "peeq library"}</span>
+      </div>
+      <div style={{ fontWeight: 500, fontSize: 12, letterSpacing: ".1em" }}>{cut.name}</div>
+      {cut.hint && (
+        <div style={{ fontSize: 11.5, color: "var(--mut)", fontStyle: "italic", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+          “{cut.hint}”
+        </div>
+      )}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "auto" }}>
+        <CutEditButton mine={mine} onEdit={onEdit} />
+      </div>
     </div>
   );
 }
