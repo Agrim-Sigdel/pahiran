@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- peeq app icon: the "ee" — two eyes taking a peek (violet store default) -->
-  <rect width="512" height="512" rx="128" fill="#6D5BFF"/>
-  <text x="256" y="342" text-anchor="middle" font-family="'Baloo 2', 'Arial Rounded MT Bold', 'Nunito', sans-serif" font-size="264" font-weight="800" letter-spacing="-6" fill="#FFFFFF">ee</text>
-</svg>
