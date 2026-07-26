@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { mapCategory } from "@/lib/constants";
+import { mapCategory, familyLabel } from "@/lib/constants";
+import { coverageCategory, type StyleCoverage } from "@/lib/types";
 import { overLimit, clientIp } from "@/lib/ratelimit";
 import { consumeTryon, refundTryon } from "@/lib/plan";
 import { badOrigin } from "@/lib/origin";
@@ -16,6 +17,12 @@ import { badOrigin } from "@/lib/origin";
      arbitrary URLs from the client.
    - With SUPABASE_SERVICE_ROLE_KEY set, cache/limits live in Postgres and
      every try-on lands in tryon_events for analytics; in-memory otherwise. */
+
+/* The studio finish is a full image edit, and a multi-piece outfit at medium
+   quality is the slowest case — comfortably past any platform default. Without
+   this the request is killed mid-generation in production, after the shopper
+   has already waited and after the credit has been spent. Matches compose. */
+export const maxDuration = 300;
 
 const FAL_ENDPOINT = "https://fal.run/fal-ai/fashn/tryon/v1.6";
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/images/edits";
@@ -34,6 +41,16 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_IMAGE_CHARS = 4_000_000; // ~3MB of base64 — far above the app's own compression
 
 const memCache = new Map<string, string>();
+
+/* Bump whenever the studio prompt changes in a way that alters the result.
+   Studio output is a product of its prompt, so a cached result made under an
+   older one is a different answer to the same question — and serving it makes
+   a fixed bug look unfixed. Costs a re-generation per (shopper, piece) pair
+   that gets tried again; the quick path is unaffected.
+     1 → original single-garment swap
+     2 → coverage-aware: sets replace every piece (including dupatta/shawl),
+         tops and bottoms leave the other half of the outfit untouched */
+const STUDIO_PROMPT_VERSION = 2;
 
 function dailyCap(): number {
   const n = Number(process.env.TRYON_DAILY_CAP);
@@ -81,7 +98,8 @@ async function storeResult(
   bytes: Buffer,
   contentType: string,
   shopId: string | null,
-  garmentId: string | null
+  garmentId: string | null,
+  compositionId: string | null
 ): Promise<string | null> {
   const ext = contentType.includes("png") ? "png" : "jpg";
   const path = key + "." + ext;
@@ -90,7 +108,14 @@ async function storeResult(
     .upload(path, bytes, { contentType, upsert: true });
   if (error) return null;
   await sb.from("tryon_results").upsert(
-    { cache_key: key, result_path: path, result_url: "", shop_id: shopId, garment_id: garmentId },
+    {
+      cache_key: key,
+      result_path: path,
+      result_url: "",
+      shop_id: shopId,
+      garment_id: garmentId,
+      composition_id: compositionId,
+    },
     { onConflict: "cache_key" }
   );
   return signResult(sb, path);
@@ -103,14 +128,21 @@ async function cachePut(
   key: string,
   url: string,
   shopId: string | null,
-  garmentId: string | null
+  garmentId: string | null,
+  compositionId: string | null
 ): Promise<void> {
   if (!sb) {
     memCache.set(key, url);
     return;
   }
   await sb.from("tryon_results").upsert(
-    { cache_key: key, result_url: url, shop_id: shopId, garment_id: garmentId },
+    {
+      cache_key: key,
+      result_url: url,
+      shop_id: shopId,
+      garment_id: garmentId,
+      composition_id: compositionId,
+    },
     { onConflict: "cache_key" }
   );
 }
@@ -156,18 +188,66 @@ async function logEvent(
   sb: SupabaseClient | null,
   shopId: string | null,
   garmentId: string | null,
+  compositionId: string | null,
   cached: boolean,
   sessionId: string | null
 ): Promise<void> {
-  if (!sb || !garmentId) return;
-  await sb
-    .from("tryon_events")
-    .insert({ shop_id: shopId, garment_id: garmentId, cached, session_id: sessionId });
+  if (!sb || (!garmentId && !compositionId)) return;
+  await sb.from("tryon_events").insert({
+    shop_id: shopId,
+    garment_id: garmentId,
+    composition_id: compositionId,
+    cached,
+    session_id: sessionId,
+  });
 }
 
 /** Studio finish: gpt-image-2 image edit with try-on guardrails. Returns a
     data URL; the caller uploads it to storage in Supabase mode. */
-async function runStudio(personImage: string, garmentImage: string, category: string): Promise<string> {
+async function runStudio(
+  personImage: string,
+  garmentImage: string,
+  category: string,
+  placement: string,
+  multiPiece: boolean
+): Promise<string> {
+  /* What to replace and, just as importantly, what to leave alone. The generic
+     "remove the Kurtha they're wearing" is wrong in both directions: for a
+     full set it never asks for the trousers to be replaced too, and for a top
+     it never says their existing trousers must survive untouched. */
+  const swap =
+    placement === "one-pieces"
+      ? `The second image is a COMPLETE OUTFIT made of several separate garments shown together. Put EVERY ` +
+        `one of them on the person, not just the main one. Count the distinct pieces in the second image and ` +
+        `reproduce all of them: the upper garment; the lower garment (trousers, churidar, suruwal, pyjama, ` +
+        `skirt or lehenga); and any dupatta, shawl, stole, scarf or overlayer shown draped with it, worn the ` +
+        `same way it is presented. If a piece appears in the second image it must appear on the person — ` +
+        `leaving one out is a failed result. None of the person's own clothing may remain visible: not their ` +
+        `top, and not their trousers, leggings or skirt, which the outfit's own lower garment replaces.`
+      : placement === "tops"
+      ? `This is an UPPER-BODY garment only. Replace just what the person is wearing on their upper body. ` +
+        `Whatever they are wearing below the waist — trousers, jeans, skirt, suruwal, churidar — must stay ` +
+        `exactly as it appears in the first image, completely unchanged, and must remain visible below the ` +
+        `hem of the new garment. Do not add, remove, recolour or restyle their lower garment.`
+      : placement === "bottoms"
+      ? `This is a LOWER-BODY garment only. Replace just what the person is wearing below the waist. ` +
+        `Whatever they are wearing on their upper body must stay exactly as it appears in the first image, ` +
+        `completely unchanged. Do not add, remove, recolour or restyle their top.`
+      : `Remove the ${category || "clothing"} the person in the first image is currently wearing and dress ` +
+        `them in the garment from the second image instead.`;
+  /* Placing three garments while holding a face identical is a materially
+     harder edit than swapping one, and 'low' is where it shows first — pieces
+     get dropped or smeared together. Only sets pay the extra; a single-garment
+     try-on is unchanged. */
+  return runStudioWithSwap(personImage, garmentImage, swap, multiPiece ? "medium" : "low");
+}
+
+async function runStudioWithSwap(
+  personImage: string,
+  garmentImage: string,
+  swap: string,
+  quality: string
+): Promise<string> {
   const toFile = async (src: string, name: string): Promise<File> => {
     if (src.startsWith("data:")) {
       const [head, b64] = src.split(",");
@@ -180,12 +260,11 @@ async function runStudio(personImage: string, garmentImage: string, category: st
   const form = new FormData();
   form.append("model", "gpt-image-2");
   form.append("size", "1024x1536");
-  form.append("quality", "low");
+  form.append("quality", quality);
   form.append(
     "prompt",
-    `Virtual try-on photo edit. Remove the ${category || "clothing"} the person in the first image is currently wearing ` +
-      `and dress them in the exact garment from the second image instead. The old garment must be completely gone, ` +
-      `never visible underneath or through the new one.
+    `Virtual try-on photo edit. ${swap} Reproduce the second image's garment exactly. Any garment being ` +
+      `replaced must be completely gone, never visible underneath or through the new one.
 
 Identity lock (most important rule): the face must be carried over from the first image completely unchanged. ` +
       `Do not retouch, beautify, slim, relight or regenerate it. Keep the identical facial features, expression, ` +
@@ -241,6 +320,8 @@ export async function POST(req: Request): Promise<Response> {
   const { personImage, category } = body || {};
   let finish: Finish = body?.finish === "studio" && openaiKey() ? "studio" : "quick";
   const garmentId: string | null = typeof body?.garmentId === "string" ? body.garmentId : null;
+  const compositionId: string | null =
+    typeof body?.compositionId === "string" ? body.compositionId : null;
   const sessionId: string | null =
     typeof body?.sessionId === "string" ? body.sessionId.slice(0, 64) : null;
 
@@ -251,26 +332,69 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  /* Resolve the garment. Supabase mode: it must exist in a shop's catalog —
+  /* Resolve the piece. Supabase mode: it must exist in a shop's catalog —
      the server trusts only the catalog's own image URL, so strangers can't
-     spend our fal credits on arbitrary images. Local mode (no Supabase):
-     the kiosk sends the garment photo as a data URL. */
+     spend our fal credits on arbitrary images. A composition is resolved the
+     same way and held to the same bar the storefront applies: published by the
+     vendor, actually rendered, and belonging to an approved shop. This runs
+     under the service role, which bypasses RLS, so those three conditions are
+     checked here rather than assumed. Local mode (no Supabase): the kiosk
+     sends the garment photo as a data URL. */
   let garmentImage: string;
   let shopId: string | null = null;
+  /* What the try-on model is asked to place. For a garment this is guessed
+     from the shop's own category label; for a composition the cut states it
+     outright, which is the whole reason coverage exists — a suruwal sent up as
+     "auto" gets hung on the torso. */
+  let placement = mapCategory(category);
+  /* True only for a rendered outfit of several separate garments. Distinct
+     from placement 'one-pieces', which a sari or a dress also gets — those
+     genuinely are one garment. */
+  let multiPiece = false;
+  /* The garment as a noun, for the studio prompt's "remove the X they are
+     wearing". Server-derived for compositions so nothing here depends on a
+     string the client chose. */
+  let subject: string = category || "";
   if (sb) {
-    if (!garmentId) {
-      return Response.json({ error: "garmentId is required" }, { status: 400 });
+    if (compositionId) {
+      const { data: comp, error: compErr } = await sb
+        .from("compositions")
+        .select("shop_id, image_url, status, published, shops (status), styles (coverage), fabrics (family)")
+        .eq("id", compositionId)
+        .maybeSingle();
+      if (compErr) {
+        await logError(sb, "composition lookup failed: " + compErr.message, { compositionId }, null);
+        return Response.json({ error: "Could not load that piece" }, { status: 500 });
+      }
+      const shopApproved =
+        (comp?.shops as { status?: string } | null)?.status === "approved";
+      if (!comp || !comp.published || comp.status !== "ready" || !comp.image_url || !shopApproved) {
+        return Response.json({ error: "Unknown or unpublished piece" }, { status: 400 });
+      }
+      garmentImage = comp.image_url;
+      shopId = comp.shop_id;
+      const coverage = ((comp.styles as { coverage?: string } | null)?.coverage ??
+        "set") as StyleCoverage;
+      placement = coverageCategory(coverage);
+      multiPiece = coverage === "set";
+      subject = familyLabel((comp.fabrics as { family?: string } | null)?.family ?? "");
+    } else if (garmentId) {
+      const { data: garment } = await sb
+        .from("garments")
+        .select("shop_id, image_url, tryon_enabled")
+        .eq("id", garmentId)
+        .maybeSingle();
+      if (!garment || !garment.tryon_enabled) {
+        return Response.json({ error: "Unknown garment" }, { status: 400 });
+      }
+      garmentImage = garment.image_url;
+      shopId = garment.shop_id;
+    } else {
+      return Response.json(
+        { error: "garmentId or compositionId is required" },
+        { status: 400 }
+      );
     }
-    const { data: garment } = await sb
-      .from("garments")
-      .select("shop_id, image_url, tryon_enabled")
-      .eq("id", garmentId)
-      .maybeSingle();
-    if (!garment || !garment.tryon_enabled) {
-      return Response.json({ error: "Unknown garment" }, { status: 400 });
-    }
-    garmentImage = garment.image_url;
-    shopId = garment.shop_id;
   } else {
     garmentImage = typeof body?.garmentImage === "string" ? body.garmentImage : "";
     if (!garmentImage.startsWith("data:image/") || garmentImage.length > MAX_IMAGE_CHARS) {
@@ -281,18 +405,42 @@ export async function POST(req: Request): Promise<Response> {
     }
   }
 
+  /* A set is several garments in one picture, and FASHN warps exactly one onto
+     a body — sent down the quick path it returns the kurtha and silently drops
+     the churidar and the dupatta. That is a limit of the model, not of the
+     wording, so the only real fix is to take the other path. Studio is a
+     general image edit and can be told to place every piece. */
+  if (multiPiece && finish !== "studio") {
+    if (openaiKey()) {
+      finish = "studio";
+    } else {
+      console.warn(
+        "[tryon] multi-piece outfit but no OPENAI_API_KEY — the quick path will fit the top only"
+      );
+    }
+  }
+
   // studio results are cached separately; quick keys stay unchanged
   const cacheKey = (f: Finish) =>
     crypto
       .createHash("sha256")
-      .update(personImage + "|" + garmentImage + "|" + (category || "") + (f === "studio" ? "|studio" : ""))
+      /* Quick keys are byte-identical to the old ones — FASHN takes no prompt,
+         so nothing about those results has changed and their cache stays warm.
+         Studio keys carry the prompt version and placement, because a studio
+         result is a product of the prompt: without this, today's fix would be
+         invisible on every pair already tried, which is exactly how a bug
+         "comes back" after it was fixed. */
+      .update(
+        personImage + "|" + garmentImage + "|" + subject +
+        (f === "studio" ? "|studio|p" + STUDIO_PROMPT_VERSION + "|" + placement : "")
+      )
       .digest("hex");
   let key = cacheKey(finish);
 
   // Cache hits are free: no spend, so no quota consumed.
   const cachedUrl = await cacheGet(sb, key);
   if (cachedUrl) {
-    await logEvent(sb, shopId, garmentId, true, sessionId);
+    await logEvent(sb, shopId, garmentId, compositionId, true, sessionId);
     return Response.json({ url: cachedUrl, cached: true });
   }
 
@@ -331,7 +479,7 @@ export async function POST(req: Request): Promise<Response> {
       key = cacheKey(finish);
       const altCached = await cacheGet(sb, key); // a quick result may already be cached — free
       if (altCached) {
-        await logEvent(sb, shopId, garmentId, true, sessionId);
+        await logEvent(sb, shopId, garmentId, compositionId, true, sessionId);
         return Response.json({ url: altCached, cached: true, finish });
       }
       res = await consumeTryon(sb, shopId, false);
@@ -380,16 +528,16 @@ export async function POST(req: Request): Promise<Response> {
 
   if (finish === "studio") {
     try {
-      const dataUrl = await runStudio(personImage, garmentImage, category);
+      const dataUrl = await runStudio(personImage, garmentImage, subject, placement, multiPiece);
       if (sb) {
         const bytes = Buffer.from(dataUrl.split(",")[1], "base64");
-        const signed = await storeResult(sb, key, bytes, "image/png", shopId, garmentId);
-        await logEvent(sb, shopId, garmentId, false, sessionId);
+        const signed = await storeResult(sb, key, bytes, "image/png", shopId, garmentId, compositionId);
+        await logEvent(sb, shopId, garmentId, compositionId, false, sessionId);
         // storage failed → serve the render once, uncached, still private (data URL)
         return Response.json({ url: signed || dataUrl, cached: false, finish });
       }
       memCache.set(key, dataUrl); // local mode
-      await logEvent(sb, shopId, garmentId, false, sessionId);
+      await logEvent(sb, shopId, garmentId, compositionId, false, sessionId);
       return Response.json({ url: dataUrl, cached: false, finish });
     } catch (e: any) {
       if (sb && shopId) await refundTryon(sb, shopId, true);
@@ -409,7 +557,7 @@ export async function POST(req: Request): Promise<Response> {
       body: JSON.stringify({
         model_image: personImage,
         garment_image: garmentImage,
-        category: mapCategory(category),
+        category: placement,
         mode: "balanced",
         output_format: "jpeg",
       }),
@@ -450,9 +598,9 @@ export async function POST(req: Request): Promise<Response> {
       if (!r.ok) throw new Error("result fetch " + r.status);
       const ct = r.headers.get("content-type") || "image/jpeg";
       const bytes = Buffer.from(await r.arrayBuffer());
-      const signed = await storeResult(sb, key, bytes, ct, shopId, garmentId);
+      const signed = await storeResult(sb, key, bytes, ct, shopId, garmentId, compositionId);
       if (signed) {
-        await logEvent(sb, shopId, garmentId, false, sessionId);
+        await logEvent(sb, shopId, garmentId, compositionId, false, sessionId);
         return Response.json({ url: signed, cached: false, finish });
       }
     } catch (e: any) {
@@ -461,7 +609,7 @@ export async function POST(req: Request): Promise<Response> {
     // storage unavailable → cache the provider URL so the render still works
   }
 
-  await cachePut(sb, key, url, shopId, garmentId);
-  await logEvent(sb, shopId, garmentId, false, sessionId);
+  await cachePut(sb, key, url, shopId, garmentId, compositionId);
+  await logEvent(sb, shopId, garmentId, compositionId, false, sessionId);
   return Response.json({ url, cached: false, finish });
 }

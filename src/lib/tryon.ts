@@ -25,7 +25,14 @@ export async function runTryOn(
   personDataUrl: string,
   garmentImage: string,
   category: string,
-  ids?: { shopId?: string | null; garmentId?: string | null },
+  ids?: {
+    shopId?: string | null;
+    garmentId?: string | null;
+    /* Set instead of garmentId when the piece is a rendered fabric x cut. The
+       server resolves whichever one it gets and refuses to trust garmentImage
+       in Supabase mode either way. */
+    compositionId?: string | null;
+  },
   finish: TryOnFinish = "studio"
 ): Promise<string> {
   const res = await fetch("/api/tryon", {
@@ -38,6 +45,7 @@ export async function runTryOn(
       finish,
       shopId: ids?.shopId || null,
       garmentId: ids?.garmentId || null,
+      compositionId: ids?.compositionId || null,
       sessionId: getKioskSessionId(),
     }),
   });

@@ -34,19 +34,40 @@ export async function POST(req: Request): Promise<Response> {
 
   const shopId = typeof body?.shopId === "string" ? body.shopId : null;
   const garmentId = typeof body?.garmentId === "string" ? body.garmentId : null;
-  if (!shopId || !garmentId) {
-    return Response.json({ error: "shopId and garmentId are required" }, { status: 400 });
+  const compositionId =
+    typeof body?.compositionId === "string" ? body.compositionId : null;
+  if (!shopId || (!garmentId && !compositionId)) {
+    return Response.json(
+      { error: "shopId and one of garmentId / compositionId are required" },
+      { status: 400 }
+    );
   }
 
-  // The garment must really belong to the shop — keeps junk out of inboxes
-  const { data: garment } = await sb
-    .from("garments")
-    .select("id")
-    .eq("id", garmentId)
-    .eq("shop_id", shopId)
-    .maybeSingle();
-  if (!garment) {
-    return Response.json({ error: "Unknown garment" }, { status: 400 });
+  /* The piece must really belong to the shop — keeps junk out of inboxes. A
+     composition must also be published: a lead for a render the vendor never
+     offered is a promise nobody made. */
+  if (compositionId) {
+    const { data: composition } = await sb
+      .from("compositions")
+      .select("id")
+      .eq("id", compositionId)
+      .eq("shop_id", shopId)
+      .eq("published", true)
+      .eq("status", "ready")
+      .maybeSingle();
+    if (!composition) {
+      return Response.json({ error: "Unknown or unpublished piece" }, { status: 400 });
+    }
+  } else {
+    const { data: garment } = await sb
+      .from("garments")
+      .select("id")
+      .eq("id", garmentId)
+      .eq("shop_id", shopId)
+      .maybeSingle();
+    if (!garment) {
+      return Response.json({ error: "Unknown garment" }, { status: 400 });
+    }
   }
 
   const name = String(body?.name || "").trim().slice(0, 80);
@@ -57,7 +78,8 @@ export async function POST(req: Request): Promise<Response> {
 
   const { error } = await sb.from("leads").insert({
     shop_id: shopId,
-    garment_id: garmentId,
+    garment_id: compositionId ? null : garmentId,
+    composition_id: compositionId,
     name,
     phone,
     size: String(body?.size || "").slice(0, 20) || null,
