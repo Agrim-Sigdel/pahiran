@@ -22,7 +22,7 @@ const MAX_BATCH = 8; // matches the server cap; past this it's noise, not catalo
    sound like peeq whichever side of the counter you're on. The verbs are the
    tailor's rather than the photographer's, because that's the work being
    described here. */
-const STITCH_MESSAGES = [
+export const STITCH_MESSAGES = [
   "Kapada kaatdai...",
   "Naap milaudai...",
   "Silai gardai...",
@@ -276,7 +276,10 @@ export default function FabricStudio({
         )}
       </div>
 
-      {busy && <StitchingOverlay fabric={fabric} count={picked.length} />}
+      {busy && (
+        <StitchingOverlay image={fabric.image} steps={picked.length}
+          caption={fabric.name + " · " + picked.length + " cut" + (picked.length !== 1 ? "s" : "")} />
+      )}
 
       {cutForm && (
         <CutModal
@@ -305,8 +308,20 @@ export default function FabricStudio({
    blinks over the dimmed subject, the copy rotates, and the bar eases toward
    a finish it never claims to reach. There the subject is the shopper's
    photo; here it is the cloth, because the cloth is what's being worked on.
-   No spinners on either side of the counter. */
-function StitchingOverlay({ fabric, count }: { fabric: Fabric; count: number }) {
+   No spinners on either side of the counter.
+
+   Exported because the counter waits on the same machines for the same cloth
+   and deserves the same wait; it passes its own copy and its own step count. */
+export function StitchingOverlay({
+  image, caption, steps, messages = STITCH_MESSAGES, footer = STITCH_FOOTER,
+}: {
+  image: string;
+  caption: string;
+  /** How many image generations this run takes — paces the bar. */
+  steps: number;
+  messages?: string[];
+  footer?: string;
+}) {
   const [msg, setMsg] = useState(0);
   const [progress, setProgress] = useState(4);
   const [slow, setSlow] = useState(false);
@@ -315,18 +330,18 @@ function StitchingOverlay({ fabric, count }: { fabric: Fabric; count: number }) 
      long as one. Scaling the time constant by the batch keeps the bar's pace
      tied to what was actually asked for instead of drifting to the top and
      sitting there while five more renders run. */
-  const tau = 45 * Math.max(1, count);
-  const SLOW_AFTER = 70 * Math.max(1, count);
+  const tau = 45 * Math.max(1, steps);
+  const SLOW_AFTER = 70 * Math.max(1, steps);
 
   /* Stops on the last line rather than looping back to the first, which reads
      as having started over. */
   useEffect(() => {
     const timer = setInterval(
-      () => setMsg((m) => Math.min(m + 1, STITCH_MESSAGES.length - 1)),
+      () => setMsg((m) => Math.min(m + 1, messages.length - 1)),
       3200
     );
     return () => clearInterval(timer);
-  }, []);
+  }, [messages.length]);
 
   useEffect(() => {
     const t0 = performance.now();
@@ -345,7 +360,7 @@ function StitchingOverlay({ fabric, count }: { fabric: Fabric; count: number }) 
       style={{ position: "fixed", inset: 0, zIndex: 58, background: "var(--forest-deep)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
 
       {/* the cloth itself, dimmed — the thing being worked on, not decoration */}
-      <img src={fabric.image} alt="" aria-hidden
+      <img src={image} alt="" aria-hidden
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(26px) brightness(.42) saturate(1.1)", transform: "scale(1.15)" }} />
 
       <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -354,19 +369,19 @@ function StitchingOverlay({ fabric, count }: { fabric: Fabric; count: number }) 
 
       <div style={{ position: "relative", padding: "26px 14px 30px", background: "linear-gradient(transparent, rgba(26,23,20,.9) 45%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 9, textAlign: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.16)", borderRadius: 999, padding: "5px 14px 5px 5px", maxWidth: "88%" }}>
-          <img src={fabric.image} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", display: "block", flexShrink: 0 }} />
+          <img src={image} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", display: "block", flexShrink: 0 }} />
           <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,.9)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {fabric.name} · {count} cut{count !== 1 ? "s" : ""}
+            {caption}
           </span>
         </div>
         <div key={msg} className="peek ph-display" style={{ fontSize: "clamp(15px, 4.4vw, 18px)", lineHeight: 1.35, fontWeight: 600, color: "#fff", maxWidth: 340, padding: "0 6px" }}>
-          {STITCH_MESSAGES[msg % STITCH_MESSAGES.length]}
+          {messages[msg % messages.length]}
         </div>
         <div style={{ width: "72%", maxWidth: 300, height: 5, borderRadius: 5, background: "rgba(255,255,255,.2)", overflow: "hidden" }}>
           <div style={{ height: "100%", width: progress + "%", borderRadius: 5, background: "var(--cream)", transition: "width .3s linear" }} />
         </div>
         <div style={{ color: "rgba(255,255,255,.55)", fontSize: 11.5, lineHeight: 1.5, maxWidth: 320, padding: "0 8px" }}>
-          {progress}% · {slow ? STITCH_SLOW : STITCH_FOOTER}
+          {progress}% · {slow ? STITCH_SLOW : footer}
         </div>
       </div>
     </div>

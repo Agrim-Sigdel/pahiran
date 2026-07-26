@@ -1,6 +1,7 @@
 import { serviceClient, bearer, ownsShop } from "@/lib/billing";
 import { badOrigin } from "@/lib/origin";
 import { composeGarment, openaiKey, type ComposeSource } from "@/lib/compose";
+import { consumeCompose, refundCompose } from "@/lib/plan";
 import type { StyleCoverage } from "@/lib/types";
 
 /* Vendor-only: render a fabric in one or more cuts.
@@ -227,39 +228,4 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   return Response.json({ results });
-}
-
-/* Thin wrappers so a missing migration degrades the way plan.ts does: warn and
-   let the work through rather than bricking the feature, with the vendor's own
-   batch cap still bounding spend. A real DB error fails closed. */
-async function consumeCompose(
-  sb: NonNullable<ReturnType<typeof serviceClient>>,
-  shopId: string
-): Promise<{ allowed: boolean; reason: string }> {
-  try {
-    const { data, error } = await sb.rpc("consume_compose", { p_shop_id: shopId });
-    if (error) throw error;
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row) throw new Error("consume_compose returned no row");
-    return { allowed: !!row.allowed, reason: row.reason };
-  } catch (e: any) {
-    const code = e?.code || "";
-    const msg = String(e?.message || e);
-    if (code === "PGRST202" || code === "42883" || /find the function|does not exist/i.test(msg)) {
-      console.warn("[compose] consume_compose missing — metering OFF. Run supabase migrations.");
-      return { allowed: true, reason: "ok" };
-    }
-    return { allowed: false, reason: "error" };
-  }
-}
-
-async function refundCompose(
-  sb: NonNullable<ReturnType<typeof serviceClient>>,
-  shopId: string
-): Promise<void> {
-  try {
-    await sb.rpc("refund_compose", { p_shop_id: shopId });
-  } catch {
-    /* best-effort: a lost refund only under-counts in the shop's favour */
-  }
 }

@@ -19,6 +19,8 @@ import {
   type StyleCoverage,
   type StyleFamily,
   type Composition,
+  type CounterInput,
+  type CounterRun,
   type Wearable,
   type GarmentRow,
   type FabricRow,
@@ -661,11 +663,17 @@ export async function removeStyle(styleId: string): Promise<void> {
 
 /* ---------- compositions (fabric stitched into a cut) ---------- */
 
+/* rendered_style_revision is part of this list because staleness needs it:
+   without it every render loads with a null revision, and a cut edited after
+   the fact never raises CUT CHANGED in the studio. */
+const COMPOSITION_COLUMNS =
+  "id, fabric_id, style_id, image_url, status, error_note, price_npr, published, note, rendered_note, rendered_style_revision";
+
 export async function loadCompositions(shopId?: string | null): Promise<Composition[]> {
   if (!isSupabaseConfigured() || !shopId) return [];
   const { data, error } = await supabase()
     .from("compositions")
-    .select("id, fabric_id, style_id, image_url, status, error_note, price_npr, published, note, rendered_note")
+    .select(COMPOSITION_COLUMNS)
     .eq("shop_id", shopId)
     .order("created_at", { ascending: false });
   if (error) return []; // un-migrated project, or a transient read failure
@@ -743,6 +751,96 @@ export async function composeFabric(
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json?.error || "Could not render (" + res.status + ")");
   return json.results || [];
+}
+
+/* ---------- the counter (a cloth, a cut and a customer, in one pass) ---------- */
+
+/** Stitch this cloth into this cut and put it on this person. Server-side for
+    the same reasons compose is: provider keys stay off the browser and both
+    meters are charged where they can't be skipped. */
+export async function runCounter(
+  shopId: string | null,
+  input: CounterInput
+): Promise<CounterRun> {
+  if (!isSupabaseConfigured() || !shopId) {
+    throw new Error("The counter needs Supabase mode");
+  }
+  const { data } = await supabase().auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("Not signed in");
+
+  const res = await fetch("/api/counter", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: JSON.stringify({ shopId, ...input }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    /* A failed try-on can still hand back the render the vendor paid for. Carry
+       it on the error so the panel can show the piece beside the message. */
+    const err = new Error(json?.error || "The counter couldn't finish (" + res.status + ")");
+    (err as Error & { garmentUrl?: string }).garmentUrl = json?.garmentUrl;
+    throw err;
+  }
+  return { garmentUrl: json.garmentUrl, tryonUrl: json.tryonUrl };
+}
+
+/** Keep a counter run: the cloth becomes a fabric, the cut becomes one of the
+    shop's own, and the render they already paid for becomes the composition
+    joining them — unpublished and unpriced, exactly as the studio leaves one.
+    Nothing is re-rendered; `garmentUrl` is already in the renders bucket. */
+export async function saveCounterRun(
+  shop: Shop | null,
+  input: CounterInput,
+  garmentUrl: string,
+  names: { fabric: string; cut: string },
+  existingFabricIds: string[]
+): Promise<{ fabric: Fabric; style: Style; composition: Composition }> {
+  if (!isSupabaseConfigured() || !shop?.id) {
+    throw new Error("Keeping a counter run needs Supabase mode");
+  }
+  const fabric = await addFabric(
+    shop,
+    {
+      name: names.fabric.trim(),
+      family: input.family,
+      image: input.fabricImage,
+      price: 0,
+      unit: "meter",
+      composition: "",
+      color: "",
+      note: input.fabricNote.trim(),
+      inStock: true,
+    },
+    existingFabricIds
+  );
+  const style = await createStyle(shop, {
+    name: names.cut.trim(),
+    family: input.family,
+    hint: input.stylePrompt.trim(),
+    coverage: input.coverage,
+    refImage: input.styleImage,
+  });
+
+  const { data, error } = await supabase()
+    .from("compositions")
+    .insert({
+      shop_id: shop.id,
+      kind: "fabric_style",
+      fabric_id: fabric.id,
+      style_id: style.id,
+      image_url: garmentUrl,
+      status: "ready",
+      /* The render was made from exactly this cut at exactly this revision and
+         with no per-pairing note, so it reads as fresh rather than stale the
+         moment it lands in the studio. */
+      rendered_note: "",
+      rendered_style_revision: style.revision,
+    })
+    .select(COMPOSITION_COLUMNS)
+    .single();
+  if (error) throw error;
+  return { fabric, style, composition: rowToComposition(data as CompositionRow) };
 }
 
 export async function setCompositionPublished(id: string, published: boolean): Promise<void> {

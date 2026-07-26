@@ -8,10 +8,11 @@ import { OverviewTab, LeadsTab, garmentTryCounts } from "@/components/Analytics"
 import LocationPicker from "@/components/LocationPicker";
 import PlanTab from "@/components/PlanTab";
 import FabricStudio from "@/components/FabricStudio";
+import CounterTryOn from "@/components/CounterTryOn";
 import Icon from "@/components/Icon";
-import type { Composition, Fabric, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
+import type { Composition, CounterInput, CounterRun, Fabric, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
 
-type Tab = "overview" | "leads" | "catalog" | "fabrics" | "settings" | "plan";
+type Tab = "overview" | "leads" | "catalog" | "fabrics" | "counter" | "settings" | "plan";
 
 interface DashboardProps {
   shop: Shop;
@@ -36,6 +37,14 @@ interface DashboardProps {
   priceComposition: (id: string, price: number) => void;
   noteComposition: (id: string, note: string) => void;
   removeComposition: (id: string) => void;
+  /* The counter: a cloth and a customer that aren't catalog rows yet. */
+  runCounter: (input: CounterInput) => Promise<CounterRun>;
+  keepCounterRun: (
+    input: CounterInput,
+    garmentUrl: string,
+    names: { fabric: string; cut: string }
+  ) => Promise<void>;
+  counterEnabled: boolean;
   events: TryOnEvent[];
   leads: Lead[];
   onLeadHandled: (id: string, handled: boolean) => void;
@@ -49,6 +58,7 @@ export default function Dashboard({
   toggleStock, fabrics, addFabric, editFabric, removeFabric, toggleFabricStock,
   styles, compositions, composeFabric, createStyle, updateStyle,
   publishComposition, priceComposition, noteComposition, removeComposition,
+  runCounter, keepCounterRun, counterEnabled,
   events, leads, onLeadHandled, loading, launchKiosk, signOut,
 }: DashboardProps) {
   const [tab, setTab] = useState<Tab>("overview");
@@ -105,7 +115,9 @@ export default function Dashboard({
     { key: "overview", label: "Overview" },
     { key: "leads", label: "Leads", badge: openLeads || undefined },
     { key: "catalog", label: "Catalog" },
-    ...(shop.type === "apparel" ? [{ key: "fabrics" as Tab, label: "Fabrics" }] : []),
+    ...(shop.type === "apparel"
+      ? [{ key: "fabrics" as Tab, label: "Fabrics" }, { key: "counter" as Tab, label: "Counter" }]
+      : []),
     { key: "plan", label: "Plan" },
     { key: "settings", label: "Settings" },
   ];
@@ -369,6 +381,12 @@ export default function Dashboard({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {tab === "counter" && (
+            <div className="fade-up">
+              <CounterTryOn onRun={runCounter} onKeep={keepCounterRun} enabled={counterEnabled} />
             </div>
           )}
 

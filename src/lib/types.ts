@@ -159,6 +159,28 @@ export const COVERAGES: { id: StyleCoverage; label: string; note: string }[] = [
   { id: "set", label: "Full set", note: "both pieces, cut from this same cloth" },
 ];
 
+/* ── the counter ──
+   A cloth, a cut and a customer that are not catalog rows yet. The made-to-
+   order flow above is authoring: list the bolt, define the cut, render ahead
+   of demand. This is the tailor's other case — someone is holding a bolt off
+   the shelf and wants to see it on themselves now — so every field here is an
+   image or a sentence the vendor just produced, and none of it is persisted
+   unless they choose to keep the run. */
+export interface CounterInput {
+  family: StyleFamily;
+  coverage: StyleCoverage;
+  fabricImage: string; // data URL — the bolt, photographed just now
+  fabricNote: string;
+  styleImage: string | null; // data URL, or null when the words carry the cut
+  stylePrompt: string;
+  personImage: string; // data URL — the customer standing there
+}
+
+export interface CounterRun {
+  garmentUrl: string; // the stitched piece, with nobody in it
+  tryonUrl: string; // the customer wearing it — private, signed, ~1h
+}
+
 export interface TryOnEvent {
   garmentId: string | null;
   cached: boolean;

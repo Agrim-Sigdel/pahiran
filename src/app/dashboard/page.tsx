@@ -16,10 +16,11 @@ import {
   updateStyle as persistStyleUpdate,
   composeFabric as runCompose, setCompositionPublished, setCompositionPrice, setCompositionNote,
   removeComposition as unpersistComposition,
+  runCounter as runCounterOnServer, saveCounterRun,
 } from "@/lib/storage";
 import { reportError } from "@/lib/logging";
 import { getRole, markVendor } from "@/lib/account";
-import type { Composition, Fabric, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
+import type { Composition, CounterInput, CounterRun, Fabric, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -220,6 +221,38 @@ export default function DashboardPage() {
     try { await unpersistComposition(id); } catch {}
   };
 
+  /* The counter spends without writing anything, so unlike composeFabric there
+     is nothing to reload afterwards — the result lives in the panel until the
+     vendor decides to keep it. */
+  const runCounter = (input: CounterInput): Promise<CounterRun> =>
+    runCounterOnServer(shop.id, input);
+
+  /* Keeping one does write: a fabric, a cut of the shop's own, and the
+     composition joining them. All three lists move at once so the Fabrics tab
+     is already correct when the vendor switches to it to set a price. */
+  const keepCounterRun = async (
+    input: CounterInput,
+    garmentUrl: string,
+    names: { fabric: string; cut: string }
+  ) => {
+    try {
+      const saved = await saveCounterRun(shop, input, garmentUrl, names, fabrics.map((f) => f.id));
+      setFabrics((c) => [saved.fabric, ...c]);
+      setStyles((c) => [...c, saved.style]);
+      setCompositions((c) => [saved.composition, ...c]);
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      if (msg.includes("fabric_limit_reached") || msg.includes("garment_limit_reached")) {
+        throw new Error("You've reached your plan's catalog limit — garments and fabrics share it. Upgrade in the Plan tab to keep this.");
+      }
+      if (msg.includes("shop_not_approved")) {
+        throw new Error("Your shop is still awaiting approval, so the catalog is locked for now.");
+      }
+      reportError("dashboard", "keep counter run failed: " + msg, { shopId: shop.id });
+      throw new Error("Could not keep this: " + (e?.message || "please try again."));
+    }
+  };
+
   const changeSlug = async (slug: string): Promise<string | null> => {
     try {
       const updated = await updateShopSlug(shop, slug);
@@ -311,6 +344,8 @@ export default function DashboardPage() {
       publishComposition={publishComposition} priceComposition={priceComposition}
       noteComposition={noteComposition}
       removeComposition={removeComposition}
+      runCounter={runCounter} keepCounterRun={keepCounterRun}
+      counterEnabled={isSupabaseConfigured()}
       events={events} leads={leads} onLeadHandled={handleLead}
       launchKiosk={() => router.push(shop.slug ? "/k/" + shop.slug : "/kiosk")}
       signOut={signOut}

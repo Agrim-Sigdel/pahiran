@@ -69,3 +69,40 @@ export async function refundTryon(
     /* best-effort: a lost refund only under-counts in the shop's favour */
   }
 }
+
+/* ── compose: the vendor's own meter ────────────────────────────────────────
+   A third allowance beside tryon_limit / studio_limit. Composes are spent at
+   authoring time by the vendor rather than by the crowd, so a missing
+   migration degrades differently from consume_tryon above: warn and let the
+   work through, because the vendor's own batch cap still bounds the spend. A
+   real DB error still fails closed. */
+
+export async function consumeCompose(
+  sb: SupabaseClient,
+  shopId: string
+): Promise<{ allowed: boolean; reason: string }> {
+  try {
+    const { data, error } = await sb.rpc("consume_compose", { p_shop_id: shopId });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new Error("consume_compose returned no row");
+    return { allowed: !!row.allowed, reason: row.reason };
+  } catch (e: any) {
+    const code = e?.code || "";
+    const msg = String(e?.message || e);
+    if (code === "PGRST202" || code === "42883" || /find the function|does not exist/i.test(msg)) {
+      console.warn("[plan] consume_compose missing — metering OFF. Run supabase migrations.");
+      return { allowed: true, reason: "ok" };
+    }
+    return { allowed: false, reason: "error" };
+  }
+}
+
+/** Return a reserved compose when the render ultimately failed. */
+export async function refundCompose(sb: SupabaseClient, shopId: string): Promise<void> {
+  try {
+    await sb.rpc("refund_compose", { p_shop_id: shopId });
+  } catch {
+    /* best-effort: a lost refund only under-counts in the shop's favour */
+  }
+}
