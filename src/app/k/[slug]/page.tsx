@@ -3,8 +3,8 @@
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Kiosk from "@/components/Kiosk";
-import { getShopBySlug, loadCatalog } from "@/lib/storage";
-import type { Garment, Shop } from "@/lib/types";
+import { getShopBySlug, loadCatalog, loadPublishedCompositions } from "@/lib/storage";
+import type { Wearable, Shop } from "@/lib/types";
 
 /* Public per-shop kiosk: pahiran.app/k/{slug}. No auth — shoppers land here
    from the shop's kiosk screen or a hanger QR (?g=<garmentId> preselects). */
@@ -14,7 +14,7 @@ function PublicKiosk() {
   const { slug } = useParams<{ slug: string }>();
   const params = useSearchParams();
   const [shop, setShop] = useState<Shop | null>(null);
-  const [catalog, setCatalog] = useState<Garment[] | null>(null);
+  const [catalog, setCatalog] = useState<Wearable[] | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
@@ -25,7 +25,14 @@ function PublicKiosk() {
         return;
       }
       setShop(s);
-      setCatalog((await loadCatalog(s.id)).filter((g) => g.inStock));
+      /* Stock the shop physically holds, then the pieces it will stitch.
+         Published compositions are wearable exactly like garments — the rail
+         and the try-on step never learn the difference. */
+      const [stock, madeToOrder] = await Promise.all([
+        loadCatalog(s.id),
+        loadPublishedCompositions(s.id),
+      ]);
+      setCatalog([...stock.filter((g) => g.inStock), ...madeToOrder]);
     })();
   }, [slug]);
 

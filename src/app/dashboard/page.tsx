@@ -10,16 +10,24 @@ import {
   loadShop, saveShop, loadCatalog, addGarment as persistGarment,
   updateGarment as persistGarmentUpdate, removeGarment as unpersistGarment,
   setGarmentStock, getTryOnEvents, getLeads, setLeadHandled,
-  updateShopSlug,
+  updateShopSlug, loadFabrics, addFabric as persistFabric,
+  updateFabric as persistFabricUpdate, removeFabric as unpersistFabric,
+  setFabricStock, loadStyles, loadCompositions, createStyle as persistStyle,
+  updateStyle as persistStyleUpdate,
+  composeFabric as runCompose, setCompositionPublished, setCompositionPrice, setCompositionNote,
+  removeComposition as unpersistComposition,
 } from "@/lib/storage";
 import { reportError } from "@/lib/logging";
 import { getRole, markVendor } from "@/lib/account";
-import type { Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
+import type { Composition, Fabric, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
   const [shop, setShop] = useState<Shop>({ id: null, slug: null, vendorCode: null, name: "", area: "", whatsapp: "", listed: false, status: "approved", statusNote: null, type: "apparel", category: "clothing", lat: null, lng: null });
   const [catalog, setCatalog] = useState<Garment[]>([]);
+  const [fabrics, setFabrics] = useState<Fabric[]>([]);
+  const [styles, setStyles] = useState<Style[]>([]);
+  const [compositions, setCompositions] = useState<Composition[]>([]);
   const [events, setEvents] = useState<TryOnEvent[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,12 +51,18 @@ export default function DashboardPage() {
       const s = await loadShop();
       if (s) setShop(s);
       const shopId = s?.id ?? null;
-      const [c, ev, ld] = await Promise.all([
+      const [c, fb, st, comp, ev, ld] = await Promise.all([
         loadCatalog(shopId),
+        loadFabrics(shopId),
+        loadStyles(shopId),
+        loadCompositions(shopId),
         getTryOnEvents(shopId),
         getLeads(shopId),
       ]);
       setCatalog(c);
+      setFabrics(fb);
+      setStyles(st);
+      setCompositions(comp);
       setEvents(ev);
       setLeads(ld);
       setLoading(false);
@@ -87,6 +101,123 @@ export default function DashboardPage() {
       reportError("dashboard", "edit garment failed: " + (e?.message || e), { shopId: shop.id });
       alert("Could not save changes: " + (e?.message || "please try again."));
     }
+  };
+
+  /* Fabrics mirror the garment handlers. The limit triggers raise the same two
+     exceptions (with fabric_limit_reached in place of garment_limit_reached),
+     so the same translation applies — both counts now share plans.max_garments. */
+  const addFabric = async (f: Omit<Fabric, "id" | "itemCode">) => {
+    try {
+      const saved = await persistFabric(shop, f, fabrics.map((x) => x.id));
+      setFabrics((c) => [saved, ...c]);
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      if (msg.includes("shop_not_approved")) {
+        alert("Your shop is still awaiting approval, so the catalog is locked for now. We'll call you once you're approved.");
+        return;
+      }
+      if (msg.includes("fabric_limit_reached") || msg.includes("garment_limit_reached")) {
+        alert("You've reached your plan's catalog limit — garments and fabrics share it. Upgrade in the Plan tab to add more.");
+        return;
+      }
+      reportError("dashboard", "add fabric failed: " + msg, { shopId: shop.id });
+      alert("Could not save fabric: " + (e?.message || "image may be too large — try a smaller photo."));
+    }
+  };
+
+  const editFabric = async (updated: Fabric) => {
+    const existing = fabrics.find((f) => f.id === updated.id);
+    if (!existing) return;
+    try {
+      const saved = await persistFabricUpdate(shop, updated, existing.image);
+      setFabrics((c) => c.map((f) => (f.id === saved.id ? saved : f)));
+    } catch (e: any) {
+      reportError("dashboard", "edit fabric failed: " + (e?.message || e), { shopId: shop.id });
+      alert("Could not save changes: " + (e?.message || "please try again."));
+    }
+  };
+
+  const removeFabric = async (id: string) => {
+    const fabric = fabrics.find((f) => f.id === id);
+    if (!fabric) return;
+    const next = fabrics.filter((f) => f.id !== id);
+    setFabrics(next);
+    try { await unpersistFabric(fabric, next.map((x) => x.id)); } catch {}
+  };
+
+  const toggleFabricStock = async (id: string) => {
+    const fabric = fabrics.find((f) => f.id === id);
+    if (!fabric) return;
+    const inStock = !fabric.inStock;
+    setFabrics((c) => c.map((f) => (f.id === id ? { ...f, inStock } : f)));
+    try { await setFabricStock(fabric, inStock); } catch {}
+  };
+
+  /* Rendering is the one action here that spends real money, so it reloads the
+     composition list from the server rather than trusting an optimistic guess:
+     a render can come back ready, failed, or skipped-because-already-there,
+     and the vendor needs to see which. */
+  const composeFabric = async (fabricId: string, styleIds: string[]) => {
+    const results = await runCompose(shop.id, fabricId, styleIds);
+    setCompositions(await loadCompositions(shop.id));
+    const failed = results.filter((r) => r.status === "failed");
+    if (failed.length === results.length) {
+      const reason = failed[0]?.error;
+      if (reason === "compose_limit") {
+        throw new Error("You've used this month's stitching allowance. Upgrade in the Plan tab for more.");
+      }
+      if (reason === "not_approved") {
+        throw new Error("Your shop is still awaiting approval, so stitching is locked for now.");
+      }
+      throw new Error("None of those came out. Try again, or check the fabric photo is clear.");
+    }
+    if (failed.length > 0) {
+      alert(failed.length + " of " + results.length + " didn't come out. Delete those and try again.");
+    }
+  };
+
+  const createStyle = async (s: {
+    name: string;
+    family: StyleFamily;
+    hint: string;
+    coverage: StyleCoverage;
+    refImage: string | null;
+  }) => {
+    const saved = await persistStyle(shop, s);
+    setStyles((cur) => [...cur, saved]);
+  };
+
+  /* Editing a cut bumps its revision in the database, which is what makes
+     existing renders of it read as stale. Reload compositions so the studio
+     shows that immediately rather than after a refresh. */
+  const updateStyle = async (updated: Style) => {
+    const existing = styles.find((s) => s.id === updated.id);
+    const saved = await persistStyleUpdate(shop, updated, existing?.refImage ?? null);
+    setStyles((cur) => cur.map((s) => (s.id === saved.id ? saved : s)));
+    setCompositions(await loadCompositions(shop.id));
+  };
+
+  const publishComposition = async (id: string, published: boolean) => {
+    setCompositions((cur) => cur.map((c) => (c.id === id ? { ...c, published } : c)));
+    try { await setCompositionPublished(id, published); } catch {}
+  };
+
+  const priceComposition = async (id: string, price: number) => {
+    setCompositions((cur) => cur.map((c) => (c.id === id ? { ...c, price } : c)));
+    try { await setCompositionPrice(id, price); } catch {}
+  };
+
+  /* Only the note moves — rendered_note stays put, so the card reads stale
+     until it's stitched again. Optimistic like its neighbours; a failed write
+     leaves the vendor's text on screen, which is the harmless direction. */
+  const noteComposition = async (id: string, note: string) => {
+    setCompositions((cur) => cur.map((c) => (c.id === id ? { ...c, note } : c)));
+    try { await setCompositionNote(id, note); } catch {}
+  };
+
+  const removeComposition = async (id: string) => {
+    setCompositions((cur) => cur.filter((c) => c.id !== id));
+    try { await unpersistComposition(id); } catch {}
   };
 
   const changeSlug = async (slug: string): Promise<string | null> => {
@@ -173,6 +304,13 @@ export default function DashboardPage() {
       catalog={catalog} addGarment={addGarment} editGarment={editGarment}
       removeGarment={removeGarment}
       toggleStock={toggleStock} loading={loading}
+      fabrics={fabrics} addFabric={addFabric} editFabric={editFabric}
+      removeFabric={removeFabric} toggleFabricStock={toggleFabricStock}
+      styles={styles} compositions={compositions}
+      composeFabric={composeFabric} createStyle={createStyle} updateStyle={updateStyle}
+      publishComposition={publishComposition} priceComposition={priceComposition}
+      noteComposition={noteComposition}
+      removeComposition={removeComposition}
       events={events} leads={leads} onLeadHandled={handleLead}
       launchKiosk={() => router.push(shop.slug ? "/k/" + shop.slug : "/kiosk")}
       signOut={signOut}

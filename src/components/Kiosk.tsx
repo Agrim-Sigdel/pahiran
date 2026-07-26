@@ -17,8 +17,9 @@ import { useCart } from "@/lib/cart";
 import { CartDrawer } from "@/components/storefront";
 import { recommendSize, HEIGHT_MIN, HEIGHT_MAX, WEIGHT_MIN, WEIGHT_MAX, type Gender, type SizeRec } from "@/lib/sizing";
 import { LangContext, STRINGS, useLangState, useT } from "@/lib/i18n";
-import type { Garment, Shop } from "@/lib/types";
+import type { Wearable, Shop } from "@/lib/types";
 import Icon from "@/components/Icon";
+import EeMark from "@/components/EeMark";
 import LookViewer from "@/components/LookViewer";
 
 /* Kiosk — light, touch-first shopper flow:
@@ -55,16 +56,6 @@ function useImageAspect(src: string | null): number | null {
   return ar;
 }
 
-/* the ee — blinks while the app is "looking" (replaces spinners) */
-function EeMark({ size, looking, color }: { size: number | string; looking?: boolean; color?: string }) {
-  return (
-    <span className={"ee-mark " + (looking ? "ee-looking" : "ee-blink")}
-      style={{ fontSize: size, color: color || "var(--violet)" }}>
-      <span>ee</span>
-    </span>
-  );
-}
-
 /* how long a shared tablet may sit untouched before it wipes the session,
    and how much warning the shopper gets before that happens */
 const IDLE_MS = 90_000;
@@ -72,7 +63,7 @@ const IDLE_GRACE_MS = 15_000;
 
 interface KioskProps {
   shop: Shop;
-  catalog: Garment[];
+  catalog: Wearable[];
   exit: () => void;
   initialGarmentId?: string | null;
   /* Shared-device mode: this tablet is used by one shopper after another, so
@@ -86,7 +77,7 @@ interface KioskProps {
 export default function Kiosk({ shop, catalog, exit, initialGarmentId, shared = false }: KioskProps) {
   const [step, setStep] = useState<"attract" | "capture" | "tryon">("attract");
   const [photo, setPhoto] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Garment | null>(null);
+  const [selected, setSelected] = useState<Wearable | null>(null);
   const [catFilter, setCatFilter] = useState("All");
   const [savedPhoto, setSavedPhoto] = useState<string | null>(null);
   const [looksCount, setLooksCount] = useState(0);
@@ -277,7 +268,7 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId, shared = 
 }
 
 function AttractScreen({ count, highlight, start, savedPhoto, useSaved, forgetSaved, loggedIn, showAccount }: {
-  count: number; highlight: Garment | null; start: () => void;
+  count: number; highlight: Wearable | null; start: () => void;
   savedPhoto: string | null; useSaved: () => void; forgetSaved: () => void;
   loggedIn: boolean; showAccount: boolean;
 }) {
@@ -488,22 +479,42 @@ function CaptureScreen({ onPhoto, loggedIn, shared = false }: { onPhoto: (dataUr
 
 /* ---------- generating overlay: the app is "looking" — the ee blinks
    over the dimmed photo. No spinners, no scan lines. ---------- */
-function GeneratingOverlay({ garment }: { garment: Garment | null }) {
+function GeneratingOverlay({ garment }: { garment: Wearable | null }) {
   const t = useT();
   const [msg, setMsg] = useState(0);
-  // Asymptotic progress — quick at first, eases toward (never reaching) done,
-  // so it stays honest whether the result lands in 2s (cache) or a minute.
+  /* Asymptotic progress — quick at first, easing toward a finish it never
+     claims, so it stays honest whether the result lands in 2s (cache) or in
+     two minutes.
+
+     tau was 30s with a 96% ceiling, which saturated at about a minute and a
+     half and then sat perfectly still. A bar that stops moving reads as a
+     crash, so shoppers gave up on results that were still coming. 45s reaching
+     99 keeps it visibly creeping across the whole realistic range: ~74% at a
+     minute, 93% at two, 98% at three. The last percent belongs to the result
+     actually arriving. */
   const [progress, setProgress] = useState(4);
-  const tau = 30;
+  const [slow, setSlow] = useState(false);
+  const tau = 45;
+  /* Past this, say so outright. A studio finish on a multi-piece outfit really
+     does take this long, and silence is what makes a wait feel like a failure. */
+  const SLOW_AFTER = 70;
+
+  /* Stops on the last line instead of wrapping. Looping back to "Peeq gardai…"
+     after a minute reads as having started over. */
   useEffect(() => {
-    const timer = setInterval(() => setMsg((m) => (m + 1) % t.genMessages.length), 3200);
+    const timer = setInterval(
+      () => setMsg((m) => Math.min(m + 1, t.genMessages.length - 1)),
+      3200
+    );
     return () => clearInterval(timer);
   }, [t.genMessages.length]);
+
   useEffect(() => {
     const t0 = performance.now();
     const timer = setInterval(() => {
       const s = (performance.now() - t0) / 1000;
-      setProgress(Math.max(4, Math.min(96, Math.round(100 * (1 - Math.exp(-s / tau))))));
+      setProgress(Math.max(4, Math.min(99, Math.round(100 * (1 - Math.exp(-s / tau))))));
+      setSlow(s > SLOW_AFTER);
     }, 300);
     return () => clearInterval(timer);
   }, [tau]);
@@ -527,7 +538,9 @@ function GeneratingOverlay({ garment }: { garment: Garment | null }) {
         <div style={{ width: "72%", maxWidth: 300, height: 5, borderRadius: 5, background: "rgba(255,255,255,.2)", overflow: "hidden" }}>
           <div style={{ height: "100%", width: progress + "%", borderRadius: 5, background: "var(--violet)", transition: "width .3s linear" }} />
         </div>
-        <div style={{ color: "rgba(255,255,255,.55)", fontSize: 11.5, lineHeight: 1.5, maxWidth: 320, padding: "0 8px" }}>{progress}% · {t.genFooter}</div>
+        <div style={{ color: "rgba(255,255,255,.55)", fontSize: 11.5, lineHeight: 1.5, maxWidth: 320, padding: "0 8px" }}>
+          {progress}% · {slow ? t.genSlow : t.genFooter}
+        </div>
       </div>
     </div>
   );
@@ -616,7 +629,10 @@ function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCount
                     {t.share}
                   </button>
                   <button className="ph-btn"
-                    onClick={async () => { await deleteLook(l.id); refresh(); }}
+                    onClick={async () => {
+                      if (!confirm(t.confirmDeleteLook)) return;
+                      await deleteLook(l.id); refresh();
+                    }}
                     style={{ color: "var(--stone)", fontSize: 11.5, padding: "6px 8px" }}>
                     {t.del}
                   </button>
@@ -629,14 +645,15 @@ function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCount
 
       {viewing && (
         <LookViewer look={viewing} src={imgSrc(viewing)} onClose={() => setViewing(null)}
-          labels={{ save: t.saveImage, share: t.share }} />
+          onDelete={async () => { await deleteLook(viewing.id); refresh(); }}
+          labels={{ save: t.saveImage, share: t.share, del: t.deleteThisLook, confirmDelete: t.confirmDeleteLook }} />
       )}
     </div>
   );
 }
 
 /* ---------- "I want this" → vendor leads inbox ---------- */
-function InterestedModal({ shop, garment, recommended, shared, onClose }: { shop: Shop; garment: Garment; recommended?: string; shared?: boolean; onClose: () => void }) {
+function InterestedModal({ shop, garment, recommended, shared, onClose }: { shop: Shop; garment: Wearable; recommended?: string; shared?: boolean; onClose: () => void }) {
   const t = useT();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -887,14 +904,14 @@ function FindMySizeSheet({ initial, onClose, onSaved, onForget }: {
 interface TryOnScreenProps {
   photo: string;
   shop: Shop;
-  rail: Garment[];
+  rail: Wearable[];
   cats: string[];
   catFilter: string;
   setCatFilter: (c: string) => void;
-  selected: Garment | null;
-  setSelected: (g: Garment | null) => void;
+  selected: Wearable | null;
+  setSelected: (g: Wearable | null) => void;
   retakePhoto: () => void;
-  initialGarment: Garment | null;
+  initialGarment: Wearable | null;
   cart: ReturnType<typeof useCart> | null; // null = no public storefront (no slug) — hide add-to-bag
   onLookSaved: () => void;
   onOpenBag: () => void;
@@ -911,7 +928,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
   const [shareState, setShareState] = useState<"idle" | "sharing">("idle");
   const [downloading, setDownloading] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false); // hold-to-compare
-  const [history, setHistory] = useState<{ garment: Garment; url: string }[]>([]); // this session's generated looks
+  const [history, setHistory] = useState<{ garment: Wearable; url: string }[]>([]); // this session's generated looks
   const savedIds = useRef<Set<string>>(new Set()); // garments already saved to My Looks this session
   const [overlay, setOverlay] = useState({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
   const stageRef = useRef<HTMLDivElement>(null);
@@ -944,7 +961,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     setPhase("idle");
   }, [setSelected]);
 
-  const startTryOn = useCallback(async (garment: Garment) => {
+  const startTryOn = useCallback(async (garment: Wearable) => {
     const seq = ++requestSeq.current;
     setSelected(garment);
     setNotice("");
@@ -956,7 +973,11 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     setOverlay({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
     try {
       const url = await runTryOn(photo, garment.image, garment.category, {
-        shopId: shop.id, garmentId: garment.id,
+        shopId: shop.id,
+        /* A rendered fabric x cut goes up as a compositionId; the server
+           resolves it from its own table and refuses an unpublished one. */
+        garmentId: garment.compositionId ? null : garment.id,
+        compositionId: garment.compositionId ?? null,
       });
       if (seq !== requestSeq.current) return;
       logLocalTryOn(garment.id, getKioskSessionId()); // no-op in Supabase mode (server logs it)
@@ -983,7 +1004,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
   }, [initialGarment, startTryOn]);
 
   /* filmstrip tap: an already-generated look comes back instantly, no re-generation */
-  const showFromHistory = (h: { garment: Garment; url: string }) => {
+  const showFromHistory = (h: { garment: Wearable; url: string }) => {
     requestSeq.current++; // drop any in-flight generation's response
     setSelected(h.garment);
     setResultImage(h.url);
@@ -1148,7 +1169,8 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
                 if (!resultImage) return;
                 setLookState("saving");
                 const saved = await saveLook({
-                  garmentId: selected.id, garmentName: selected.name,
+                  garmentId: selected.id, compositionId: selected.compositionId ?? null,
+                  garmentName: selected.name,
                   price: selected.price, shopName: shop.name, imageUrl: resultImage,
                 });
                 if (saved) { setLookState("saved"); savedIds.current.add(selected.id); onLookSaved(); }
@@ -1260,15 +1282,26 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
                   flexShrink: 0, width: 108, padding: 0, borderRadius: 16, overflow: "hidden", textAlign: "left",
                   background: "var(--card)", border: "2px solid " + (selected?.id === g.id ? "var(--violet)" : "var(--line)"),
                 }}>
-                <div style={{ aspectRatio: "3/4", background: "var(--paper-deep)" }}>
+                <div style={{ aspectRatio: "3/4", background: "var(--paper-deep)", position: "relative" }}>
                   <img src={g.image} alt={g.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  {/* No camera has seen this piece — it's a render of cloth in a
+                      cut the shop will stitch. Saying so on the tile matters
+                      more than on the result, because this is where the
+                      shopper decides what they're looking at. */}
+                  {g.stitchedToOrder && (
+                    <span style={{ position: "absolute", top: 6, left: 6, background: "rgba(26,23,20,.78)", color: "#fff", fontSize: 8.5, fontWeight: 600, letterSpacing: ".07em", padding: "3px 6px", borderRadius: 2 }}>
+                      {t.madeToOrder}
+                    </span>
+                  )}
                 </div>
                 <div style={{ padding: "7px 9px 9px" }}>
                   <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</div>
                   <div style={{ fontSize: 11.5, color: "var(--stone)", fontWeight: 500, marginTop: 2 }}>{npr(g.price)}</div>
-                  {g.sizes.length > 0 && (
+                  {g.sizes.length > 0 ? (
                     <div style={{ fontSize: 9.5, color: "var(--stone)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.sizes.join(" ")}</div>
-                  )}
+                  ) : g.stitchedToOrder ? (
+                    <div style={{ fontSize: 9.5, color: "var(--stone)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.yourMeasurements}</div>
+                  ) : null}
                 </div>
               </button>
             ))}
