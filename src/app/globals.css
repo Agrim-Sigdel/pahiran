@@ -165,7 +165,10 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .panel-head .sub { font-size: 13px; color: var(--stone); }
 
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--stone); font-weight: 600; }
-.field input { padding: 12px 15px; border-radius: 14px; border: 1px solid var(--line); font-size: 15px; background: #fff; color: var(--ink); font-weight: 400; letter-spacing: 0; text-transform: none; }
+.field input, .field textarea { padding: 12px 15px; border-radius: 14px; border: 1px solid var(--line); font-size: 15px; background: #fff; color: var(--ink); font-weight: 400; letter-spacing: 0; text-transform: none; }
+/* textarea only: inherit the UI face rather than the browser's monospace
+   default, and let it grow downward but never sideways out of its column */
+.field textarea { font-family: inherit; resize: vertical; min-height: 84px; }
 
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 22px; overflow-x: auto; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
@@ -212,6 +215,11 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 
 /* product-card grids: auto-fill desktop, guaranteed 2-up on phones */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px; }
+/* The studio's render cards carry a price field, a note field and an action
+   row on top of the image, so they need more width than a catalog tile and
+   collapse to one column on phones — two 122px columns cannot hold a textarea
+   and three controls without overflowing. */
+.studio-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 18px; }
 
 /* ── landing hero — one look, two fits. The b-image crossfades in and out
@@ -331,6 +339,9 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 
   .section-pad { padding: 30px 16px; }
   .card-grid, .shop-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  /* One column, not two: a render card is an editing surface, and half a
+     phone width leaves ~122px once the modal's padding is taken out. */
+  .studio-grid { grid-template-columns: 1fr; gap: 14px; }
   .feed-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 10px; }
 
   .btn-solid, .btn-outline, .btn-violet { padding: 12px 24px; font-size: 15px; }

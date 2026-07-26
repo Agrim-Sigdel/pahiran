@@ -48,6 +48,117 @@ export interface Garment {
   stitchedToOrder: boolean;
 }
 
+/* Made-to-order. A fabric is a listing the shopper browses; a style is a cut it
+   can be stitched into. The rendered fabric x style variant arrives with the
+   compose pipeline — see 20260726000100_fabrics_styles.sql. */
+
+/* The taxonomy that pairs a fabric with the cuts it can become. Kept separate
+   from the garment CATEGORIES list: categories describe a finished piece on a
+   rack, families describe what a bolt of cloth can be turned into. */
+export type StyleFamily =
+  | "suit" | "lehenga" | "kurtha" | "daura-suruwal" | "sari-blouse" | "sherwani";
+
+/** How a fabric is priced — per running meter, per single piece, or per set. */
+export type FabricUnit = "meter" | "piece" | "set";
+
+export interface Fabric {
+  id: string;
+  itemCode: string | null; // printed on the bolt tag; null in localStorage mode
+  name: string;
+  family: StyleFamily;
+  image: string; // data URL (local mode) or public storage URL (Supabase mode)
+  price: number; // NPR, per `unit`
+  unit: FabricUnit;
+  composition: string; // "wool 120s", "banarasi silk"; "" = unspecified
+  color: string;
+  /* What the shop knows about this cloth that a photo doesn't show — where a
+     border falls, how heavily it drapes. Feeds the compose prompt. */
+  note: string;
+  inStock: boolean;
+}
+
+/* A fabric stitched into one cut: a product nobody photographed. Authored by
+   the vendor, so every combination a shopper sees is one the tailor agreed to
+   make. `published` is the vendor's review gate. */
+export type CompositionStatus = "pending" | "ready" | "failed";
+
+export interface Composition {
+  id: string;
+  fabricId: string | null;
+  styleId: string | null;
+  image: string | null; // null until status is "ready"
+  status: CompositionStatus;
+  errorNote: string | null;
+  price: number; // NPR
+  published: boolean;
+  /* A note true of this pairing only — the cloth's own note and the cut's
+     wording cover everything else. renderedNote is what the current image was
+     actually made from, so the two differing is exactly what "stale" means. */
+  note: string;
+  renderedNote: string;
+  /* Which revision of the cut produced this image. Null on renders made before
+     revisions existed — unknowable, not stale. */
+  renderedStyleRevision: number | null;
+}
+
+/** Why a render no longer matches what the shop is offering, or null if it
+    still does. The two inputs a vendor can change after the fact are the
+    pairing's note and the cut itself; everything else means a new render. */
+export function staleReason(
+  c: Composition,
+  style?: Style | null
+): "note" | "cut" | null {
+  if (c.status !== "ready") return null;
+  if (c.note.trim() !== c.renderedNote.trim()) return "note";
+  if (style && c.renderedStyleRevision !== null && style.revision !== c.renderedStyleRevision) {
+    return "cut";
+  }
+  return null;
+}
+
+/* What the kiosk can put on a shopper. To the try-on step a photographed
+   garment and a rendered fabric x cut are the same thing — an image of a piece
+   of clothing — so the rail, the stage and the cart all take this one shape
+   and stay unaware of the difference.
+
+   Only the writes care. garment_id and composition_id are separate foreign
+   keys (see 20260726000400), and exactly one of them is set: compositionId is
+   present precisely when this wearable came from a composition. */
+export interface Wearable extends Garment {
+  compositionId?: string | null;
+}
+
+/* Which pieces the cut actually makes. Read twice: the compose prompt turns it
+   into an instruction, and try-on turns it into a placement category. A note
+   cannot do the second job, which is why this is an enum and not wording. */
+export type StyleCoverage = "top" | "bottom" | "set";
+
+export interface Style {
+  id: string;
+  shopId: string | null; // null = platform-global, available to every shop
+  family: StyleFamily;
+  name: string;
+  hint: string; // the cut in words — what the compose step reads
+  coverage: StyleCoverage;
+  refImage: string | null; // optional reference photo; sharpens the hint
+  active: boolean;
+  sort: number;
+  /* Bumped by the database whenever a compose-relevant field changes, so a
+     render can tell whether the cut has moved on since it was made. */
+  revision: number;
+}
+
+/* Coverage → what try-on is being asked to place. Families can't answer this:
+   a suit and a blazer share one, and mean different halves of a body. */
+export const coverageCategory = (c: StyleCoverage): string =>
+  c === "top" ? "tops" : c === "bottom" ? "bottoms" : "one-pieces";
+
+export const COVERAGES: { id: StyleCoverage; label: string; note: string }[] = [
+  { id: "top", label: "Top only", note: "kurtha, blouse, blazer — nothing below the waist" },
+  { id: "bottom", label: "Bottom only", note: "suruwal, churidar, skirt — nothing above" },
+  { id: "set", label: "Full set", note: "both pieces, cut from this same cloth" },
+];
+
 export interface TryOnEvent {
   garmentId: string | null;
   cached: boolean;
@@ -122,6 +233,95 @@ export interface GarmentRow {
   in_stock: boolean;
   tryon_enabled: boolean;
   stitched_to_order: boolean;
+}
+
+export interface FabricRow {
+  id: string;
+  shop_id: string;
+  item_code: string | null;
+  name: string;
+  family: string;
+  image_url: string;
+  price_npr: number;
+  unit: string | null;
+  composition: string | null;
+  color: string | null;
+  note: string | null;
+  in_stock: boolean;
+}
+
+export interface CompositionRow {
+  id: string;
+  fabric_id: string | null;
+  style_id: string | null;
+  image_url: string | null;
+  status: string;
+  error_note: string | null;
+  price_npr: number;
+  published: boolean;
+  note: string | null;
+  rendered_note: string | null;
+  rendered_style_revision: number | null;
+}
+
+export function rowToComposition(r: CompositionRow): Composition {
+  return {
+    id: r.id,
+    fabricId: r.fabric_id ?? null,
+    styleId: r.style_id ?? null,
+    image: r.image_url ?? null,
+    status: (r.status as CompositionStatus) ?? "pending",
+    errorNote: r.error_note ?? null,
+    price: r.price_npr ?? 0,
+    published: r.published ?? false,
+    note: r.note ?? "",
+    renderedNote: r.rendered_note ?? "",
+    renderedStyleRevision: r.rendered_style_revision ?? null,
+  };
+}
+
+export interface StyleRow {
+  id: string;
+  shop_id: string | null;
+  family: string;
+  name: string;
+  prompt_hint: string;
+  coverage: string | null;
+  ref_image_url: string | null;
+  active: boolean | null;
+  sort: number | null;
+  revision: number | null;
+}
+
+export function rowToFabric(r: FabricRow): Fabric {
+  return {
+    id: r.id,
+    itemCode: r.item_code ?? null,
+    name: r.name,
+    family: r.family as StyleFamily,
+    image: r.image_url,
+    price: r.price_npr,
+    unit: (r.unit as FabricUnit) ?? "meter",
+    composition: r.composition ?? "",
+    color: r.color ?? "",
+    note: r.note ?? "",
+    inStock: r.in_stock,
+  };
+}
+
+export function rowToStyle(r: StyleRow): Style {
+  return {
+    id: r.id,
+    shopId: r.shop_id ?? null,
+    family: r.family as StyleFamily,
+    name: r.name,
+    hint: r.prompt_hint,
+    coverage: (r.coverage as StyleCoverage) ?? "set",
+    refImage: r.ref_image_url ?? null,
+    active: r.active ?? true,
+    sort: r.sort ?? 0,
+    revision: r.revision ?? 1,
+  };
 }
 
 export function rowToGarment(r: GarmentRow): Garment {
