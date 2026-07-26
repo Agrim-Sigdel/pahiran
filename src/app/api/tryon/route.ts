@@ -342,20 +342,11 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   /* Per-shop plan metering (Supabase mode only — local mode has no plans).
-     Reserve one generation now; refund below if it fails. If the shop's studio
-     allowance is spent but quick remains, downgrade to quick instead of failing. */
+     Reserve one generation now; refund below if it fails. One meter: studio is
+     the only mode, so every try-on spends from tryon_limit and the studio
+     allowance is no longer consulted (see lib/plan.ts). */
   if (sb && shopId) {
-    let res = await consumeTryon(sb, shopId, finish === "studio");
-    if (!res.allowed && res.reason === "studio_limit") {
-      finish = "quick";
-      key = cacheKey(finish);
-      const altCached = await cacheGet(sb, key); // a quick result may already be cached — free
-      if (altCached) {
-        await logEvent(sb, shopId, garmentId, compositionId, true, sessionId);
-        return Response.json({ url: altCached, cached: true, finish });
-      }
-      res = await consumeTryon(sb, shopId, false);
-    }
+    const res = await consumeTryon(sb, shopId, finish === "studio");
     if (!res.allowed) {
       if (res.reason === "error") {
         await logError(sb, "plan meter unavailable", { shopId }, shopId);

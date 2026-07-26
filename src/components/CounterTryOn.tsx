@@ -8,7 +8,7 @@ import { downloadImage } from "@/lib/looks";
 import { StitchingOverlay, ImageZoom } from "@/components/FabricStudio";
 import Icon from "@/components/Icon";
 import { COVERAGES } from "@/lib/types";
-import type { CounterInput, CounterRun, Fabric, Style, StyleCoverage, StyleFamily } from "@/lib/types";
+import type { CounterInput, CounterRun, Fabric, Garment, Style, StyleCoverage, StyleFamily } from "@/lib/types";
 
 /* The counter: three photographs and a finished try-on, in one sitting.
 
@@ -43,6 +43,9 @@ interface Props {
   /** The shop's listed bolts, so a counter run can start from one of them
       instead of a fresh photograph. */
   fabrics: Fabric[];
+  /** The catalog's own add — the other way to keep a run: the stitched render
+      becomes a plain garment item, no fabric or cut rows involved. */
+  onAddGarment: (g: Omit<Garment, "id" | "itemCode">) => Promise<void> | void;
 }
 
 /* The cloth is the one image every fidelity complaint will trace back to, so
@@ -107,7 +110,7 @@ async function toSmallDataUrl(url: string): Promise<string> {
   );
 }
 
-export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics }: Props) {
+export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, onAddGarment }: Props) {
   const [family, setFamily] = useState<StyleFamily>(FAMILIES[0].id);
   const [coverage, setCoverage] = useState<StyleCoverage>("set");
   const [fabricImage, setFabricImage] = useState<string | null>(null);
@@ -274,7 +277,7 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics }
           below so the next customer only needs a new photo. ── */}
       {run && (
         <Result key={run.result.tryonUrl} run={run.result} input={run.from}
-          onKeep={onKeep} onStartOver={startOver} />
+          onKeep={onKeep} onAddGarment={onAddGarment} onStartOver={startOver} />
       )}
 
       {/* The previous fitting, from this browser — shown only while there's no
@@ -800,20 +803,36 @@ function PhotoBox({ image, onImage, max, label, hint, optional, camera, onError 
    sale turns on, so it leads at full size. The stitched piece sits beside it
    because that is the one worth keeping — it is what a shopper would browse
    later, and it is already paid for and already stored. */
-function Result({ run, input, onKeep, onStartOver }: {
+/* The catalog speaks in CATEGORIES labels; the counter speaks in families.
+   Sherwani has no catalog label of its own, so it files under Other. */
+const familyCategory = (f: StyleFamily): string =>
+  f === "suit" ? "Suit"
+  : f === "lehenga" ? "Lehenga"
+  : f === "kurtha" ? "Kurtha"
+  : f === "daura-suruwal" ? "Daura Suruwal"
+  : f === "sari-blouse" ? "Sari"
+  : "Other";
+
+function Result({ run, input, onKeep, onAddGarment, onStartOver }: {
   run: CounterRun;
   input: CounterInput;
   onKeep: (input: CounterInput, garmentUrl: string, names: { fabric: string; cut: string }) => Promise<void>;
+  onAddGarment: (g: Omit<Garment, "id" | "itemCode">) => Promise<void> | void;
   onStartOver: () => void;
 }) {
-  const [keeping, setKeeping] = useState(false);
+  /* One form open at a time: keeping as made-to-order and adding as a garment
+     are alternative homes for the same render. */
+  const [form, setForm] = useState<"fabric" | "garment" | null>(null);
   const [names, setNames] = useState({ fabric: "", cut: "" });
+  const [garmentName, setGarmentName] = useState("");
+  const [garmentPrice, setGarmentPrice] = useState("");
   const [saving, setSaving] = useState(false);
-  const [kept, setKept] = useState(false);
+  const [kept, setKept] = useState<"fabric" | "garment" | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const canSave = Boolean(names.fabric.trim() && names.cut.trim() && !saving);
+  const canAddGarment = Boolean(garmentName.trim() && !saving);
 
   const save = async () => {
     if (!canSave) return;
@@ -821,10 +840,43 @@ function Result({ run, input, onKeep, onStartOver }: {
     setError(null);
     try {
       await onKeep(input, run.garmentUrl, names);
-      setKept(true);
-      setKeeping(false);
+      setKept("fabric");
+      setForm(null);
     } catch (e: any) {
       setError(e?.message || "Could not keep this — please try again.");
+    }
+    setSaving(false);
+  };
+
+  const addGarment = async () => {
+    if (!canAddGarment) return;
+    setSaving(true);
+    setError(null);
+    try {
+      /* addGarment uploads a data URL; the render lives on the storage host,
+         so it's fetched and recompressed like any garment photo upload. */
+      const blob = await (await fetch(run.garmentUrl)).blob();
+      const image = await fileToCompressedDataURL(
+        new File([blob], "garment.jpg", { type: blob.type || "image/png" }),
+        1200,
+        0.85
+      );
+      await onAddGarment({
+        name: garmentName.trim(),
+        category: familyCategory(input.family),
+        price: Number(garmentPrice || 0),
+        image,
+        sizes: [],
+        inStock: true,
+        tryonEnabled: true,
+        /* No finished piece exists — this render is a promise the tailor
+           stitches to measure, and the tag should say so. */
+        stitchedToOrder: true,
+      });
+      setKept("garment");
+      setForm(null);
+    } catch (e: any) {
+      setError(e?.message || "Could not add this to the catalog — please try again.");
     }
     setSaving(false);
   };
@@ -875,10 +927,12 @@ function Result({ run, input, onKeep, onStartOver }: {
               two — waiting in the Fabrics tab for a price. */}
           {kept ? (
             <div style={{ fontSize: 12.5, color: "var(--forest)", lineHeight: 1.6 }}>
-              <Icon name="check" /> Kept. It&apos;s in your Fabrics tab — set a price there, then
-              publish it for shoppers.
+              <Icon name="check" />{" "}
+              {kept === "fabric"
+                ? "Kept. It's in your Fabrics tab — set a price there, then publish it for shoppers."
+                : "Added. It's in your Catalog tab, in stock and try-on ready, marked stitched to order."}
             </div>
-          ) : keeping ? (
+          ) : form === "fabric" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <label className="field">Name this cloth
                 <input value={names.fabric} maxLength={80} autoFocus
@@ -895,7 +949,7 @@ function Result({ run, input, onKeep, onStartOver }: {
                 so. The customer&apos;s photo is not kept with it.
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="ph-btn" disabled={saving} onClick={() => setKeeping(false)}
+                <button className="ph-btn" disabled={saving} onClick={() => setForm(null)}
                   style={{ flex: 1, color: "var(--forest-deep)", padding: 11, fontSize: 11.5, border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>cancel</button>
                 <button className="ph-btn" disabled={!canSave} onClick={save}
                   style={{ flex: 2, background: canSave ? "var(--forest)" : "var(--line)", color: canSave ? "var(--cream)" : "var(--mut)", padding: 11, fontSize: 11.5, borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
@@ -903,11 +957,42 @@ function Result({ run, input, onKeep, onStartOver }: {
                 </button>
               </div>
             </div>
+          ) : form === "garment" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <label className="field">Name this garment
+                <input value={garmentName} maxLength={80} autoFocus
+                  onChange={(e) => setGarmentName(e.target.value)}
+                  placeholder={"e.g. " + familyLabel(input.family) + " in navy wool"} />
+              </label>
+              <label className="field">Price (NPR, optional)
+                <input value={garmentPrice} inputMode="numeric"
+                  onChange={(e) => setGarmentPrice(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))}
+                  placeholder="e.g. 12500" />
+              </label>
+              <div style={{ fontSize: 11, color: "var(--mut)", lineHeight: 1.55 }}>
+                Goes straight into your catalog as a stitched-to-order piece, try-on enabled.
+                The customer&apos;s photo is not kept with it.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="ph-btn" disabled={saving} onClick={() => setForm(null)}
+                  style={{ flex: 1, color: "var(--forest-deep)", padding: 11, fontSize: 11.5, border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>cancel</button>
+                <button className="ph-btn" disabled={!canAddGarment} onClick={addGarment}
+                  style={{ flex: 2, background: canAddGarment ? "var(--forest)" : "var(--line)", color: canAddGarment ? "var(--cream)" : "var(--mut)", padding: 11, fontSize: 11.5, borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
+                  {saving ? "adding…" : "add to catalog"}
+                </button>
+              </div>
+            </div>
           ) : (
-            <button className="ph-btn btn-solid" onClick={() => setKeeping(true)}
-              style={{ padding: "10px 18px", fontSize: 11.5 }}>
-              keep this in my fabrics
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button className="ph-btn btn-solid" onClick={() => setForm("fabric")}
+                style={{ padding: "10px 18px", fontSize: 11.5 }}>
+                keep this in my fabrics
+              </button>
+              <button className="ph-btn" onClick={() => setForm("garment")}
+                style={{ padding: "10px 18px", fontSize: 11.5, fontWeight: 500, color: "var(--forest-deep)", border: "1px solid var(--forest)", borderRadius: "var(--radius-btn)" }}>
+                add to catalog as a garment
+              </button>
+            </div>
           )}
           {error && <div style={{ fontSize: 12, color: "var(--warn)", marginTop: 8 }}>{error}</div>}
         </div>

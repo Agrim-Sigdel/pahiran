@@ -167,6 +167,10 @@ export async function POST(req: Request): Promise<Response> {
             family,
             fabricNote: fabricNote || undefined,
             coverage,
+            /* Low, unlike the studio's medium: this render serves the one
+               customer standing at the counter, not the catalog. Trying low
+               end-to-end to judge whether the difference is worth 8x. */
+            quality: "low",
           });
         } catch (e: any) {
           await refundCompose(sb, shopId);
@@ -206,8 +210,10 @@ export async function POST(req: Request): Promise<Response> {
             coverageCategory(coverage),
             coverage === "set",
             /* Counter fittings all come out on the same white studio backdrop —
-               the shop wall behind the customer varies, the output shouldn't. */
-            { studioBackground: true }
+               the shop wall behind the customer varies, the output shouldn't.
+               quality: low even for sets, to judge low end-to-end against the
+               kiosk's low/medium split. */
+            { studioBackground: true, quality: "low" }
           );
         } catch (e: any) {
           await refundTryon(sb, shopId, true); // the compose stands — its render is returned below

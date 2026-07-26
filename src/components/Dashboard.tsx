@@ -463,7 +463,7 @@ export default function Dashboard({
 
           {tab === "counter" && (
             <div className="fade-up">
-              <CounterTryOn onRun={runCounter} onKeep={keepCounterRun} enabled={counterEnabled} styles={styles} fabrics={fabrics} />
+              <CounterTryOn onRun={runCounter} onKeep={keepCounterRun} enabled={counterEnabled} styles={styles} fabrics={fabrics} onAddGarment={addGarment} />
             </div>
           )}
 

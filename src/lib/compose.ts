@@ -44,6 +44,10 @@ export interface ComposeRequest {
   /** The vendor's note about this exact cloth-and-cut pairing. Refines the
       cut; it does not redefine which pieces exist — that's `coverage`. */
   note?: string;
+  /** Render quality. Defaults to medium — catalog imagery is generated once
+      and seen often. The counter overrides to low: its render serves one
+      customer standing there, not the catalog. */
+  quality?: "low" | "medium" | "high";
 }
 
 async function toFile(src: string, name: string): Promise<File> {
@@ -171,7 +175,7 @@ export async function composeGarment(req: ComposeRequest): Promise<string> {
   const form = new FormData();
   form.append("model", "gpt-image-2");
   form.append("size", "1024x1536"); // portrait: garments are taller than wide
-  form.append("quality", "medium"); // catalog imagery is generated once and seen often
+  form.append("quality", req.quality ?? "medium");
   form.append("prompt", buildPrompt(req));
 
   const files = await Promise.all(

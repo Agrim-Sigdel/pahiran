@@ -1,9 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /* Per-shop plan metering. A try-on reserves one generation against the shop's
-   30-day allowance; a studio finish additionally reserves one studio slot.
-   All accounting is atomic in Postgres (see consume_tryon / refund_tryon in
-   supabase/schema.sql) so concurrent try-ons can't overshoot the plan. */
+   30-day allowance. All accounting is atomic in Postgres (see consume_tryon /
+   refund_tryon in supabase/schema.sql) so concurrent try-ons can't overshoot
+   the plan.
+
+   The studio meter is retired in code. It dates from when studio was a premium
+   finish beside quick; the kiosk and the counter now run studio as the only
+   mode, which made studio_limit the de-facto try-on limit and tryon_limit a
+   cap on the degraded fallback nobody chose. So every try-on now spends from
+   tryon_limit alone: p_studio is pinned false below, studio_used never moves,
+   and studio_limit never refuses anyone. The columns and the RPC parameter
+   stay (no migration needed) — this file just stops using them. */
 
 export type ConsumeReason =
   | "ok"
@@ -21,17 +29,18 @@ export interface ConsumeResult {
   studioLeft: number;
 }
 
-/** Atomically reserve one try-on (and one studio slot when `studio`) against
-    the shop's plan. Fail-closed: any DB error blocks the spend. */
+/** Atomically reserve one try-on against the shop's plan. Fail-closed: any DB
+    error blocks the spend. The `studio` argument is accepted for call-site
+    compatibility and deliberately ignored — see the header note. */
 export async function consumeTryon(
   sb: SupabaseClient,
   shopId: string,
-  studio: boolean
+  _studio: boolean
 ): Promise<ConsumeResult> {
   try {
     const { data, error } = await sb.rpc("consume_tryon", {
       p_shop_id: shopId,
-      p_studio: studio,
+      p_studio: false,
     });
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
@@ -57,14 +66,15 @@ export async function consumeTryon(
   }
 }
 
-/** Return a reserved try-on when the generation ultimately failed. */
+/** Return a reserved try-on when the generation ultimately failed. Mirrors
+    consumeTryon: only the try-on count moves, never the studio count. */
 export async function refundTryon(
   sb: SupabaseClient,
   shopId: string,
-  studio: boolean
+  _studio: boolean
 ): Promise<void> {
   try {
-    await sb.rpc("refund_tryon", { p_shop_id: shopId, p_studio: studio });
+    await sb.rpc("refund_tryon", { p_shop_id: shopId, p_studio: false });
   } catch {
     /* best-effort: a lost refund only under-counts in the shop's favour */
   }

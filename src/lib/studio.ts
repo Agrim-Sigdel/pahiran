@@ -59,6 +59,9 @@ export async function runStudio(
         counter wants every fitting to come out looking the same; the kiosk
         deliberately keeps the shopper's own scene. */
     studioBackground?: boolean;
+    /** Override the automatic quality choice (low for one garment, medium
+        for a multi-piece set). */
+    quality?: "low" | "medium" | "high";
   }
 ): Promise<string> {
   /* What to replace and, just as importantly, what to leave alone. The generic
@@ -89,7 +92,13 @@ export async function runStudio(
      harder edit than swapping one, and 'low' is where it shows first — pieces
      get dropped or smeared together. Only sets pay the extra; a single-garment
      try-on is unchanged. */
-  return runStudioWithSwap(personImage, garmentImage, swap, multiPiece ? "medium" : "low", !!opts?.studioBackground);
+  return runStudioWithSwap(
+    personImage,
+    garmentImage,
+    swap,
+    opts?.quality ?? (multiPiece ? "medium" : "low"),
+    !!opts?.studioBackground
+  );
 }
 
 async function runStudioWithSwap(

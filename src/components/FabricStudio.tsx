@@ -361,36 +361,39 @@ export function StitchingOverlay({
 
   return (
     <div onClick={(e) => e.stopPropagation()}
-      style={{ position: "fixed", inset: 0, zIndex: 58, background: "var(--forest-deep)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      style={{ position: "fixed", inset: 0, zIndex: 58, background: "var(--forest-deep)", overflow: "hidden" }}>
 
       {/* the cloth itself, dimmed — the thing being worked on, not decoration */}
       <img src={image} alt="" aria-hidden
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(26px) brightness(.42) saturate(1.1)", transform: "scale(1.15)" }} />
 
-      <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: preview ? "22px 16px 8px" : 0 }}>
+      {/* One centred column: the subject (the ee, or the stitched piece once
+          it exists) with the words directly under it — not pinned to the
+          bottom edge with a screen of empty dark between them. */}
+      <div style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, padding: "26px 14px", textAlign: "center" }}>
         {preview ? (
           <img src={preview} alt="The stitched piece" className="fade-up"
-            style={{ maxWidth: "min(78%, 340px)", maxHeight: "100%", objectFit: "contain", borderRadius: 12, boxShadow: "0 14px 44px rgba(0,0,0,.45)" }} />
+            style={{ maxWidth: "min(78%, 320px)", maxHeight: "52vh", minHeight: 0, objectFit: "contain", borderRadius: 12, boxShadow: "0 14px 44px rgba(0,0,0,.45)" }} />
         ) : (
           <EeMark size="clamp(38px, 12vw, 64px)" looking color="#fff" />
         )}
-      </div>
 
-      <div style={{ position: "relative", padding: "26px 14px 30px", background: "linear-gradient(transparent, rgba(26,23,20,.9) 45%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 9, textAlign: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.16)", borderRadius: 999, padding: "5px 14px 5px 5px", maxWidth: "88%" }}>
-          <img src={image} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", display: "block", flexShrink: 0 }} />
-          <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,.9)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {caption}
-          </span>
-        </div>
-        <div key={msg} className="peek ph-display" style={{ fontSize: "clamp(15px, 4.4vw, 18px)", lineHeight: 1.35, fontWeight: 600, color: "#fff", maxWidth: 340, padding: "0 6px" }}>
-          {messages[msg % messages.length]}
-        </div>
-        <div style={{ width: "72%", maxWidth: 300, height: 5, borderRadius: 5, background: "rgba(255,255,255,.2)", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: progress + "%", borderRadius: 5, background: "var(--cream)", transition: "width .3s linear" }} />
-        </div>
-        <div style={{ color: "rgba(255,255,255,.55)", fontSize: 11.5, lineHeight: 1.5, maxWidth: 320, padding: "0 8px" }}>
-          {progress}% · {slow ? STITCH_SLOW : footer}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 9 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.16)", borderRadius: 999, padding: "5px 14px 5px 5px", maxWidth: "88vw" }}>
+            <img src={image} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", display: "block", flexShrink: 0 }} />
+            <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,.9)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {caption}
+            </span>
+          </div>
+          <div key={msg} className="peek ph-display" style={{ fontSize: "clamp(15px, 4.4vw, 18px)", lineHeight: 1.35, fontWeight: 600, color: "#fff", maxWidth: 340, padding: "0 6px" }}>
+            {messages[msg % messages.length]}
+          </div>
+          <div style={{ width: "min(72vw, 300px)", height: 5, borderRadius: 5, background: "rgba(255,255,255,.2)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: progress + "%", borderRadius: 5, background: "var(--cream)", transition: "width .3s linear" }} />
+          </div>
+          <div style={{ color: "rgba(255,255,255,.55)", fontSize: 11.5, lineHeight: 1.5, maxWidth: 320, padding: "0 8px" }}>
+            {progress}% · {slow ? STITCH_SLOW : footer}
+          </div>
         </div>
       </div>
     </div>
