@@ -25,21 +25,45 @@ and including `20260719000100_admin_and_limits.sql` — all tables, the `plans` 
 `refund_tryon`, `incr_rate_limit`, `activate_plan`, `grant_credits` and
 `enforce_garment_limit` functions.
 
-In the SQL editor, run exactly these three files, in order:
+In the SQL editor, run the snapshot, then **every migration dated after it**, in
+filename order:
 
 ```
 supabase/schema.sql
 supabase/migrations/20260720000100_shopper_accounts.sql
 supabase/migrations/20260720000200_item_codes.sql
+supabase/migrations/20260721000100_admin_console.sql
+supabase/migrations/20260721000200_shop_owner_unique.sql
+supabase/migrations/20260721000300_shop_type.sql
+supabase/migrations/20260721000400_shop_type_backfill.sql
+supabase/migrations/20260721000500_shop_category.sql
+supabase/migrations/20260726000100_fabrics_styles.sql
+supabase/migrations/20260726000200_compositions.sql
+supabase/migrations/20260726000300_fabric_note_and_style_check.sql
+supabase/migrations/20260726000400_wearable_compositions.sql
+supabase/migrations/20260726000500_style_coverage_and_notes.sql
+supabase/migrations/20260726000600_editable_cuts.sql
 ```
 
-Do **not** replay the other twelve migrations. Most of their statements are
-idempotent (`create table if not exists`, `create or replace function`), but the
-17 `create policy` statements in `schema.sql` are not — Postgres has no
-`create policy if not exists`, so a replay aborts on the first duplicate.
+The rule is "snapshot, then everything newer" — not a fixed list. `schema.sql`
+folds in migrations only up to `20260719000100`, so anything dated later is
+genuinely missing from a fresh project. When you fold newer migrations into the
+snapshot (see below), shorten this list to match.
 
-Storage buckets come from that SQL too: `garments` (public read), `results`,
-`looks` and `shopper-photos` (all private, signed-URL access only).
+Do **not** replay migrations dated *before* the snapshot. Most of their
+statements are idempotent (`create table if not exists`, `create or replace
+function`), but the 17 `create policy` statements in `schema.sql` are not —
+Postgres has no `create policy if not exists`, so a replay aborts on the first
+duplicate.
+
+Storage buckets come from that SQL too: `garments`, `fabrics`, `styles` and
+`renders` (public read), and `results`, `looks`, `shopper-photos` (private,
+signed-URL access only).
+
+> One statement can fail on a locked-down project: `20260726000200` creates a
+> policy on `storage.objects`, which is owned by `supabase_storage_admin`. It's
+> wrapped so an ownership error is caught and skipped rather than rolling back
+> the whole migration — the `renders` bucket is public, so reads still work.
 
 ### 2. Auth
 
