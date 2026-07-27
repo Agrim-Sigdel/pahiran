@@ -2,15 +2,18 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import QRCode from "qrcode";
-import { CATEGORIES, SIZES, npr } from "@/lib/constants";
+import { CATEGORIES, SIZES, FAMILIES, FABRIC_UNITS, npr, fabricPrice, familyLabel } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
 import { OverviewTab, LeadsTab, garmentTryCounts } from "@/components/Analytics";
 import LocationPicker from "@/components/LocationPicker";
 import PlanTab from "@/components/PlanTab";
+import FabricStudio, { CutModal } from "@/components/FabricStudio";
+import CounterTryOn from "@/components/CounterTryOn";
 import Icon from "@/components/Icon";
-import type { Garment, Lead, Shop, TryOnEvent } from "@/lib/types";
+import { COVERAGES } from "@/lib/types";
+import type { Composition, CounterInput, CounterRun, Fabric, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
 
-type Tab = "overview" | "leads" | "catalog" | "settings" | "plan";
+type Tab = "overview" | "leads" | "catalog" | "fabrics" | "designs" | "counter" | "settings" | "plan";
 
 interface DashboardProps {
   shop: Shop;
@@ -21,6 +24,29 @@ interface DashboardProps {
   editGarment: (g: Garment) => void;
   removeGarment: (id: string) => void;
   toggleStock: (id: string) => void;
+  fabrics: Fabric[];
+  addFabric: (f: Omit<Fabric, "id" | "itemCode">) => void;
+  editFabric: (f: Fabric) => void;
+  removeFabric: (id: string) => void;
+  toggleFabricStock: (id: string) => void;
+  styles: Style[];
+  compositions: Composition[];
+  composeFabric: (fabricId: string, styleIds: string[]) => Promise<void>;
+  createStyle: (s: { name: string; family: StyleFamily; hint: string; coverage: StyleCoverage; refImage: string | null }) => Promise<void>;
+  updateStyle: (s: Style) => Promise<void>;
+  publishComposition: (id: string, published: boolean) => void;
+  priceComposition: (id: string, price: number) => void;
+  noteComposition: (id: string, note: string) => void;
+  removeComposition: (id: string) => void;
+  /* The counter: a cloth and a customer that aren't catalog rows yet.
+     `onStitched` fires when the piece exists, halfway through the run. */
+  runCounter: (input: CounterInput, onStitched?: (garmentUrl: string) => void) => Promise<CounterRun>;
+  keepCounterRun: (
+    input: CounterInput,
+    garmentUrl: string,
+    names: { fabric: string; cut: string }
+  ) => Promise<void>;
+  counterEnabled: boolean;
   events: TryOnEvent[];
   leads: Lead[];
   onLeadHandled: (id: string, handled: boolean) => void;
@@ -31,11 +57,23 @@ interface DashboardProps {
 
 export default function Dashboard({
   shop, updateShop, changeSlug, catalog, addGarment, editGarment, removeGarment,
-  toggleStock, events, leads, onLeadHandled, loading, launchKiosk, signOut,
+  toggleStock, fabrics, addFabric, editFabric, removeFabric, toggleFabricStock,
+  styles, compositions, composeFabric, createStyle, updateStyle,
+  publishComposition, priceComposition, noteComposition, removeComposition,
+  runCounter, keepCounterRun, counterEnabled,
+  events, leads, onLeadHandled, loading, launchKiosk, signOut,
 }: DashboardProps) {
   const [tab, setTab] = useState<Tab>("overview");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Garment | null>(null);
+  const [showFabricForm, setShowFabricForm] = useState(false);
+  const [editingFabric, setEditingFabric] = useState<Fabric | null>(null);
+  const [studioFabric, setStudioFabric] = useState<Fabric | null>(null);
+  const [familyFilter, setFamilyFilter] = useState("All");
+  const [cutFamilyFilter, setCutFamilyFilter] = useState("All");
+  /* Same three jobs as the studio's form: new cut, edit a shop cut, copy a
+     library cut into one the shop owns. */
+  const [cutForm, setCutForm] = useState<{ mode: "new" | "edit" | "copy"; style?: Style } | null>(null);
   const [filter, setFilter] = useState("All");
   const [codeQuery, setCodeQuery] = useState("");
   const [qrGarment, setQrGarment] = useState<Garment | null>(null);
@@ -61,10 +99,40 @@ export default function Dashboard({
   const kioskPath = shop.slug ? "/k/" + shop.slug : "/kiosk";
   const origin = typeof window === "undefined" ? "" : window.location.origin;
 
+  const visibleFabrics = useMemo(
+    () => (familyFilter === "All" ? fabrics : fabrics.filter((f) => f.family === familyFilter)),
+    [fabrics, familyFilter]
+  );
+
+  /* The designs tab: every cut, the shop's own first within each family so
+     their tailoring sits above the library's. */
+  const visibleCuts = useMemo(() => {
+    const list = cutFamilyFilter === "All" ? styles : styles.filter((s) => s.family === cutFamilyFilter);
+    return [...list].sort((a, b) =>
+      Number(!!b.shopId) - Number(!!a.shopId) || a.sort - b.sort || a.name.localeCompare(b.name));
+  }, [styles, cutFamilyFilter]);
+  const yourCutCount = useMemo(() => visibleCuts.filter((s) => s.shopId).length, [visibleCuts]);
+
+  /* Only ready renders count on the card — a failed or in-flight one isn't a
+     cut the shop can sell yet. */
+  const compCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of compositions) {
+      if (c.status !== "ready" || !c.fabricId) continue;
+      m.set(c.fabricId, (m.get(c.fabricId) ?? 0) + 1);
+    }
+    return m;
+  }, [compositions]);
+
+  /* Made-to-order is a tailoring flow, so it follows the same entitlement as
+     the kiosk: a catalog-only shop never sees it. */
   const TABS: { key: Tab; label: string; badge?: number }[] = [
     { key: "overview", label: "Overview" },
     { key: "leads", label: "Leads", badge: openLeads || undefined },
     { key: "catalog", label: "Catalog" },
+    ...(shop.type === "apparel"
+      ? [{ key: "fabrics" as Tab, label: "Fabrics" }, { key: "designs" as Tab, label: "Designs" }, { key: "counter" as Tab, label: "Counter" }]
+      : []),
     { key: "plan", label: "Plan" },
     { key: "settings", label: "Settings" },
   ];
@@ -236,6 +304,169 @@ export default function Dashboard({
             </div>
           )}
 
+          {tab === "fabrics" && (
+            <div className="fade-up">
+              <div className="cat-bar">
+                <div>
+                  <span className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>fabrics</span>
+                  <span style={{ color: "var(--mut)", marginLeft: 10, fontSize: 13 }}>{fabrics.length} fabric{fabrics.length !== 1 ? "s" : ""}</span>
+                </div>
+                <div className="cat-tools">
+                  <select value={familyFilter} onChange={(e) => setFamilyFilter(e.target.value)}
+                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 13 }}>
+                    <option>All</option>
+                    {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                  </select>
+                  <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => setShowFabricForm(true)}>
+                    + add fabric
+                  </button>
+                </div>
+              </div>
+
+              {visibleFabrics.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--mut)" }}>
+                  <div style={{ fontSize: 14, marginBottom: 6 }}>
+                    {fabrics.length > 0 ? "No fabrics in that family." : "No fabrics yet."}
+                  </div>
+                  <div style={{ fontSize: 12.5, marginBottom: 18, lineHeight: 1.6 }}>
+                    Photograph each bolt flat and well-lit — the weave and colour are what
+                    the stitched preview is built from.
+                  </div>
+                  <button className="ph-btn btn-solid" style={{ padding: "11px 22px", fontSize: 12 }}
+                    onClick={() => setShowFabricForm(true)}>+ add fabric</button>
+                </div>
+              ) : (
+                <div className="card-grid">
+                  {visibleFabrics.map((f) => (
+                    <div key={f.id} className="fade-up" style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)", opacity: f.inStock ? 1 : 0.6 }}>
+                      <div style={{ aspectRatio: "4/3", position: "relative", background: "var(--sage-mist)" }}>
+                        <button onClick={() => setStudioFabric(f)} title={"Cuts for " + f.name}
+                          style={{ display: "block", width: "100%", height: "100%", padding: 0, border: "none", background: "none", cursor: "pointer" }}>
+                          <img src={f.image} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: f.inStock ? "none" : "grayscale(.7)" }} />
+                        </button>
+                        <span style={{ position: "absolute", top: 10, left: 10, background: "var(--cream)", color: "var(--forest-deep)", fontSize: 10, fontWeight: 600, letterSpacing: ".1em", padding: "4px 10px", borderRadius: 2 }}>
+                          {familyLabel(f.family)}
+                        </span>
+                        {(compCount.get(f.id) ?? 0) > 0 && (
+                          <span style={{ position: "absolute", top: 10, right: 10, background: "rgba(26,23,20,.8)", color: "var(--cream)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
+                            {compCount.get(f.id)} cut{compCount.get(f.id) !== 1 ? "s" : ""}
+                          </span>
+                        )}
+                        {!f.inStock && (
+                          <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--forest-deep)", color: "var(--cream)", fontSize: 10, fontWeight: 500, letterSpacing: ".08em", padding: "4px 9px", borderRadius: 2 }}>
+                            Out of stock
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ padding: "13px 14px 14px" }}>
+                        {f.itemCode && (
+                          <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 10.5, letterSpacing: ".08em", color: "var(--camel)", marginBottom: 3 }}>{f.itemCode}</div>
+                        )}
+                        <div style={{ fontWeight: 500, fontSize: 11.5, letterSpacing: ".12em", marginBottom: 4 }}>{f.name}</div>
+                        {(f.composition || f.color) && (
+                          <div style={{ fontSize: 11, color: "var(--mut)", marginBottom: 5 }}>
+                            {[f.composition, f.color].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, gap: 6 }}>
+                          <span style={{ color: "var(--camel)", fontWeight: 500, fontSize: 12.5 }}>{fabricPrice(f.price, f.unit)}</span>
+                          <span style={{ display: "flex", gap: 2 }}>
+                            <button className="ph-btn" onClick={() => setStudioFabric(f)}
+                              style={{ color: "var(--forest-deep)", fontSize: 11, padding: "4px 5px", fontWeight: 600 }}>
+                              Cuts
+                            </button>
+                            <button className="ph-btn" onClick={() => setEditingFabric(f)}
+                              style={{ color: "var(--forest-deep)", fontSize: 11, padding: "4px 5px", fontWeight: 500 }}>
+                              Edit
+                            </button>
+                            <button className="ph-btn" onClick={() => toggleFabricStock(f.id)}
+                              style={{ color: f.inStock ? "var(--mut)" : "var(--warn)", fontSize: 11, padding: "4px 5px", fontWeight: 500 }}>
+                              {f.inStock ? "In stock" : "Restock"}
+                            </button>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === "designs" && (
+            <div className="fade-up">
+              <div className="cat-bar">
+                <div>
+                  <span className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>designs</span>
+                  <span style={{ color: "var(--mut)", marginLeft: 10, fontSize: 13 }}>
+                    {visibleCuts.length} cut{visibleCuts.length !== 1 ? "s" : ""}
+                    {yourCutCount > 0 ? ` · ${yourCutCount} yours` : ""}
+                  </span>
+                </div>
+                <div className="cat-tools">
+                  <select value={cutFamilyFilter} onChange={(e) => setCutFamilyFilter(e.target.value)}
+                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 13 }}>
+                    <option>All</option>
+                    {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                  </select>
+                  <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }}
+                    onClick={() => setCutForm({ mode: "new" })}>
+                    + add your own cut
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ fontSize: 12.5, color: "var(--mut)", margin: "-2px 0 18px", lineHeight: 1.65 }}>
+                Every cut a cloth can be stitched into. Library cuts come with peeq and are
+                shared by every shop; cuts marked yours belong to your shop alone, and only
+                you can change them.
+              </div>
+
+              {visibleCuts.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--mut)" }}>
+                  <div style={{ fontSize: 14, marginBottom: 18 }}>No cuts in that family yet.</div>
+                  <button className="ph-btn btn-solid" style={{ padding: "11px 22px", fontSize: 12 }}
+                    onClick={() => setCutForm({ mode: "new" })}>+ add your own cut</button>
+                </div>
+              ) : (
+                FAMILIES.filter((f) => cutFamilyFilter === "All" || f.id === cutFamilyFilter).map((f) => {
+                  const familyCuts = visibleCuts.filter((s) => s.family === f.id);
+                  if (familyCuts.length === 0) return null;
+                  /* Two different shapes of card, so two rows: putting a tall
+                     wireframe next to a three-line description in one grid
+                     leaves the text cards mostly white space. */
+                  const withImage = familyCuts.filter((c) => c.refImage);
+                  const textOnly = familyCuts.filter((c) => !c.refImage);
+                  const edit = (c: Style) => setCutForm({ mode: c.shopId ? "edit" : "copy", style: c });
+                  return (
+                    <div key={f.id} style={{ marginBottom: 30 }}>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: 10 }}>
+                        <span className="ph-display" style={{ fontSize: 16, color: "var(--forest-deep)" }}>{f.label.toLowerCase()}</span>
+                        <span style={{ fontSize: 11.5, color: "var(--mut)" }}>{familyCuts.length}</span>
+                      </div>
+                      {withImage.length > 0 && (
+                        <div className="card-grid" style={{ marginBottom: textOnly.length ? 12 : 0 }}>
+                          {withImage.map((c) => <CutCard key={c.id} cut={c} onEdit={() => edit(c)} />)}
+                        </div>
+                      )}
+                      {textOnly.length > 0 && (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 12 }}>
+                          {textOnly.map((c) => <TextCutCard key={c.id} cut={c} onEdit={() => edit(c)} />)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {tab === "counter" && (
+            <div className="fade-up">
+              <CounterTryOn onRun={runCounter} onKeep={keepCounterRun} enabled={counterEnabled} styles={styles} fabrics={fabrics} onAddGarment={addGarment} />
+            </div>
+          )}
+
           {tab === "plan" && (
             <div className="fade-up">
               <PlanTab shop={shop} />
@@ -261,6 +492,52 @@ export default function Dashboard({
           onRemove={() => { removeGarment(editing.id); setEditing(null); }}
         />
       )}
+      {showFabricForm && (
+        <FabricModal onClose={() => setShowFabricForm(false)}
+          onSave={(f) => { addFabric(f); setShowFabricForm(false); }} />
+      )}
+      {editingFabric && (
+        <FabricModal
+          initial={editingFabric}
+          onClose={() => setEditingFabric(null)}
+          onSave={(f) => { editFabric({ ...editingFabric, ...f }); setEditingFabric(null); }}
+          onRemove={() => { removeFabric(editingFabric.id); setEditingFabric(null); }}
+        />
+      )}
+      {studioFabric && (
+        <FabricStudio
+          fabric={studioFabric}
+          styles={styles}
+          compositions={compositions.filter((c) => c.fabricId === studioFabric.id)}
+          onClose={() => setStudioFabric(null)}
+          onCompose={(styleIds) => composeFabric(studioFabric.id, styleIds)}
+          onCreateStyle={createStyle}
+          onUpdateStyle={updateStyle}
+          onPublish={publishComposition}
+          onPrice={priceComposition}
+          onNote={noteComposition}
+          onRemove={removeComposition}
+        />
+      )}
+      {cutForm && (
+        <CutModal
+          family={cutForm.style?.family ?? FAMILIES[0].id}
+          pickFamily={cutForm.mode === "new"}
+          mode={cutForm.mode}
+          initial={cutForm.style}
+          onClose={() => setCutForm(null)}
+          onSave={async (s) => {
+            /* A copy saves as a new shop cut — the library one every other
+               shop sees stays untouched. */
+            if (cutForm.mode === "edit" && cutForm.style) {
+              await updateStyle({ ...cutForm.style, ...s });
+            } else {
+              await createStyle(s);
+            }
+            setCutForm(null);
+          }}
+        />
+      )}
       {showTagSheet && (
         <TagSheetModal
           catalog={catalog}
@@ -276,6 +553,92 @@ export default function Dashboard({
           onClose={() => setQrGarment(null)}
         />
       )}
+    </div>
+  );
+}
+
+/* ── cuts on the designs tab ──
+   A cut is words first and a picture second (see style-library.ts), so it gets
+   two card shapes: one led by the reference photo, and a compact text card for
+   cuts that are only words. They never share a grid row — a tall wireframe
+   next to a three-line description leaves the text card mostly empty. */
+
+const cutOwnerChip = (mine: boolean): React.CSSProperties => ({
+  fontSize: 9.5, fontWeight: 600, letterSpacing: ".09em", padding: "3px 8px",
+  borderRadius: 2, whiteSpace: "nowrap",
+  background: mine ? "var(--forest)" : "var(--sage-mist)",
+  color: mine ? "var(--cream)" : "var(--mut)",
+});
+
+const cutCoverageChip: React.CSSProperties = {
+  fontSize: 9.5, fontWeight: 600, letterSpacing: ".09em", padding: "3px 8px",
+  borderRadius: 2, textTransform: "uppercase", whiteSpace: "nowrap",
+  background: "var(--sage)", color: "var(--forest-deep)",
+};
+
+function CutEditButton({ mine, onEdit }: { mine: boolean; onEdit: () => void }) {
+  return (
+    <button className="ph-btn" onClick={onEdit}
+      title={mine ? "Change this cut" : "Library cut — take a copy you can change"}
+      style={{ color: "var(--forest-deep)", fontSize: 11, padding: "4px 5px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 }}>
+      <Icon name={mine ? "edit" : "copy"} /> {mine ? "Edit" : "Make it your own"}
+    </button>
+  );
+}
+
+function CutCard({ cut, onEdit }: { cut: Style; onEdit: () => void }) {
+  const mine = !!cut.shopId;
+  const cov = COVERAGES.find((x) => x.id === cut.coverage);
+  return (
+    <div className="fade-up" style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)", display: "flex", flexDirection: "column" }}>
+      {/* The image is absolutely placed so a tall wireframe scales down into
+          the frame instead of stretching the card (and the whole grid row). */}
+      <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--sage-mist)", overflow: "hidden" }}>
+        <img src={cut.refImage ?? undefined} alt={cut.name}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", padding: 10, boxSizing: "border-box" }} />
+        {cov && (
+          <span style={{ ...cutCoverageChip, position: "absolute", top: 10, left: 10, background: "var(--cream)" }}>
+            {cov.label}
+          </span>
+        )}
+        <span style={{ ...cutOwnerChip(mine), position: "absolute", top: 10, right: 10, background: mine ? "var(--forest)" : "rgba(26,23,20,.65)", color: "var(--cream)" }}>
+          {mine ? "YOURS" : "peeq library"}
+        </span>
+      </div>
+      <div style={{ padding: "11px 13px 12px", flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
+        <div style={{ fontWeight: 500, fontSize: 11.5, letterSpacing: ".12em" }}>{cut.name}</div>
+        {cut.hint && (
+          <div style={{ fontSize: 11, color: "var(--mut)", lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            {cut.hint}
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "auto", paddingTop: 3 }}>
+          <CutEditButton mine={mine} onEdit={onEdit} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Text-only cut: the chips sit in flow above the words, never over them. */
+function TextCutCard({ cut, onEdit }: { cut: Style; onEdit: () => void }) {
+  const mine = !!cut.shopId;
+  const cov = COVERAGES.find((x) => x.id === cut.coverage);
+  return (
+    <div className="fade-up" style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", border: "1px solid var(--line)", padding: "13px 14px 11px", display: "flex", flexDirection: "column", gap: 7 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        {cov && <span style={cutCoverageChip}>{cov.label}</span>}
+        <span style={cutOwnerChip(mine)}>{mine ? "YOURS" : "peeq library"}</span>
+      </div>
+      <div style={{ fontWeight: 500, fontSize: 12, letterSpacing: ".1em" }}>{cut.name}</div>
+      {cut.hint && (
+        <div style={{ fontSize: 11.5, color: "var(--mut)", fontStyle: "italic", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+          “{cut.hint}”
+        </div>
+      )}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "auto" }}>
+        <CutEditButton mine={mine} onEdit={onEdit} />
+      </div>
     </div>
   );
 }
@@ -530,6 +893,114 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
             onClick={() => { if (confirm("Remove \"" + initial.name + "\" from the catalog?")) onRemove(); }}
             style={{ width: "100%", marginTop: 12, color: "var(--mut)", fontSize: 12, textDecoration: "underline", textUnderlineOffset: 3 }}>
             Remove from catalog
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Fabric modal ──
+   Deliberately not a GarmentModal variant. A fabric has no sizes (it's cut to
+   the person) and no category, but it does have a family, a unit, and a weave
+   — and price without a unit is meaningless on a bolt. Sharing one component
+   would mean a prop soup of mutually-exclusive fields. */
+function FabricModal({ initial, onClose, onSave, onRemove }: {
+  initial?: Fabric;
+  onClose: () => void;
+  onSave: (f: Omit<Fabric, "id" | "itemCode">) => void;
+  onRemove?: () => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [family, setFamily] = useState<StyleFamily>(initial?.family ?? FAMILIES[0].id);
+  const [price, setPrice] = useState(initial ? String(initial.price || "") : "");
+  const [unit, setUnit] = useState<Fabric["unit"]>(initial?.unit ?? "meter");
+  const [composition, setComposition] = useState(initial?.composition ?? "");
+  const [color, setColor] = useState(initial?.color ?? "");
+  const [note, setNote] = useState(initial?.note ?? "");
+  const [image, setImage] = useState<string | null>(initial?.image ?? null);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    try { setImage(await fileToCompressedDataURL(file)); }
+    catch { alert("Could not read that image. Try a JPG or PNG."); }
+    setBusy(false);
+  };
+
+  const canSave = Boolean(name.trim() && image && !busy);
+  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 15, background: "#fff" };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="fade-up"
+        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 400, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: "28px 26px" }}>
+        <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 18 }}>
+          {initial ? "edit fabric" : "add a fabric"}
+        </div>
+
+        <div onClick={() => fileRef.current?.click()}
+          style={{ border: "1.5px dashed " + (image ? "var(--forest)" : "var(--line)"), borderRadius: 6, height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--sage)", color: "var(--mut)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
+          {busy ? <span>Processing photo…</span>
+            : image ? <img src={image} alt="Fabric preview" style={{ height: "100%", objectFit: "contain" }} />
+            : <div style={{ padding: 12 }}>Tap to upload a fabric photo<br /><span style={{ fontSize: 12 }}>Lay it flat in daylight — fill the frame with the weave</span></div>}
+        </div>
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input style={input} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="Fabric name (e.g. Navy Italian Wool)" />
+          <div>
+            <div className="field" style={{ marginBottom: 7 }}>Stitched into</div>
+            <select value={family} onChange={(e) => setFamily(e.target.value as StyleFamily)} style={input}>
+              {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <input style={{ ...input, flex: 1 }} value={price} maxLength={8} inputMode="numeric"
+              onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))} placeholder="Price (NPR)" />
+            <select value={unit} onChange={(e) => setUnit(e.target.value as Fabric["unit"])} style={{ ...input, flex: 1 }}>
+              {FABRIC_UNITS.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <input style={{ ...input, flex: 1 }} value={composition} maxLength={40}
+              onChange={(e) => setComposition(e.target.value)} placeholder="Weave (e.g. wool 120s)" />
+            <input style={{ ...input, flex: 1 }} value={color} maxLength={30}
+              onChange={(e) => setColor(e.target.value)} placeholder="Colour" />
+          </div>
+          <div>
+            <div className="field" style={{ marginBottom: 7 }}>Anything we should know about this cloth?</div>
+            <textarea style={{ ...input, minHeight: 68, resize: "vertical", fontFamily: "inherit" }}
+              value={note} maxLength={300} onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. gold border runs along one edge only — it goes on the pallu" />
+            <div style={{ fontSize: 11, color: "var(--mut)", marginTop: 5, lineHeight: 1.55 }}>
+              Optional, but this is the part a photo can't show. Where a border sits or how
+              heavily a cloth drapes is what makes the stitched preview right.
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+          <button className="ph-btn" onClick={onClose}
+            style={{ flex: 1, color: "var(--forest-deep)", padding: 13, fontSize: 12, letterSpacing: ".12em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>cancel</button>
+          <button className="ph-btn" disabled={!canSave}
+            onClick={() => onSave({
+              name: name.trim(), family, image: image!,
+              price: Number(price || 0), unit,
+              composition: composition.trim(), color: color.trim(), note: note.trim(),
+              inStock: initial?.inStock ?? true,
+            })}
+            style={{ flex: 2, background: canSave ? "var(--forest)" : "var(--line)", color: canSave ? "var(--cream)" : "var(--mut)", padding: 13, fontSize: 12, letterSpacing: ".12em", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
+            {initial ? "save changes" : "save fabric"}
+          </button>
+        </div>
+        {initial && onRemove && (
+          <button className="ph-btn"
+            onClick={() => { if (confirm("Remove \"" + initial.name + "\" from your fabrics?")) onRemove(); }}
+            style={{ width: "100%", marginTop: 12, color: "var(--mut)", fontSize: 12, textDecoration: "underline", textUnderlineOffset: 3 }}>
+            Remove fabric
           </button>
         )}
       </div>

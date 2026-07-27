@@ -205,7 +205,10 @@ function SignedIn({ email }: { email: string }) {
                   <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                     <button className="ph-btn" onClick={() => shareLook(l).catch(() => {})}
                       style={{ flex: 1, border: "1.5px solid var(--ink)", color: "var(--ink)", fontSize: 12, padding: "6px 0", fontWeight: 600, borderRadius: 999 }}>share</button>
-                    <button className="ph-btn" onClick={async () => { await deleteLook(l.id); refresh(); }}
+                    <button className="ph-btn" onClick={async () => {
+                      if (!confirm("Delete this look? This can't be undone.")) return;
+                      await deleteLook(l.id); refresh();
+                    }}
                       style={{ color: "var(--stone)", fontSize: 11.5, padding: "6px 8px" }}>delete</button>
                   </div>
                 </div>
@@ -215,7 +218,10 @@ function SignedIn({ email }: { email: string }) {
         )}
       </div>
 
-      {viewing && <LookViewer look={viewing} src={imgSrc(viewing)} onClose={() => setViewing(null)} />}
+      {viewing && (
+        <LookViewer look={viewing} src={imgSrc(viewing)} onClose={() => setViewing(null)}
+          onDelete={async () => { await deleteLook(viewing.id); refresh(); }} />
+      )}
     </main>
   );
 }

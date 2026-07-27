@@ -53,9 +53,17 @@ const en = {
 
   genMessages: ["Peeq gardai... 👀", "Lighting milaudai...", "Kapada ramrari fit gardai...", "Pose milaudai...", "Sana sana details milaudai...", "Almost tayar!", "La, sakinai lagyo, ahha la daami cha"],
   genFooter: "ek minute jati laagchha, tara worth it chha hai",
+  /* Shown once the wait passes the point where silence starts to read as
+     failure. A full outfit genuinely takes longer than a single piece. */
+  genSlow: "ali dhilo bhairacha — banirahecha, nabandanus hai",
 
   pickAPiece: "pick a piece below",
   sizes: "sizes:",
+  /* Shown on pieces the shop stitches rather than stocks — a rendered fabric
+     and cut. The shopper is looking at cloth plus a promise, not a photo of
+     something hanging in the back, and the tile is where that has to land. */
+  madeToOrder: "MADE TO ORDER",
+  yourMeasurements: "your measurements",
   aiResultNote: "AI try-on · ask staff to see it in person",
   holdToCompare: "hold to compare",
   originalPhoto: "your photo",
@@ -117,6 +125,9 @@ const en = {
   share: "share",
   del: "delete",
   confirmDeleteAll: "Delete all saved looks and your remembered photo from this device?",
+  /* Individual delete is as irreversible as delete-all, so it asks too. */
+  confirmDeleteLook: "Delete this look? This can't be undone.",
+  deleteThisLook: "delete this look",
   privacyLink: "how we handle your photo",
 };
 
@@ -163,9 +174,12 @@ const ne: typeof en = {
 
   genMessages: ["एक झलक हेर्दै…", "कपडा ओढाउँदै…", "उज्यालो मिलाउँदै…", "बुट्टा सिलाउँदै…", "अन्तिम टच…"],
   genFooter: "एक मिनेट जति लाग्छ, तर लायकको छ है",
+  genSlow: "अलि ढिलो भइरहेछ — बन्दैछ, बन्द नगर्नुहोस् है",
 
   pickAPiece: "तलबाट एउटा लुगा छान्नुहोस्",
   sizes: "साइज:",
+  madeToOrder: "अर्डरमा सिलाइने",
+  yourMeasurements: "तपाईंको नाप",
   aiResultNote: "AI ट्राई-अन · सक्कली हेर्न स्टाफलाई भन्नुहोस्",
   holdToCompare: "तुलना गर्न थिचिराख्नुहोस्",
   originalPhoto: "तपाईंको फोटो",
@@ -227,6 +241,8 @@ const ne: typeof en = {
   share: "सेयर",
   del: "मेटाउनुहोस्",
   confirmDeleteAll: "यस डिभाइसबाट सबै सेभ गरिएका लुक र सम्झिएको फोटो मेटाउने?",
+  confirmDeleteLook: "यो लुक मेटाउने? फेरि फर्काउन मिल्दैन।",
+  deleteThisLook: "यो लुक मेटाउनुहोस्",
   privacyLink: "तपाईंको फोटो कसरी प्रयोग हुन्छ",
 };
 

@@ -4,8 +4,8 @@ import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Kiosk from "@/components/Kiosk";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
-import { loadCatalog, loadShop } from "@/lib/storage";
-import type { Garment, Shop } from "@/lib/types";
+import { loadCatalog, loadPublishedCompositions, loadShop } from "@/lib/storage";
+import type { Wearable, Shop } from "@/lib/types";
 
 /* Vendor's own kiosk (launched from the dashboard). Public shopper links
    go to /k/[slug] instead. */
@@ -14,7 +14,7 @@ function KioskOwn() {
   const router = useRouter();
   const params = useSearchParams();
   const [shop, setShop] = useState<Shop>({ id: null, slug: null, vendorCode: null, name: "", area: "", whatsapp: "", listed: false, status: "approved", statusNote: null, type: "apparel", category: "clothing", lat: null, lng: null });
-  const [catalog, setCatalog] = useState<Garment[] | null>(null); // null = loading
+  const [catalog, setCatalog] = useState<Wearable[] | null>(null); // null = loading
 
   useEffect(() => {
     (async () => {
@@ -27,7 +27,14 @@ function KioskOwn() {
       }
       const s = await loadShop();
       if (s) setShop(s);
-      setCatalog((await loadCatalog(s?.id)).filter((g) => g.inStock));
+      /* Stock the shop physically holds, then the pieces it will stitch.
+         Published compositions are wearable exactly like garments — the rail
+         and the try-on step never learn the difference. */
+      const [stock, madeToOrder] = await Promise.all([
+        loadCatalog(s?.id),
+        loadPublishedCompositions(s?.id),
+      ]);
+      setCatalog([...stock.filter((g) => g.inStock), ...madeToOrder]);
     })();
   }, [router]);
 
@@ -46,7 +53,7 @@ function KioskOwn() {
       <div style={{ position: "fixed", inset: 0, background: "var(--ink)", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, textAlign: "center", padding: 24 }}>
         <div className="ph-display" style={{ fontSize: 26 }}>nothing listed yet</div>
         <p style={{ color: "rgba(255,255,255,.55)", maxWidth: 380, margin: 0 }}>
-          Add at least one in-stock garment in the dashboard before launching the kiosk.
+          Add an in-stock garment, or publish a fabric in a cut, before launching the kiosk.
         </p>
         <button className="ph-btn btn-violet" onClick={() => router.push("/dashboard")}
           style={{ padding: "14px 28px" }}>

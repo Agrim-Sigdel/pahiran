@@ -15,7 +15,11 @@ import { blobToDataURL, dataURLToBlob } from "@/lib/images";
 
 export interface SavedLook {
   id: string;
+  /* The piece this look is of, whether photographed or rendered. Cloud rows
+     keep the two apart in separate foreign keys; here they collapse back into
+     one id, because a saved look only ever needs to point at its piece. */
   garmentId: string;
+  compositionId?: string | null;
   garmentName: string;
   price: number;
   shopName: string;
@@ -138,6 +142,7 @@ async function signedLookUrl(path: string): Promise<string> {
 
 interface LookMeta {
   garmentId: string;
+  compositionId?: string | null;
   garmentName: string;
   price: number;
   shopName: string;
@@ -158,7 +163,10 @@ async function cloudSaveLookBlob(uid: string, meta: LookMeta, blob: Blob): Promi
     .insert({
       user_id: uid,
       shop_id: meta.shopId ?? null,
-      garment_id: meta.garmentId,
+      /* Exactly one of the pair — garment_id is a foreign key to garments, and
+         a composition is not a row there. */
+      garment_id: meta.compositionId ? null : meta.garmentId,
+      composition_id: meta.compositionId ?? null,
       garment_name: meta.garmentName,
       shop_name: meta.shopName,
       price_npr: meta.price,
@@ -173,7 +181,8 @@ async function cloudSaveLookBlob(uid: string, meta: LookMeta, blob: Blob): Promi
   }
   return {
     id: data.id,
-    garmentId: data.garment_id,
+    garmentId: data.garment_id ?? data.composition_id,
+    compositionId: data.composition_id ?? null,
     garmentName: data.garment_name,
     price: data.price_npr,
     shopName: data.shop_name ?? "",
@@ -207,7 +216,8 @@ async function cloudListLooks(uid: string): Promise<SavedLook[]> {
   return Promise.all(
     rows.map(async (r) => ({
       id: r.id,
-      garmentId: r.garment_id,
+      garmentId: r.garment_id ?? r.composition_id,
+      compositionId: r.composition_id ?? null,
       garmentName: r.garment_name,
       price: r.price_npr,
       shopName: r.shop_name ?? "",
@@ -278,6 +288,7 @@ async function cloudForgetPhoto(uid: string): Promise<void> {
 
 interface SaveLookInput {
   garmentId: string;
+  compositionId?: string | null;
   garmentName: string;
   price: number;
   shopName: string;

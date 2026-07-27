@@ -13,23 +13,41 @@ npm run dev                  # http://localhost:3000
 ```
 
 Without `FAL_KEY`, everything works except AI generation — the kiosk falls back to the manual
-positioning preview.
+positioning preview. `OPENAI_API_KEY` powers the "studio" try-on finish and the made-to-order
+render pipeline; without it try-on drops to the quick finish and `/api/compose` returns a clear
+error.
 
-## What's here (Phase 0)
+## Two modes
 
-- `/` — landing
-- `/dashboard` — vendor catalog management (localStorage for now; Supabase in Phase 1)
-- `/kiosk` — full-screen shopper flow: photo → pick from the rack → AI try-on
-- `/api/tryon` — server-side proxy to fal.ai FASHN v1.6. The key never reaches the browser.
-  In-memory result cache (same person + garment = free) and per-IP rate limiting.
+The app runs with **no backend at all** — `src/lib/storage.ts` falls back to localStorage when
+the Supabase env vars are absent, which is the zero-setup demo path. Set
+`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` and the
+same UI runs multi-tenant against Postgres, Storage and RLS. No code branches on environment —
+see [docs/environments.md](./docs/environments.md) for bootstrapping a project.
 
-## Phase 1 wiring (when ready)
+## What's here
 
-1. Create a Supabase project, run `supabase/schema.sql` in the SQL editor.
-2. Fill the Supabase vars in `.env.local`.
-3. Swap the five functions in `src/lib/storage.js` for Supabase queries; move the try-on
-   cache from memory into the `tryon_results` table.
-4. Add vendor auth and per-shop routes: `/k/[slug]`, `/s/[slug]`.
+**Shopper**
+- `/` — landing · `/signin` — shopper + vendor sign-in · `/account` — saved looks, details
+- `/kiosk`, `/k/[slug]` — full-screen try-on: photo → pick a piece → AI try-on
+- `/s/[slug]`, `/s/[slug]/[garment]` — storefront and product pages (server-rendered share cards)
+
+**Vendor**
+- `/dashboard` — catalog, fabrics + the fabric studio, analytics, leads inbox, plan
+- `/admin` — approval queue, billing inbox, ops
+
+**API** (keys stay server-side)
+- `/api/tryon` — fal.ai FASHN v1.6 (quick) or gpt-image-2 (studio). Result cache keyed on
+  person + garment, per-IP rate limits, daily spend cap.
+- `/api/compose` — renders a fabric in a cut. Vendor-only and metered.
+- `/api/lead`, `/api/log`, `/api/billing/*`
+
+## Made to order
+
+Beyond photographed stock, a shop can sell **cloth plus a promise**: a fabric rendered into a
+cut nobody has photographed, which shoppers can still try on. That has its own design notes —
+coverage, staleness, metering, migration order — in
+[docs/made-to-order.md](./docs/made-to-order.md).
 
 ## Security notes
 

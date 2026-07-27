@@ -1,6 +1,6 @@
 # EasyFitCheck (formerly Pahiran) — Project Status
 
-_Last updated: 2026-07-14 · Companion to [PRODUCT_PLAN.md](./PRODUCT_PLAN.md)_
+_Last updated: 2026-07-26 · Companion to [PRODUCT_PLAN.md](./PRODUCT_PLAN.md)_
 
 ## ✅ What we have (working today)
 
@@ -57,6 +57,17 @@ _Last updated: 2026-07-14 · Companion to [PRODUCT_PLAN.md](./PRODUCT_PLAN.md)_
   `/admin` console has a vendor queue (approve / reject / suspend / restore,
   reasons required on refusal) alongside the billing inbox, with every action
   written to an audit trail. See [docs/vendor-approval.md](./docs/vendor-approval.md)
+- **Made-to-order (fabric → styled render → wearable)**: vendors upload a bolt of
+  cloth, pick the cuts they'd actually stitch it into (a seeded platform library,
+  a photo of one they've stitched, or their own words), and get a
+  catalog-quality ghost-mannequin render of each pairing. They price and publish
+  it; shoppers then try those renders on in the kiosk exactly like photographed
+  stock, tagged **MADE TO ORDER**. Cuts declare their **coverage**
+  (top / bottom / full set), which drives both the render prompt and where
+  try-on places the garment. Editing a cut or a pairing's note marks its renders
+  stale rather than silently leaving a picture of something the shop no longer
+  offers. Metered separately from try-ons (`compose_limit`), because the vendor
+  controls this spend. See [docs/made-to-order.md](./docs/made-to-order.md)
 
 ## ❌ What we don't have
 
@@ -72,13 +83,15 @@ _Last updated: 2026-07-14 · Companion to [PRODUCT_PLAN.md](./PRODUCT_PLAN.md)_
 ### Phase 2+ — three-sided platform (plan only, no code)
 - [ ] Shopper accounts with saved photo (cross-device; Phase C of the plan)
 - [ ] Influencer stores (`/i/[name]`), attribution, commissions
-- [ ] Fabric → styled-render pipeline (style template gallery)
 - [ ] Search, checkout (eSewa/Khalti/COD), delivery, reviews
 
 ### Quality gaps
 - [ ] Zero tests, no error monitoring
 - [ ] FASHN quality benchmark on saris/lehengas not run — this is the go/no-go item
-      (50 garments, 5 body types + 20-fabric styled-render fidelity test)
+      (50 garments, 5 body types + 20-fabric styled-render fidelity test). The
+      styled-render pipeline now exists, so the fabric half of this is runnable
+      today — whether a rendered kurtha is good enough to sell from is still
+      unanswered
 - [ ] No garment editing (only add / remove / stock toggle); no slug customization
 
 ## Next work block (→ "I can put this in one shop")

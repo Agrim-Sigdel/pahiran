@@ -91,9 +91,10 @@ export default function PlanTab({ shop }: { shop: Shop }) {
             resets {resetLabel}
           </span>
         </div>
+        {/* One meter: every try-on runs the studio finish and spends from
+            tryon_limit — the retired studio allowance isn't shown. */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginTop: 4 }}>
           <Meter label="Try-ons this period" used={sub.tryonsUsed} limit={sub.plan.tryonLimit} />
-          <Meter label="Studio finishes" used={sub.studioUsed} limit={sub.plan.studioLimit} />
         </div>
         <div style={{ marginTop: 16 }}>
           <button className="ph-btn" disabled={!!busy} onClick={requestCredits}
@@ -126,7 +127,6 @@ export default function PlanTab({ shop }: { shop: Shop }) {
                 </div>
                 <ul style={{ listStyle: "none", padding: 0, margin: "4px 0 8px", fontSize: 13, color: "var(--mut)", lineHeight: 1.9 }}>
                   <li>{p.tryonLimit.toLocaleString("en-IN")} try-ons / month</li>
-                  <li>{p.studioLimit.toLocaleString("en-IN")} studio finishes</li>
                   <li>{p.maxGarments == null ? "Unlimited garments" : p.maxGarments + " garments"}</li>
                 </ul>
                 {canRequest ? (

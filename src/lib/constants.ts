@@ -12,6 +12,29 @@ export const CATEGORIES = [
 
 export const SIZES = ["XS", "S", "M", "L", "XL", "XXL", "Free size"] as const;
 
+/* Made-to-order families: what a bolt of cloth can be stitched into. This is
+   the axis that pairs a fabric with the cuts offered for it, and it's a
+   different question from CATEGORIES above (which describes a finished piece
+   already hanging on a rack). Keep in sync with the family check constraints
+   in 20260726000100_fabrics_styles.sql. */
+export const FAMILIES = [
+  { id: "suit",          label: "Suit" },
+  { id: "lehenga",       label: "Lehenga" },
+  { id: "kurtha",        label: "Kurtha" },
+  { id: "daura-suruwal", label: "Daura Suruwal" },
+  { id: "sari-blouse",   label: "Sari blouse" },
+  { id: "sherwani",      label: "Sherwani" },
+] as const;
+
+export const FABRIC_UNITS = [
+  { id: "meter", label: "per meter" },
+  { id: "piece", label: "per piece" },
+  { id: "set",   label: "per set" },
+] as const;
+
+export const familyLabel = (id: string): string =>
+  FAMILIES.find((f) => f.id === id)?.label ?? id;
+
 /* What a shop sells. Descriptive, and it decides the shop's try-on
    entitlement: the try-on model renders worn garments (tops / bottoms /
    one-pieces — see mapCategory above), so clothing is the only category that
@@ -48,6 +71,10 @@ export function mapCategory(cat: string): string {
 
 export const npr = (n: number | string | null | undefined): string =>
   "रू " + Number(n || 0).toLocaleString("en-IN");
+
+/** "रू 2,400 per meter" — a fabric's price is meaningless without its unit. */
+export const fabricPrice = (n: number, unit: string): string =>
+  npr(n) + " " + (FABRIC_UNITS.find((u) => u.id === unit)?.label ?? "per meter");
 
 /** wa.me deep link, or null if the number is too short to be real. */
 export function waLink(number: string, message: string): string | null {

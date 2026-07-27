@@ -1,6 +1,11 @@
-# Changes — traditional shopping, product pages, shopper accounts
+# Changes
 
-_Session summary. Companion to [STATUS.md](./STATUS.md) and [PRODUCT_PLAN.md](./PRODUCT_PLAN.md)._
+_A running log of session summaries, oldest first. Companion to
+[STATUS.md](./STATUS.md) and [PRODUCT_PLAN.md](./PRODUCT_PLAN.md)._
+
+---
+
+# Session — traditional shopping, product pages, shopper accounts
 
 This session added three things and fixed one:
 
@@ -178,3 +183,136 @@ Build (`npx next build`) and typecheck (`npx tsc --noEmit`) are clean.
   4. Sign in as an existing vendor while the intent toggle says "I'm shopping" → you still land `/dashboard` (role honoured, not downgraded).
 - **Decide on Google sign-in**: it's currently deferred (email/password only). If you want it back, re-add a `signInWithGoogle` helper in `src/lib/account.ts` and a "Continue with Google" button on `/signin` — the `/auth/callback` role handling is already in place.
 - **Optional**: if email confirmation is on in Supabase Auth, new email sign-ups must confirm before first sign-in. Turn it off for a frictionless flow, or leave it on.
+
+---
+
+# Session — made to order: fabrics, cuts and wearable renders
+
+_Architecture reference: [docs/made-to-order.md](./docs/made-to-order.md)._
+
+This session built the fabric → styled-render pipeline that PRODUCT_PLAN listed
+under Phase 2+, and took it through to the shopper.
+
+A tailoring shop sells cloth plus a promise: pick this fabric, have it stitched
+into that cut. Nobody has photographed the result. Vendors can now upload a
+fabric, pick the cuts they'd actually stitch it into, get a catalog-quality
+render of each, price it and publish it — and shoppers can try those renders on
+exactly like any photographed garment.
+
+Everything is **additive**. Shops that only sell finished garments see no change.
+
+## 1. The fabric studio (vendor)
+
+Open a cloth → pick cuts → stitch → review → price → publish.
+
+- **Cuts come from three places**: a seeded platform library, a photo of one the
+  shop has actually stitched, or the shop's own words. The database requires at
+  least one of words or photo (`styles_describable`) — a cut with neither tells
+  the render step nothing.
+- **A style photo contributes shape only.** The prompt takes silhouette and seams
+  from the reference and colour/fabric strictly from the cloth, or a navy sample
+  bleeds navy into every fabric it's used with.
+- **Publishing requires a price.** An unpriced render is a dead end, not a product.
+- **Renders are ghost-mannequin — no person, no face, no shaped torso.**
+  Load-bearing, not stylistic: the render becomes the *garment input* to try-on,
+  so any body baked into it gets dragged onto the shopper.
+
+## 2. Coverage — top / bottom / full set
+
+The seeded cuts already carried this idea in prose, inconsistently: *"Single
+blazer, no trousers"* was explicit, *"worn over matching churidar"* was a guess
+the image model got to make, and the A-line kurtha never mentioned a lower
+garment. Same shop, two kurthas, one churidar.
+
+`styles.coverage` is now a structured `'top' | 'bottom' | 'set'`, because it is
+read **twice** — the compose prompt turns it into an instruction, try-on turns it
+into a placement category. A note could only ever do the first; try-on can't read
+a sentence, and a suruwal sent up as `auto` gets hung on the torso.
+
+It lives on the **cut**, not the pairing: `(shop_id, fabric_id, style_id)` is
+unique, so per-composition coverage would collide — and "kurtha" vs "kurtha with
+churidar" really are two products at two prices.
+
+## 3. Notes per cloth-and-cut
+
+Three layers, each answering what the others can't: `fabrics.note` (this cloth),
+`styles.prompt_hint` (this cut), and new `compositions.note` (**this cloth in
+this cut**), injected most-specific-last.
+
+A note refines a cut; it cannot redefine which pieces exist — that's coverage,
+and the UI says so.
+
+## 4. Editable cuts, and renders that admit they're stale
+
+Your own cuts are editable. Library cuts aren't — they belong to every shop — so
+the pencil becomes a **copy** that opens prefilled and saves your own version.
+
+Editing a cut's wording, coverage or reference photo bumps `styles.revision` via
+**trigger** (not app code — there's more than one path to an update, and a
+forgotten bump is a silent lie). Renders from the old revision then show
+`CUT CHANGED`; a note edit shows `NOTE CHANGED`, because the fixes differ.
+Renaming or reordering deliberately does **not** bump.
+
+## 5. Shoppers can wear them
+
+A published fabric × cut appears in the kiosk rail beside photographed stock and
+goes through the same try-on, tagged `MADE TO ORDER`.
+
+`garment_id` is a foreign key to `garments` and a composition isn't a row there,
+so `tryon_events`, `leads`, `saved_looks` and `tryon_results` each gained a
+`composition_id`. That matters most for leads — one that can't say *which fabric
+and cut* is useless to a made-to-order shop.
+
+Try-on also gets placement from coverage, and a multi-piece **set** is forced
+onto the studio path: FASHN warps one garment onto a body, so a set sent down the
+quick path returns the kurtha and silently drops the churidar and dupatta. A
+model limit, not a wording problem.
+
+## Fixes found along the way
+
+- **`/api/tryon` had no `maxDuration`** while `/api/compose` had 300. Invisible
+  in dev; in production a slow studio call is killed mid-generation, *after* the
+  shopper waited and the credit was spent.
+- **Renders overwrote themselves.** `renders` is public and CDN-cached, and the
+  try-on cache keys on the garment URL — so a re-stitch kept serving the picture
+  it had just replaced. Each render now gets a fresh path; the old object is
+  deleted only after the row points at the new one.
+- **The loading bar froze.** It eased to 96% and stopped moving at ~97s, which
+  reads as a crash. Now 45s/99%, still visibly creeping at three minutes, and it
+  says so outright past 70s. The message carousel stops on its last line rather
+  than looping back to the first (which read as starting over).
+- **Errors were swallowed.** A missing column reported itself as "Unknown
+  fabric", sending debugging the wrong way. Query failures and absent rows are
+  now distinct.
+- **Looks are deletable from the viewer**, not just the grid — you decide you
+  don't want one *while looking at it*. Both paths now confirm; only delete-all
+  used to.
+- **UI cleanup**: hand-rolled `✎ ⧉ ✓` glyphs replaced with the existing `Icon`
+  set (the reason it exists — per-OS typefaces, screen readers reading them
+  literally); real `<label>` association in the cut form; the photo picker became
+  a keyboard-reachable `<button>`; the render grid moved to its own class that
+  goes single-column on phones, where two 122px columns couldn't hold a textarea.
+
+## What you need to do
+
+1. **Apply the six migrations to production.** Staging already has them, in order
+   `20260726000100` → `000600`. See
+   [docs/made-to-order.md](./docs/made-to-order.md#migrations).
+2. **Confirm `OPENAI_API_KEY` (or `OPEN_AI_API_KEY`) is set** in every
+   environment. Compose and the studio try-on finish both need it; compose
+   returns a clear 500 without it.
+3. **Judge render quality against real cloth.** This is the go/no-go the plan
+   calls for — the pipeline is built, but whether a rendered kurtha is good
+   enough to sell from is a question only your fabrics can answer.
+4. **Watch compose spend.** Free plans get 15 renders/month, pro 2000. Failed
+   renders refund automatically; re-stitching after an edit does not, because
+   it's a real generation.
+
+### Verified
+
+- `tsc --noEmit` and `next build` both clean.
+- All six migrations replayed against a throwaway Postgres: constraints reject
+  what they should, the `ON CONFLICT` upsert updates in place rather than
+  duplicating, the revision trigger fires on wording and coverage but not on
+  rename, and staleness clears on re-stitch.
+- **Not verified: render quality** — that's item 3 above.
