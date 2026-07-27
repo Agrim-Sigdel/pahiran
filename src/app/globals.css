@@ -377,10 +377,16 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .hero-dot[data-on] { background: #fff; transform: scale(1.25); }
 .hero-dot:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 
+/* These sit on a photograph, not on the page, so they take no theme tokens:
+   var(--ink) is near-white in dark mode, which put a white glyph on a white
+   pill and left the arrows invisible. Same dark scrim as .hero-bar instead —
+   it reads over a pale photo and a dark one, in either theme. */
 .hero-arrow {
   position: absolute; top: 50%; transform: translateY(-50%);
-  width: 32px; height: 32px; border-radius: 999px; border: none;
-  background: rgba(255,255,255,.86); color: var(--ink);
+  width: 32px; height: 32px; border-radius: 999px;
+  background: rgba(13,11,10,.55); color: #fff;
+  border: 1px solid rgba(255,255,255,.35);
+  backdrop-filter: blur(6px);
   font-size: 20px; line-height: 1; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   opacity: 0; transition: opacity .2s ease;

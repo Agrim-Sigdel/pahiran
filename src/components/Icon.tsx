@@ -15,7 +15,8 @@ export type IconName =
   | "bag" | "check" | "heart" | "heart-filled" | "close" | "print" | "ruler"
   | "phone" | "locate" | "reset" | "star" | "edit" | "bolt" | "sparkle"
   | "person" | "eye" | "dice" | "party" | "point-down" | "swap" | "scissors"
-  | "copy" | "open" | "camera" | "download" | "search";
+  | "copy" | "open" | "camera" | "download" | "search"
+  | "globe" | "share";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   bag: <><path d="M4 8h16l-1.2 11.2a2 2 0 0 1-2 1.8H7.2a2 2 0 0 1-2-1.8L4 8Z" /><path d="M8.5 8V6a3.5 3.5 0 0 1 7 0v2" /></>,
@@ -43,6 +44,10 @@ const PATHS: Record<IconName, React.ReactNode> = {
   open: <><path d="M13.5 4H20v6.5" /><path d="M20 4 10.5 13.5" /><path d="M18.5 13.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7.5a2 2 0 0 1 2-2h4.5" /></>,
   camera: <><path d="M3 8.8a2 2 0 0 1 2-2h2.3l1.2-2h6.6l1.2 2H19a2 2 0 0 1 2 2v8.4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="12.8" r="3.4" /></>,
   download: <><path d="M12 3.5v11" /><path d="m7 10 5 5 5-5" /><path d="M4.5 19.5h15" /></>,
+  /* language switcher — the label beside it names the language you'd switch
+     TO, written in that language, so the glyph only has to say "language" */
+  globe: <><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17" /><path d="M12 3.5c2.4 2.4 3.6 5.3 3.6 8.5s-1.2 6.1-3.6 8.5c-2.4-2.4-3.6-5.3-3.6-8.5S9.6 5.9 12 3.5Z" /></>,
+  share: <><path d="M12 15.5V3.5" /><path d="m7.5 8 4.5-4.5L16.5 8" /><path d="M5.5 13v5.5a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V13" /></>,
   search: <><circle cx="11" cy="11" r="6.5" /><path d="m15.8 15.8 4.7 4.7" /></>,
 };
 

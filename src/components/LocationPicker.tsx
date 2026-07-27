@@ -129,7 +129,7 @@ export default function LocationPicker({ lat, lng, onChange }: {
         style={{ height: 240, borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", overflow: "hidden", zIndex: 0, position: "relative" }} />
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <button type="button" className="ph-btn" onClick={useMyLocation}
-          style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--forest-deep)", padding: "8px 14px", fontSize: 11, letterSpacing: ".08em" }}>
+          style={{ border: "1px solid var(--line)", background: "var(--card)", color: "var(--forest-deep)", padding: "8px 14px", fontSize: 11, letterSpacing: ".08em" }}>
           <Icon name="locate" /> use my location
         </button>
         <span style={{ fontSize: 12, color: "var(--mut)", fontWeight: 400, letterSpacing: 0, textTransform: "none" }}>

@@ -156,7 +156,7 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
   const input = (invalid: boolean): React.CSSProperties => ({
     padding: "13px 14px", borderRadius: "var(--radius-btn)",
     border: "1px solid " + (invalid ? "var(--danger)" : "var(--line)"),
-    background: "#fff", color: "var(--ink)", fontSize: 15, width: "100%",
+    background: "var(--card)", color: "var(--ink)", fontSize: 15, width: "100%",
   });
 
   const fieldError: React.CSSProperties = {

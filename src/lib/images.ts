@@ -25,6 +25,40 @@ export function fileToCompressedDataURL(
   });
 }
 
+/* Fetch + decode an image before anything shows it.
+
+   A URL arriving is not the same thing as a picture arriving: a signed render
+   URL still has to be downloaded and decoded, which on a shop's wifi is a
+   visible beat. Anything that swaps a loading state for an <img> the moment it
+   has the URL will stop its own loading animation over a blank frame. Await
+   this first and the swap lands on a picture that is already paintable.
+
+   Never rejects — a decode failure should still let the caller try to render
+   it (and the timeout keeps a stalled fetch from freezing the UI forever). */
+export function preloadImage(src: string, timeoutMs = 20_000): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || !src) return resolve();
+    const img = new Image();
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    img.onload = () => {
+      // decode() moves the (expensive) decode off the frame that paints it
+      const d = img.decode?.();
+      if (d) d.then(finish, finish);
+      else finish();
+    };
+    img.onerror = finish;
+    img.decoding = "async";
+    img.src = src;
+  });
+}
+
 /* Blob → data URL. The inverse of dataURLToBlob, for pulling an image back out
    of Storage: /api/tryon only accepts data URLs, so anything fetched from a
    signed URL has to be inlined before it can be sent for a try-on. */

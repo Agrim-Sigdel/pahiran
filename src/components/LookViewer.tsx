@@ -53,11 +53,11 @@ export default function LookViewer({ look, src, onClose, onDelete, labels }: {
         <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
           <button className="ph-btn btn-violet" onClick={save} disabled={saving}
             style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "11px 24px", fontSize: 14, opacity: saving ? 0.6 : 1 }}>
-            <Icon name="point-down" /> {saving ? "…" : labels?.save || "save image"}
+            <Icon name="download" /> {saving ? "…" : labels?.save || "save image"}
           </button>
           <button className="ph-btn" onClick={(e) => { e.stopPropagation(); shareLook(look).catch(() => {}); }}
             style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "11px 24px", fontSize: 14, fontWeight: 600, color: "#fff", border: "1.5px solid rgba(255,255,255,.5)", borderRadius: 999 }}>
-            {labels?.share || "share"}
+            <Icon name="share" /> {labels?.share || "share"}
           </button>
         </div>
         {/* Deliberately below the other two and quieter than them: deleting is

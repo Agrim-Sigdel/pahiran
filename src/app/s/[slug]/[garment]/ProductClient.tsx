@@ -107,7 +107,7 @@ export default function ProductClient({
             style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--ink)", fontWeight: 600 }}>
             <Icon name="bag" /> bag
             {cart.count > 0 && (
-              <span style={{ background: "var(--violet)", color: "#fff", fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, borderRadius: 999, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
+              <span style={{ background: "var(--violet)", color: "var(--on-accent)", fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, borderRadius: 999, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
                 {cart.count}
               </span>
             )}
@@ -124,7 +124,10 @@ export default function ProductClient({
 
       {/* product */}
       <div style={{ maxWidth: 1040, margin: "0 auto", padding: "18px min(32px, 5vw) 10px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 32, alignItems: "start" }}>
-        <div style={{ position: "relative", aspectRatio: "3/4", background: "var(--sage-mist)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)" }}>
+        {/* Capped, not stretched. The grid cell is ~500px wide on a desktop
+            and 3:4 turns that into ~670px of height — taller than the fold,
+            so the buy panel beside it got pushed off screen. */}
+        <div style={{ position: "relative", aspectRatio: "3/4", width: "100%", maxWidth: 380, maxHeight: "min(64vh, 520px)", background: "var(--sage-mist)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)" }}>
           <img src={garment.image} alt={garment.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: garment.inStock ? "none" : "grayscale(.7)" }} />
           <HeartButton saved={wish.has(garment.id)} onClick={() => wish.toggle(garment.id)} />
           {!garment.inStock && (
@@ -155,8 +158,8 @@ export default function ProductClient({
         </section>
       )}
 
-      <footer style={{ background: "var(--ink)", color: "rgba(250,246,240,.45)", textAlign: "center", fontSize: 12.5, padding: "26px 16px" }}>
-        powered by <b className="wordmark" style={{ color: "var(--paper)", fontSize: 13 }}>p<span className="ee">ee</span>q</b> · a little look before you buy
+      <footer style={{ background: "var(--slab)", color: "var(--on-slab-quiet)", textAlign: "center", fontSize: 12.5, padding: "26px 16px" }}>
+        powered by <b className="wordmark" style={{ color: "var(--on-slab)", fontSize: 13 }}>p<span className="ee">ee</span>q</b> · a little look before you buy
         {" · "}
         <Link href="/privacy" style={{ color: "rgba(250,246,240,.55)", textUnderlineOffset: 3 }}>privacy</Link>
       </footer>
@@ -212,9 +215,9 @@ function BuyPanel({ garment, slug, shop, tryOn, onAdd }: {
                 {garment.sizes.map((s) => (
                   <button key={s} className="ph-btn" onClick={() => { setSize(s); setErr(false); }}
                     style={{
-                      minWidth: 50, padding: "11px 16px", fontSize: 14, fontWeight: 600, borderRadius: 12,
+                      minWidth: 44, padding: "9px 14px", fontSize: 13.5, fontWeight: 600, borderRadius: 11,
                       background: size === s ? "var(--violet)" : "var(--cream)",
-                      color: size === s ? "#fff" : "var(--ink)",
+                      color: size === s ? "var(--on-accent)" : "var(--ink)",
                       border: "1.5px solid " + (size === s ? "var(--violet)" : "var(--line)"),
                     }}>
                     {s}
@@ -227,34 +230,34 @@ function BuyPanel({ garment, slug, shop, tryOn, onAdd }: {
           <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 14 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "var(--stone)" }}>Quantity</span>
             <div style={{ display: "flex", alignItems: "center", border: "1px solid var(--line)", borderRadius: 999, overflow: "hidden", background: "var(--cream)" }}>
-              <button className="ph-btn" onClick={() => setQty((n) => Math.max(1, n - 1))} aria-label="Decrease quantity" style={{ width: 42, height: 42, fontSize: 19, color: "var(--ink)" }}>−</button>
+              <button className="ph-btn" onClick={() => setQty((n) => Math.max(1, n - 1))} aria-label="Decrease quantity" style={{ width: 36, height: 36, fontSize: 18, color: "var(--ink)" }}>−</button>
               <span style={{ minWidth: 30, textAlign: "center", fontWeight: 600 }}>{qty}</span>
-              <button className="ph-btn" onClick={() => setQty((n) => Math.min(20, n + 1))} aria-label="Increase quantity" style={{ width: 42, height: 42, fontSize: 19, color: "var(--ink)" }}>+</button>
+              <button className="ph-btn" onClick={() => setQty((n) => Math.min(20, n + 1))} aria-label="Increase quantity" style={{ width: 36, height: 36, fontSize: 18, color: "var(--ink)" }}>+</button>
             </div>
           </div>
         </>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 11, marginTop: 26, maxWidth: 420 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 24, maxWidth: 330 }}>
         {garment.inStock && (
-          <button className="ph-btn btn-violet" onClick={add} style={{ width: "100%" }}>
-            add to bag · {npr(garment.price * qty)}
+          <button className="ph-btn btn-violet" onClick={add} style={{ width: "100%", padding: "11px 20px", fontSize: 14.5 }}>
+            <Icon name="bag" /> add to bag · {npr(garment.price * qty)}
           </button>
         )}
         {garment.inStock && (
           <TryOnCta shop={shop} state={tryOn} href={`/k/${slug}?g=${encodeURIComponent(garment.id)}`}
-            className="btn-outline" style={{ width: "100%", textAlign: "center" }}>
+            className="btn-outline" style={{ width: "100%", textAlign: "center", padding: "9px 20px", fontSize: 14.5 }}>
             see it on you first
           </TryOnCta>
         )}
         {wa && (
-          <a href={wa} target="_blank" rel="noopener noreferrer" className="btn-wa" style={{ width: "100%" }}>
+          <a href={wa} target="_blank" rel="noopener noreferrer" className="btn-wa" style={{ width: "100%", padding: "11px 20px", fontSize: 14 }}>
             ask on WhatsApp
           </a>
         )}
       </div>
 
-      <p style={{ fontSize: 12.5, color: "var(--stone)", marginTop: 18, lineHeight: 1.6, maxWidth: 420 }}>
+      <p style={{ fontSize: 12, color: "var(--stone)", marginTop: 16, lineHeight: 1.6, maxWidth: 330 }}>
         No online payment. Add pieces to your bag and the shop confirms price, payment and delivery with you directly.
       </p>
     </div>

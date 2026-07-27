@@ -20,10 +20,16 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#FAF6F0",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FAF6F0" },
+    { media: "(prefers-color-scheme: dark)", color: "#141210" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  /* Light or dark comes straight from the device — there is no in-app switch,
+     so no script, no stored preference and nothing to hydrate around. The
+     whole theme is the prefers-color-scheme block in globals.css. */
   return (
     <html lang="en">
       <body>{children}</body>

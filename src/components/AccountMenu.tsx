@@ -47,7 +47,7 @@ export default function AccountMenu() {
         aria-expanded={open}
         aria-label="Your account"
         style={{
-          width: 34, height: 34, borderRadius: 999, background: "var(--violet)", color: "#fff",
+          width: 34, height: 34, borderRadius: 999, background: "var(--violet)", color: "var(--on-accent)",
           fontWeight: 700, fontSize: 15, display: "inline-flex", alignItems: "center", justifyContent: "center",
         }}
       >

@@ -192,12 +192,12 @@ export default async function Home() {
             </h2>
             <a href={shops.length > 0 ? "#shops" : "#how"} className="btn-violet" style={{ padding: "13px 34px" }}>browse shops</a>
           </div>
-          <div style={{ background: "var(--ink)", borderRadius: "var(--radius-card)", padding: "34px 30px", textAlign: "center" }}>
+          <div style={{ background: "var(--slab)", color: "var(--on-slab)", borderRadius: "var(--radius-card)", padding: "34px 30px", textAlign: "center" }}>
             <div className="kicker" style={{ marginBottom: 10, color: "var(--butter)" }}>own a store?</div>
-            <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(22px, 3vw, 28px)", color: "var(--paper)", margin: "0 0 18px" }}>
-              put <span className="wordmark" style={{ color: "var(--paper)", fontSize: "inherit" }}>p<span className="ee">ee</span>q</span> in your shop
+            <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(22px, 3vw, 28px)", color: "var(--on-slab)", margin: "0 0 18px" }}>
+              put <span className="wordmark" style={{ color: "var(--on-slab)", fontSize: "inherit" }}>p<span className="ee">ee</span>q</span> in your shop
             </h2>
-            <Link href="/owner" className="ph-btn" style={{ background: "var(--butter)", color: "var(--ink)", padding: "13px 34px", fontSize: 16, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999, textDecoration: "none", display: "inline-block" }}>
+            <Link href="/owner" className="ph-btn" style={{ background: "var(--butter)", color: "var(--on-light)", padding: "13px 34px", fontSize: 16, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999, textDecoration: "none", display: "inline-block" }}>
               peeq for store owners →
             </Link>
           </div>
@@ -212,7 +212,7 @@ export default async function Home() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, maxWidth: 1040, margin: "0 auto" }}>
           {STEPS.map(([n, t, d]) => (
             <div key={n} style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "22px 20px" }}>
-              <div className="ee-mark" style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--butter)", fontSize: 17, color: "var(--ink)" }}>{n}</div>
+              <div className="ee-mark" style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--butter)", fontSize: 17, color: "var(--on-light)" }}>{n}</div>
               <div className="ph-display" style={{ fontSize: 18, fontWeight: 600, color: "var(--ink)", margin: "12px 0 4px" }}>{t}</div>
               <div style={{ fontSize: 14.5, color: "var(--stone)", lineHeight: 1.6 }}>{d}</div>
             </div>
@@ -221,8 +221,8 @@ export default async function Home() {
       </section>
 
       {/* footer */}
-      <footer style={{ background: "var(--ink)", color: "rgba(250,246,240,.6)", padding: "30px 20px", textAlign: "center" }}>
-        <div className="wordmark" style={{ fontSize: 26, color: "var(--paper)" }}>p<span className="ee">ee</span>q</div>
+      <footer style={{ background: "var(--slab)", color: "var(--on-slab-quiet)", padding: "30px 20px", textAlign: "center" }}>
+        <div className="wordmark" style={{ fontSize: 26, color: "var(--on-slab)" }}>p<span className="ee">ee</span>q</div>
         <div style={{ marginTop: 12 }}>
           <Link href="/privacy" style={{ fontSize: 13, color: "rgba(250,246,240,.6)", textUnderlineOffset: 3 }}>privacy</Link>
         </div>

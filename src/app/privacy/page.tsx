@@ -127,8 +127,8 @@ export default function PrivacyPage() {
         ))}
       </article>
 
-      <footer style={{ background: "var(--ink)", color: "rgba(250,246,240,.6)", padding: "26px 20px", textAlign: "center" }}>
-        <div className="wordmark" style={{ fontSize: 22, color: "var(--paper)" }}>p<span className="ee">ee</span>q</div>
+      <footer style={{ background: "var(--slab)", color: "var(--on-slab-quiet)", padding: "26px 20px", textAlign: "center" }}>
+        <div className="wordmark" style={{ fontSize: 22, color: "var(--on-slab)" }}>p<span className="ee">ee</span>q</div>
       </footer>
     </main>
   );

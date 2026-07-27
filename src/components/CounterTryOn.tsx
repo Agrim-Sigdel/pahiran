@@ -556,7 +556,7 @@ function CutPickerModal({ cuts, familyName, selectedId, onPick, onClose }: {
           </span>
           <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus
             placeholder="Search cuts…" aria-label="Search cuts"
-            style={{ width: "100%", padding: "11px 12px 11px 36px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "#fff", fontSize: 13.5, boxSizing: "border-box" }} />
+            style={{ width: "100%", padding: "11px 12px 11px 36px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13.5, boxSizing: "border-box" }} />
         </div>
 
         <div style={{ overflowY: "auto", minHeight: 0 }}>
@@ -656,7 +656,7 @@ function FabricPickerModal({ fabrics, selectedId, onPick, onClose }: {
           </span>
           <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus
             placeholder="Search by name, code, colour…" aria-label="Search fabrics"
-            style={{ width: "100%", padding: "11px 12px 11px 36px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "#fff", fontSize: 13.5, boxSizing: "border-box" }} />
+            style={{ width: "100%", padding: "11px 12px 11px 36px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13.5, boxSizing: "border-box" }} />
         </div>
 
         <div style={{ overflowY: "auto", minHeight: 0 }}>
@@ -713,7 +713,7 @@ function FabricPickerModal({ fabrics, selectedId, onPick, onClose }: {
 
 const selectStyle: React.CSSProperties = {
   padding: "12px 15px", borderRadius: 14, border: "1px solid var(--line)",
-  fontSize: 15, background: "#fff", color: "var(--ink)", fontWeight: 400,
+  fontSize: 15, background: "var(--card)", color: "var(--ink)", fontWeight: 400,
   letterSpacing: 0, textTransform: "none", width: "100%",
 };
 
@@ -887,7 +887,7 @@ function Result({ run, input, onKeep, onAddGarment, onStartOver }: {
         <div style={{ position: "relative" }}>
           <img src={run.tryonUrl} alt="The customer wearing the stitched piece"
             style={{ width: "100%", borderRadius: 8, display: "block", background: "var(--sage-mist)" }} />
-          <span style={{ position: "absolute", top: 10, left: 10, background: "rgba(26,23,20,.78)", color: "var(--cream)", fontSize: 9.5, fontWeight: 500, letterSpacing: ".09em", padding: "4px 9px", borderRadius: 2 }}>
+          <span style={{ position: "absolute", top: 10, left: 10, background: "rgba(26,23,20,.78)", color: "var(--on-slab)", fontSize: 9.5, fontWeight: 500, letterSpacing: ".09em", padding: "4px 9px", borderRadius: 2 }}>
             STYLE PREVIEW
           </span>
         </div>

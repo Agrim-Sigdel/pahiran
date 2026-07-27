@@ -120,15 +120,15 @@ export default function OwnerPage() {
 
       {/* custom solution / demo call */}
       <section style={{ maxWidth: 1040, margin: "0 auto", padding: "0 20px 40px" }}>
-        <div style={{ background: "var(--ink)", borderRadius: "var(--radius-card)", padding: "38px 30px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8 }}>
-          <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(20px, 2.8vw, 26px)", color: "var(--paper)", margin: 0, maxWidth: 560 }}>
+        <div style={{ background: "var(--slab)", color: "var(--on-slab)", borderRadius: "var(--radius-card)", padding: "38px 30px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8 }}>
+          <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(20px, 2.8vw, 26px)", color: "var(--on-slab)", margin: 0, maxWidth: 560 }}>
             need a custom solution or integration for your business?
           </h2>
           <p style={{ color: "rgba(250,246,240,.65)", fontSize: 14.5, margin: 0 }}>
             schedule a free demo call with us. 15 minutes, no strings.
           </p>
           <a href="https://cal.com/contractorops/15min" target="_blank" rel="noopener noreferrer" className="ph-btn"
-            style={{ background: "var(--butter)", color: "var(--ink)", padding: "13px 32px", fontSize: 15, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999, textDecoration: "none", display: "inline-block", marginTop: 12 }}>
+            style={{ background: "var(--butter)", color: "var(--on-light)", padding: "13px 32px", fontSize: 15, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999, textDecoration: "none", display: "inline-block", marginTop: 12 }}>
             book a free demo call →
           </a>
         </div>
@@ -148,7 +148,7 @@ export default function OwnerPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 14, maxWidth: 1040, margin: "0 auto" }}>
           {VENDOR_STEPS.map(([t, d], i) => (
             <div key={t} style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "20px 18px" }}>
-              <div className="ee-mark" style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--butter)", fontSize: 16, color: "var(--ink)" }}>{i + 1}</div>
+              <div className="ee-mark" style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--butter)", fontSize: 16, color: "var(--on-light)" }}>{i + 1}</div>
               <div className="ph-display" style={{ fontSize: 17, fontWeight: 600, color: "var(--ink)", margin: "11px 0 3px" }}>{t}</div>
               <div style={{ fontSize: 14, color: "var(--stone)", lineHeight: 1.6 }}>{d}</div>
             </div>
@@ -168,8 +168,8 @@ export default function OwnerPage() {
       </section>
 
       {/* footer */}
-      <footer style={{ background: "var(--ink)", color: "rgba(250,246,240,.6)", padding: "30px 20px", textAlign: "center" }}>
-        <div className="wordmark" style={{ fontSize: 26, color: "var(--paper)" }}>p<span className="ee">ee</span>q</div>
+      <footer style={{ background: "var(--slab)", color: "var(--on-slab-quiet)", padding: "30px 20px", textAlign: "center" }}>
+        <div className="wordmark" style={{ fontSize: 26, color: "var(--on-slab)" }}>p<span className="ee">ee</span>q</div>
       </footer>
     </main>
   );

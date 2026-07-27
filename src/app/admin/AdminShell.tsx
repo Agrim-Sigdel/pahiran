@@ -189,7 +189,7 @@ export function Field(props: React.InputHTMLAttributes<HTMLInputElement>) {
         borderRadius: "var(--radius-btn)",
         border: "1px solid var(--line)",
         fontSize: 13,
-        background: "#fff",
+        background: "var(--card)",
         ...props.style,
       }}
     />

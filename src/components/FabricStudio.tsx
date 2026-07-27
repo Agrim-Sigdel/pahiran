@@ -361,7 +361,7 @@ export function StitchingOverlay({
 
   return (
     <div onClick={(e) => e.stopPropagation()}
-      style={{ position: "fixed", inset: 0, zIndex: 58, background: "var(--forest-deep)", overflow: "hidden" }}>
+      style={{ position: "fixed", inset: 0, zIndex: 58, background: "#151210", overflow: "hidden" }}>
 
       {/* the cloth itself, dimmed — the thing being worked on, not decoration */}
       <img src={image} alt="" aria-hidden
@@ -389,7 +389,7 @@ export function StitchingOverlay({
             {messages[msg % messages.length]}
           </div>
           <div style={{ width: "min(72vw, 300px)", height: 5, borderRadius: 5, background: "rgba(255,255,255,.2)", overflow: "hidden" }}>
-            <div style={{ height: "100%", width: progress + "%", borderRadius: 5, background: "var(--cream)", transition: "width .3s linear" }} />
+            <div style={{ height: "100%", width: progress + "%", borderRadius: 5, background: "#fff", transition: "width .3s linear" }} />
           </div>
           <div style={{ color: "rgba(255,255,255,.55)", fontSize: 11.5, lineHeight: 1.5, maxWidth: 320, padding: "0 8px" }}>
             {progress}% · {slow ? STITCH_SLOW : footer}
@@ -436,14 +436,14 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
           <div style={{ color: "var(--mut)", fontSize: 12 }}>stitching…</div>
         )}
         {c.status === "ready" && (
-          <span style={{ position: "absolute", top: 10, left: 10, background: "rgba(26,23,20,.78)", color: "var(--cream)", fontSize: 9.5, fontWeight: 500, letterSpacing: ".09em", padding: "4px 9px", borderRadius: 2 }}>
+          <span style={{ position: "absolute", top: 10, left: 10, background: "rgba(26,23,20,.78)", color: "var(--on-slab)", fontSize: 9.5, fontWeight: 500, letterSpacing: ".09em", padding: "4px 9px", borderRadius: 2 }}>
             STYLE PREVIEW
           </span>
         )}
         {/* The note moved on from what made this picture. Said on the image
             itself, because that image is now the thing that's wrong. */}
         {stale && (
-          <span style={{ position: "absolute", top: 10, right: 10, background: "var(--warn)", color: "#fff", fontSize: 9.5, fontWeight: 600, letterSpacing: ".08em", padding: "4px 9px", borderRadius: 2 }}>
+          <span style={{ position: "absolute", top: 10, right: 10, background: "var(--warn)", color: "var(--on-accent)", fontSize: 9.5, fontWeight: 600, letterSpacing: ".08em", padding: "4px 9px", borderRadius: 2 }}>
             {why === "cut" ? "CUT CHANGED" : "NOTE CHANGED"}
           </span>
         )}
@@ -456,7 +456,7 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
               value={price} inputMode="numeric" placeholder="Price (NPR)"
               onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))}
               onBlur={() => onPrice(c.id, Number(price || 0))}
-              style={{ width: "100%", padding: "8px 10px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 13, background: "#fff", marginBottom: 8 }}
+              style={{ width: "100%", padding: "8px 10px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 13, background: "var(--card)", marginBottom: 8 }}
             />
             {/* Refines the cut for this cloth only. It cannot add or remove a
                 piece — that's the cut's own top/bottom/set, and try-on reads
@@ -465,7 +465,7 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
               value={note} maxLength={300} placeholder="Note for this cloth in this cut (optional)"
               onChange={(e) => setNote(e.target.value)}
               onBlur={() => { if (note.trim() !== c.note.trim()) onNote(c.id, note.trim()); }}
-              style={{ width: "100%", padding: "7px 9px", borderRadius: "var(--radius-btn)", border: "1px solid " + (stale ? "var(--warn)" : "var(--line)"), fontSize: 12, background: "#fff", marginBottom: 8, minHeight: 46, resize: "vertical", fontFamily: "inherit" }}
+              style={{ width: "100%", padding: "7px 9px", borderRadius: "var(--radius-btn)", border: "1px solid " + (stale ? "var(--warn)" : "var(--line)"), fontSize: 12, background: "var(--card)", marginBottom: 8, minHeight: 46, resize: "vertical", fontFamily: "inherit" }}
             />
             {stale && (
               <div style={{ marginBottom: 8 }}>
@@ -616,7 +616,7 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
         {pickFamily && mode === "new" && (
           <label className="field" style={{ marginBottom: 14 }}>Which family is this cut for?
             <select value={fam} onChange={(e) => setFam(e.target.value as StyleFamily)}
-              style={{ width: "100%", padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "#fff", fontSize: 13.5 }}>
+              style={{ width: "100%", padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13.5 }}>
               {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
             </select>
           </label>

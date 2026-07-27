@@ -347,7 +347,7 @@ export default function DashboardPage() {
       runCounter={runCounter} keepCounterRun={keepCounterRun}
       counterEnabled={isSupabaseConfigured()}
       events={events} leads={leads} onLeadHandled={handleLead}
-      launchKiosk={() => router.push(shop.slug ? "/k/" + shop.slug : "/kiosk")}
+      launchKiosk={(v2) => router.push((shop.slug ? "/k/" + shop.slug : "/kiosk") + (v2 ? "?v=2" : ""))}
       signOut={signOut}
     />
   );
