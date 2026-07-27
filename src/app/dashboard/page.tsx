@@ -19,6 +19,7 @@ import {
   runCounter as runCounterOnServer, saveCounterRun,
 } from "@/lib/storage";
 import { reportError } from "@/lib/logging";
+import { toastErr, toastWarn, toastFailure } from "@/lib/toast";
 import { getRole, markVendor } from "@/lib/account";
 import type { Composition, CounterInput, CounterRun, Fabric, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
 
@@ -80,15 +81,17 @@ export default function DashboardPage() {
          arrive as raw Postgres exception text. Translate them — the vendor
          should never see 'shop_not_approved' spelled that way. */
       if (msg.includes("shop_not_approved")) {
-        alert("Your shop is still awaiting approval, so the catalog is locked for now. We'll call you once you're approved.");
+        toastWarn("Your shop is still awaiting approval, so the catalog is locked for now. We'll call you once you're approved.");
         return;
       }
       if (msg.includes("garment_limit_reached")) {
-        alert("You've reached your plan's garment limit. Upgrade in the Plan tab to add more.");
+        toastWarn("You've reached your plan's garment limit.", {
+          action: { label: "see plans", onClick: () => router.push("/dashboard?tab=plan") },
+        });
         return;
       }
       reportError("dashboard", "add garment failed: " + msg, { shopId: shop.id });
-      alert("Could not save garment: " + (e?.message || "image may be too large — try a smaller photo."));
+      toastErr("Could not save garment: " + (e?.message || "the image may be too large — try a smaller photo."));
     }
   };
 
@@ -100,7 +103,7 @@ export default function DashboardPage() {
       setCatalog((c) => c.map((g) => (g.id === saved.id ? saved : g)));
     } catch (e: any) {
       reportError("dashboard", "edit garment failed: " + (e?.message || e), { shopId: shop.id });
-      alert("Could not save changes: " + (e?.message || "please try again."));
+      toastErr("Could not save changes: " + (e?.message || "please try again."));
     }
   };
 
@@ -114,15 +117,17 @@ export default function DashboardPage() {
     } catch (e: any) {
       const msg = String(e?.message || e);
       if (msg.includes("shop_not_approved")) {
-        alert("Your shop is still awaiting approval, so the catalog is locked for now. We'll call you once you're approved.");
+        toastWarn("Your shop is still awaiting approval, so the catalog is locked for now. We'll call you once you're approved.");
         return;
       }
       if (msg.includes("fabric_limit_reached") || msg.includes("garment_limit_reached")) {
-        alert("You've reached your plan's catalog limit — garments and fabrics share it. Upgrade in the Plan tab to add more.");
+        toastWarn("You've reached your plan's catalog limit — garments and fabrics share it.", {
+          action: { label: "see plans", onClick: () => router.push("/dashboard?tab=plan") },
+        });
         return;
       }
       reportError("dashboard", "add fabric failed: " + msg, { shopId: shop.id });
-      alert("Could not save fabric: " + (e?.message || "image may be too large — try a smaller photo."));
+      toastErr("Could not save fabric: " + (e?.message || "the image may be too large — try a smaller photo."));
     }
   };
 
@@ -134,16 +139,28 @@ export default function DashboardPage() {
       setFabrics((c) => c.map((f) => (f.id === saved.id ? saved : f)));
     } catch (e: any) {
       reportError("dashboard", "edit fabric failed: " + (e?.message || e), { shopId: shop.id });
-      alert("Could not save changes: " + (e?.message || "please try again."));
+      toastErr("Could not save changes: " + (e?.message || "please try again."));
     }
   };
 
+  /* ── optimistic writes ───────────────────────────────────────────────
+     Every handler below moves the UI first and the database second, which is
+     right — a stock toggle should not wait on a round trip. What was wrong was
+     the `catch {}`: on a dropped connection the vendor watched "Out of stock"
+     apply, it silently did not, and the storefront went on selling a piece
+     the shop no longer had. Each one now puts the row back the way it was and
+     says so, with the action offered again. */
   const removeFabric = async (id: string) => {
     const fabric = fabrics.find((f) => f.id === id);
     if (!fabric) return;
     const next = fabrics.filter((f) => f.id !== id);
     setFabrics(next);
-    try { await unpersistFabric(fabric, next.map((x) => x.id)); } catch {}
+    try {
+      await unpersistFabric(fabric, next.map((x) => x.id));
+    } catch (e) {
+      setFabrics(fabrics); // it is still there — show it
+      toastFailure("Could not delete “" + fabric.name + "”", e);
+    }
   };
 
   const toggleFabricStock = async (id: string) => {
@@ -151,7 +168,12 @@ export default function DashboardPage() {
     if (!fabric) return;
     const inStock = !fabric.inStock;
     setFabrics((c) => c.map((f) => (f.id === id ? { ...f, inStock } : f)));
-    try { await setFabricStock(fabric, inStock); } catch {}
+    try {
+      await setFabricStock(fabric, inStock);
+    } catch (e) {
+      setFabrics((c) => c.map((f) => (f.id === id ? { ...f, inStock: fabric.inStock } : f)));
+      toastFailure("Could not change stock for “" + fabric.name + "”", e);
+    }
   };
 
   /* Rendering is the one action here that spends real money, so it reloads the
@@ -173,7 +195,7 @@ export default function DashboardPage() {
       throw new Error("None of those came out. Try again, or check the fabric photo is clear.");
     }
     if (failed.length > 0) {
-      alert(failed.length + " of " + results.length + " didn't come out. Delete those and try again.");
+      toastWarn(failed.length + " of " + results.length + " didn't come out. Delete those and try again.");
     }
   };
 
@@ -200,12 +222,23 @@ export default function DashboardPage() {
 
   const publishComposition = async (id: string, published: boolean) => {
     setCompositions((cur) => cur.map((c) => (c.id === id ? { ...c, published } : c)));
-    try { await setCompositionPublished(id, published); } catch {}
+    try {
+      await setCompositionPublished(id, published);
+    } catch (e) {
+      setCompositions((cur) => cur.map((c) => (c.id === id ? { ...c, published: !published } : c)));
+      toastFailure(published ? "Could not publish that piece" : "Could not unpublish that piece", e);
+    }
   };
 
   const priceComposition = async (id: string, price: number) => {
+    const before = compositions.find((c) => c.id === id)?.price;
     setCompositions((cur) => cur.map((c) => (c.id === id ? { ...c, price } : c)));
-    try { await setCompositionPrice(id, price); } catch {}
+    try {
+      await setCompositionPrice(id, price);
+    } catch (e) {
+      if (before !== undefined) setCompositions((cur) => cur.map((c) => (c.id === id ? { ...c, price: before } : c)));
+      toastFailure("Could not save that price", e);
+    }
   };
 
   /* Only the note moves — rendered_note stays put, so the card reads stale
@@ -213,12 +246,25 @@ export default function DashboardPage() {
      leaves the vendor's text on screen, which is the harmless direction. */
   const noteComposition = async (id: string, note: string) => {
     setCompositions((cur) => cur.map((c) => (c.id === id ? { ...c, note } : c)));
-    try { await setCompositionNote(id, note); } catch {}
+    try {
+      await setCompositionNote(id, note);
+    } catch (e) {
+      /* Deliberately NOT rolled back: the vendor's own words are the one thing
+         it would be worse to delete than to leave unsaved. Say it didn't save
+         and let them press again. */
+      toastFailure("Could not save that note", e);
+    }
   };
 
   const removeComposition = async (id: string) => {
+    const before = compositions;
     setCompositions((cur) => cur.filter((c) => c.id !== id));
-    try { await unpersistComposition(id); } catch {}
+    try {
+      await unpersistComposition(id);
+    } catch (e) {
+      setCompositions(before);
+      toastFailure("Could not delete that piece", e);
+    }
   };
 
   /* The counter spends without writing anything, so unlike composeFabric there
@@ -268,7 +314,12 @@ export default function DashboardPage() {
     if (!garment) return;
     const next = catalog.filter((g) => g.id !== id);
     setCatalog(next);
-    try { await unpersistGarment(garment, next.map((x) => x.id)); } catch {}
+    try {
+      await unpersistGarment(garment, next.map((x) => x.id));
+    } catch (e) {
+      setCatalog(catalog);
+      toastFailure("Could not delete “" + garment.name + "”", e);
+    }
   };
 
   const toggleStock = async (id: string) => {
@@ -276,14 +327,21 @@ export default function DashboardPage() {
     if (!garment) return;
     const inStock = !garment.inStock;
     setCatalog((c) => c.map((g) => (g.id === id ? { ...g, inStock } : g)));
-    try { await setGarmentStock(garment, inStock); } catch {}
+    try {
+      await setGarmentStock(garment, inStock);
+    } catch (e) {
+      /* The one that matters most: a failed "out of stock" that looked like it
+         worked leaves the storefront taking orders for a piece that is gone. */
+      setCatalog((c) => c.map((g) => (g.id === id ? { ...g, inStock: garment.inStock } : g)));
+      toastFailure("“" + garment.name + "” is still marked " + (garment.inStock ? "in stock" : "out of stock"), e);
+    }
   };
 
   const updateShop = useCallback((s: Shop) => {
     setShop(s);
     saveShop(s).catch((e: any) => {
       reportError("dashboard", "save shop failed: " + (e?.message || e), { shopId: s.id });
-      alert("Could not save shop settings: " + (e?.message || "please try again."));
+      toastErr("Could not save shop settings: " + (e?.message || "please try again."));
     });
   }, []);
 
@@ -312,7 +370,12 @@ export default function DashboardPage() {
 
   const handleLead = async (id: string, handled: boolean) => {
     setLeads((ls) => ls.map((l) => (l.id === id ? { ...l, handled } : l)));
-    try { await setLeadHandled(id, handled); } catch {}
+    try {
+      await setLeadHandled(id, handled);
+    } catch (e) {
+      setLeads((ls) => ls.map((l) => (l.id === id ? { ...l, handled: !handled } : l)));
+      toastFailure("Could not mark that order " + (handled ? "done" : "open"), e);
+    }
   };
 
   const signOut = isSupabaseConfigured()
@@ -328,7 +391,9 @@ export default function DashboardPage() {
   }
 
   if (!loading && shop.status !== "approved") {
-    return <PendingReview shop={shop} signOut={signOut} />;
+    /* updateShop so a vendor whose review is stuck on a mistyped phone number
+       can fix it themselves instead of being unreachable and unapprovable */
+    return <PendingReview shop={shop} signOut={signOut} updateShop={updateShop} />;
   }
 
   return (
@@ -347,7 +412,7 @@ export default function DashboardPage() {
       runCounter={runCounter} keepCounterRun={keepCounterRun}
       counterEnabled={isSupabaseConfigured()}
       events={events} leads={leads} onLeadHandled={handleLead}
-      launchKiosk={(v2) => router.push((shop.slug ? "/k/" + shop.slug : "/kiosk") + (v2 ? "?v=2" : ""))}
+      launchKiosk={() => router.push(shop.slug ? "/k/" + shop.slug : "/kiosk")}
       signOut={signOut}
     />
   );

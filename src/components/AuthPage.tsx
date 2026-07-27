@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import Icon from "@/components/Icon";
 import {
-  signInWithEmail, signUpWithEmail,
+  signInWithEmail, signUpWithEmail, sendPasswordReset,
   ensureRole, getRole, roleHome,
 } from "@/lib/account";
 
@@ -54,15 +55,30 @@ const COPY: Record<"shopper" | "vendor", Copy> = {
 
 export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
   const router = useRouter();
+  const params = useSearchParams();
   const copy = COPY[intent];
 
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  /* Honour ?mode=signup. /owner's two "create your shop free" buttons — the
+     page's whole conversion path — sent acquisition traffic to /login, which
+     opened on a form headed "vendor sign in" asking a brand-new vendor for a
+     password they had never set. */
+  const [mode, setMode] = useState<"signin" | "signup">(
+    params.get("mode") === "signup" ? "signup" : "signin"
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(true);
+  /* Two channels, because they are two different things and were sharing one:
+     "you already have an account, sign in below" was rendered in role="alert"
+     and --danger, i.e. as a failure, for a message that is just information. */
   const [message, setMessage] = useState("");
+  const [notice, setNotice] = useState("");
+  const [resetting, setResetting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const emailId = useId();
+  const passwordId = useId();
 
   // remembered session → skip the form, route by the stored role
   useEffect(() => {
@@ -82,8 +98,8 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
   if (!isSupabaseConfigured()) {
     return (
       <Shell>
-        <h1 className="ph-display" style={{ fontSize: 26, color: "var(--forest-deep)", margin: "0 0 4px" }}>no sign-in needed</h1>
-        <p style={{ color: "var(--mut)", fontSize: 13, margin: "0 0 24px", lineHeight: 1.6 }}>{copy.localMode.blurb}</p>
+        <h1 className="ph-display" style={{ fontSize: 26, color: "var(--ink)", margin: "0 0 4px" }}>no sign-in needed</h1>
+        <p style={{ color: "var(--stone)", fontSize: 13, margin: "0 0 24px", lineHeight: 1.6 }}>{copy.localMode.blurb}</p>
         <button className="ph-btn btn-solid" style={{ width: "100%" }} onClick={() => router.push(copy.localMode.href)}>{copy.localMode.cta}</button>
       </Shell>
     );
@@ -127,7 +143,7 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
           // confirmations off: Supabase reports the duplicate directly
           if (/already registered|already exists/i.test(error.message)) {
             setMode("signin");
-            setMessage("An account with this email already exists — sign in below.");
+            setNotice("You already have an account with this email — sign in below.");
             return;
           }
           throw error;
@@ -136,10 +152,10 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
         // identities instead of an error (anti-enumeration behaviour)
         if (data.user && !data.session && data.user.identities?.length === 0) {
           setMode("signin");
-          setMessage("An account with this email already exists — sign in below.");
+          setNotice("You already have an account with this email — sign in below.");
           return;
         }
-        if (!data.session) { setMessage("Check your email to confirm your account, then sign in."); setMode("signin"); return; }
+        if (!data.session) { setNotice("Check your email to confirm your account, then sign in."); setMode("signin"); return; }
       } else {
         const { error } = await signInWithEmail(email.trim(), password);
         if (error) throw error;
@@ -147,10 +163,28 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
       const role = await ensureRole(intent);
       router.push(roleHome(role));
     } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : "Something went wrong — try again.");
+      /* Supabase's own strings were surfaced verbatim. "Invalid login
+         credentials" and "AuthApiError: …" are messages for a developer;
+         these are the two things that actually go wrong, said plainly. */
+      setMessage(friendlyAuthError(err, mode));
     } finally {
       setBusy(false);
     }
+  };
+
+  /* Always the same answer, sent or not: telling someone "no account with that
+     email" turns this box into a way to find out who has one. */
+  const forgotPassword = async () => {
+    const trimmed = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setFieldErrors((f) => ({ ...f, email: "Enter your email address first, then tap “forgot password”." }));
+      return;
+    }
+    setResetting(true);
+    setMessage("");
+    await sendPasswordReset(trimmed);
+    setResetting(false);
+    setNotice(`If an account exists for ${trimmed}, we've sent it a link to set a new password. Check your inbox and spam.`);
   };
 
   const input = (invalid: boolean): React.CSSProperties => ({
@@ -160,7 +194,10 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
   });
 
   const fieldError: React.CSSProperties = {
-    fontSize: 12.5, color: "var(--danger)", textAlign: "left", marginTop: -6,
+    fontSize: 12.5, color: "var(--danger)", textAlign: "left", marginTop: -6, fontWeight: 600,
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: 12.5, fontWeight: 600, color: "var(--ink)", textAlign: "left", marginBottom: 5, display: "block",
   };
 
   return (
@@ -172,32 +209,71 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
         {mode === "signin" ? copy.signinBlurb : copy.signupBlurb}
       </p>
 
+      {/* Real <label>s. Both fields were placeholder-only, so the instant you
+          typed an email the form was two unlabelled boxes — and the errors,
+          which had aria-invalid but no aria-describedby and no role, were
+          never announced at all. */}
       <form onSubmit={submit} noValidate style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <input style={input(!!fieldErrors.email)} type="email" maxLength={EMAIL_MAX} placeholder="you@email.com" value={email}
-          onChange={(e) => { setEmail(e.target.value); if (fieldErrors.email) setFieldErrors((f) => ({ ...f, email: undefined })); }}
-          autoComplete="email" aria-invalid={!!fieldErrors.email} />
-        {fieldErrors.email && <div style={fieldError}>{fieldErrors.email}</div>}
-        <input style={input(!!fieldErrors.password)} type="password" maxLength={PASSWORD_MAX} placeholder="Password (6+ characters)"
-          value={password}
-          onChange={(e) => { setPassword(e.target.value); if (fieldErrors.password) setFieldErrors((f) => ({ ...f, password: undefined })); }}
-          autoComplete={mode === "signin" ? "current-password" : "new-password"} aria-invalid={!!fieldErrors.password} />
-        {fieldErrors.password && <div style={fieldError}>{fieldErrors.password}</div>}
+        <div>
+          <label htmlFor={emailId} style={labelStyle}>Email</label>
+          <input id={emailId} style={input(!!fieldErrors.email)} type="email" maxLength={EMAIL_MAX}
+            placeholder="you@email.com" value={email} autoFocus
+            onChange={(e) => { setEmail(e.target.value); if (fieldErrors.email) setFieldErrors((f) => ({ ...f, email: undefined })); }}
+            autoComplete="email" aria-invalid={!!fieldErrors.email}
+            aria-describedby={fieldErrors.email ? emailId + "-err" : undefined} />
+          {fieldErrors.email && <div id={emailId + "-err"} role="alert" style={fieldError}>{fieldErrors.email}</div>}
+        </div>
+        <div>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+            <label htmlFor={passwordId} style={labelStyle}>Password</label>
+            {/* The way back in. There was none — anywhere in the codebase. */}
+            {mode === "signin" && (
+              <button type="button" className="ph-btn" onClick={forgotPassword} disabled={resetting}
+                style={{ fontSize: 12.5, fontWeight: 600, color: "var(--violet)", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}>
+                {resetting ? "sending…" : "forgot password?"}
+              </button>
+            )}
+          </div>
+          <div style={{ position: "relative" }}>
+            <input id={passwordId} style={{ ...input(!!fieldErrors.password), paddingRight: 46 }}
+              type={reveal ? "text" : "password"} maxLength={PASSWORD_MAX}
+              placeholder={mode === "signup" ? `at least ${PASSWORD_MIN} characters` : "your password"}
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); if (fieldErrors.password) setFieldErrors((f) => ({ ...f, password: undefined })); }}
+              autoComplete={mode === "signin" ? "current-password" : "new-password"} aria-invalid={!!fieldErrors.password}
+              aria-describedby={fieldErrors.password ? passwordId + "-err" : undefined} />
+            {/* Typing a password you can't see, on a phone keyboard, is how
+                people get locked out of an account they just created. */}
+            <button type="button" className="ph-btn" onClick={() => setReveal((v) => !v)}
+              aria-label={reveal ? "Hide password" : "Show password"} aria-pressed={reveal}
+              style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: 8, color: "var(--stone)", fontSize: 16 }}>
+              <Icon name="eye" />
+            </button>
+          </div>
+          {fieldErrors.password && <div id={passwordId + "-err"} role="alert" style={fieldError}>{fieldErrors.password}</div>}
+        </div>
         <button className="ph-btn btn-violet" disabled={busy} type="submit" style={{ width: "100%", opacity: busy ? 0.6 : 1 }}>
           {busy ? "one moment…" : mode === "signin" ? "sign in" : "sign up"}
         </button>
       </form>
-      {message && (
-        message.startsWith("Check your email") ? (
-          <div className="note-ok" style={{ marginTop: 14 }}>{message}</div>
-        ) : (
-          <div role="alert" style={{ marginTop: 14, fontSize: 13, color: "var(--danger)" }}>{message}</div>
-        )
-      )}
-      <button className="ph-btn" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); setFieldErrors({}); }}
+
+      {notice && <div className="note-ok" style={{ marginTop: 14 }}>{notice}</div>}
+      {message && <div role="alert" style={{ marginTop: 14, fontSize: 13, color: "var(--danger)", fontWeight: 600 }}>{message}</div>}
+
+      <button className="ph-btn" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); setNotice(""); setFieldErrors({}); }}
         style={{ color: "var(--stone)", fontSize: 13, marginTop: 18, textDecoration: "underline", textUnderlineOffset: 3 }}>
         {mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
       </button>
-      <div style={{ marginTop: 16, fontSize: 12.5, color: "var(--stone)" }}>
+
+      {/* Signing up is agreeing to something, so the terms of that agreement
+          have to be reachable from the form. Neither auth surface linked to
+          the privacy policy at all. */}
+      <p style={{ marginTop: 16, fontSize: 12, color: "var(--stone)", lineHeight: 1.6 }}>
+        {mode === "signup" ? "By creating an account you agree to how we handle your data — see our " : "How we handle your data: "}
+        <Link href="/privacy" style={{ color: "var(--violet)", fontWeight: 600 }}>privacy policy</Link>.
+      </p>
+
+      <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--stone)" }}>
         {copy.crossLink.question}{" "}
         <Link href={copy.crossLink.href} style={{ color: "var(--violet)", fontWeight: 600 }}>{copy.crossLink.label}</Link>
       </div>
@@ -205,9 +281,34 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
   );
 }
 
+/* Supabase's raw messages leaked straight to the form. These are the cases
+   that actually happen; anything else keeps a generic line rather than
+   showing a shopper an AuthApiError. */
+function friendlyAuthError(err: unknown, mode: "signin" | "signup"): string {
+  const raw = err instanceof Error ? err.message : "";
+  if (/invalid login credentials|invalid_grant/i.test(raw)) {
+    return "That email and password don't match. Check them, or use “forgot password”.";
+  }
+  if (/email not confirmed/i.test(raw)) {
+    return "Check your email and confirm your account first, then sign in.";
+  }
+  if (/rate limit|too many/i.test(raw)) {
+    return "Too many attempts — wait a minute and try again.";
+  }
+  if (/weak password|password should be/i.test(raw)) {
+    return "That password is too weak — try a longer one.";
+  }
+  if (/network|fetch/i.test(raw)) {
+    return "We couldn't reach the server — check your connection and try again.";
+  }
+  return mode === "signup"
+    ? "We couldn't create your account just now — please try again."
+    : "We couldn't sign you in just now — please try again.";
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--sage)" }}>
+    <main style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", background: "var(--paper)" }}>
       <nav className="efc-nav" style={{ background: "var(--paper)" }}>
         <div className="nav-links">
           <Link href="/">home</Link>
@@ -221,7 +322,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <Link href="/owner" style={{ color: "var(--violet)" }}>for store owners</Link>
         </div>
       </nav>
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div id="main" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div className="sheet" style={{ padding: "40px 36px", width: 400, maxWidth: "100%", textAlign: "center" }}>
           {children}
         </div>

@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useId, useRef } from "react";
 import Link from "next/link";
 import { npr, waLink, CHECKOUT } from "@/lib/constants";
 import { submitOrder } from "@/lib/storage";
-import { signInWithEmail, signUpWithEmail, ensureRole, saveContact } from "@/lib/account";
+import { signInWithEmail, signUpWithEmail, sendPasswordReset, ensureRole, saveContact } from "@/lib/account";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { nameError, phoneError, fieldErrorStyle } from "@/lib/validate";
 import { useCart, type CartLine } from "@/lib/cart";
 import GarmentImage from "@/components/GarmentImage";
 import TryOnCta, { type TryOnState } from "@/components/TryOnCta";
 import Icon from "@/components/Icon";
+import Dialog from "@/components/Dialog";
 import type { Garment, Shop } from "@/lib/types";
 
 /* Shared storefront building blocks — used by both the collection page
@@ -25,7 +26,7 @@ export function HeartButton({ saved, onClick }: { saved: boolean; onClick: () =>
   return (
     <button className="ph-btn" onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClick(); }}
       aria-label={saved ? "Remove from saved" : "Save for later"} aria-pressed={saved}
-      style={{ position: "absolute", top: 8, right: 8, width: 34, height: 34, borderRadius: 999, background: "rgba(255,255,255,.9)", color: saved ? "var(--violet)" : "var(--stone)", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(0,0,0,.12)" }}>
+      style={{ position: "absolute", top: 8, right: 8, width: 34, height: 34, borderRadius: "var(--radius-pill)", background: "rgba(255,255,255,.9)", color: saved ? "var(--violet)" : "var(--stone)", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(0,0,0,.12)" }}>
       <Icon name={saved ? "heart-filled" : "heart"} />
     </button>
   );
@@ -52,12 +53,20 @@ export function ShopCard({ g, slug, saved, onToggleSave, onAdd, priority = false
   };
 
   return (
-    <div className="fade-up" style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", overflow: "hidden", opacity: g.inStock ? 1 : 0.6, display: "flex", flexDirection: "column" }}>
-      <div style={{ position: "relative", aspectRatio: "3/4", background: "var(--sage-mist)" }}>
+    /* No card-wide opacity: dimming the whole tile to .6 pushed the name and
+       the price under the contrast floor, which is the information a shopper
+       needs in order to ask the shop about a sold-out piece. The photo greys,
+       the words stay readable. */
+    <div className="fade-up" style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div className="shop-tile">
         <Link href={href} style={{ position: "absolute", inset: 0, display: "block" }}>
-          <GarmentImage src={g.image} alt={g.name} grayscale={!g.inStock} priority={priority} />
+          {/* contain, not cover — see .shop-tile. The frame is fixed; the
+              piece is fitted into it whole rather than cropped to fill it. */}
+          <GarmentImage src={g.image} alt={g.name} objectFit="contain"
+            sizes="(max-width: 640px) 50vw, 210px"
+            grayscale={!g.inStock} priority={priority} />
           {!g.inStock && (
-            <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--ink)", color: "var(--paper)", fontSize: 11, fontWeight: 500, padding: "4px 12px", borderRadius: 999 }}>
+            <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--ink)", color: "var(--paper)", fontSize: 11.5, fontWeight: 600, padding: "4px 12px", borderRadius: "var(--radius-pill)" }}>
               out of stock
             </span>
           )}
@@ -71,29 +80,34 @@ export function ShopCard({ g, slug, saved, onToggleSave, onAdd, priority = false
           {g.inStock ? (
             needsSize ? (
               <Link href={href} className="ph-btn"
-                style={{ background: "var(--violet)", color: "var(--on-accent)", fontWeight: 700, fontFamily: "'Baloo 2', cursive", fontSize: 14, padding: "10px 0", borderRadius: 999, width: "100%", textAlign: "center", textDecoration: "none" }}>
+                style={{ background: "var(--violet)", color: "var(--on-accent)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif", fontSize: 14, padding: "10px 0", borderRadius: "var(--radius-pill)", width: "100%", textAlign: "center", textDecoration: "none" }}>
                 choose size
               </Link>
             ) : (
               <button className="ph-btn" onClick={quickAdd}
-                style={{ background: "var(--violet)", color: "var(--on-accent)", fontWeight: 700, fontFamily: "'Baloo 2', cursive", fontSize: 14, padding: "10px 0", borderRadius: 999, width: "100%" }}>
+                style={{ background: "var(--violet)", color: "var(--on-accent)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif", fontSize: 14, padding: "10px 0", borderRadius: "var(--radius-pill)", width: "100%" }}>
                 {added ? <><Icon name="check" /> added</> : <><Icon name="bag" /> add to bag</>}
               </button>
             )
           ) : (
-            <button className="ph-btn" disabled style={{ background: "var(--line)", color: "var(--stone)", fontWeight: 700, fontFamily: "'Baloo 2', cursive", fontSize: 14, padding: "10px 0", borderRadius: 999, width: "100%", cursor: "not-allowed" }}>
+            /* --stone on --line is a grey-on-grey pill. This says the same
+               thing as a plain disabled control without pretending to be a
+               button the shopper could have pressed. */
+            <div aria-disabled style={{ background: "var(--paper-deep)", color: "var(--stone)", border: "1px dashed var(--line-strong)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif", fontSize: 14, padding: "10px 0", borderRadius: "var(--radius-pill)", width: "100%", textAlign: "center" }}>
               sold out
-            </button>
+            </div>
           )}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          {/* "details" is gone: the card image, the title and (when a size is
+              needed) the CTA all already link to the same product page, so it
+              was a fourth link to a place the shopper could reach three other
+              ways — and it competed with the one link that goes somewhere
+              else. */}
+          <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center" }}>
             <TryOnCta shop={shop ?? { type: "apparel" }} state={tryOn ?? { enabled: true, left: 1 }}
               href={`/k/${slug}?g=${encodeURIComponent(g.id)}`}
               style={{ textDecoration: "underline", textUnderlineOffset: 4, fontSize: 12.5, fontWeight: 600, color: "var(--violet)" }}>
               see it on you →
             </TryOnCta>
-            <Link href={href} className="ph-btn" style={{ color: "var(--stone)", fontSize: 12, textDecoration: "none" }}>
-              details
-            </Link>
           </div>
         </div>
       </div>
@@ -129,6 +143,7 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
   const [sendError, setSendError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false); // opened the saved details for a change
   const nameRef = useRef<HTMLInputElement>(null);
+  const detailsFormId = useId();
 
   useEffect(() => { if (defaultName && !name) setName(defaultName); }, [defaultName]);
   useEffect(() => { if (defaultPhone && !phone) setPhone(defaultPhone); }, [defaultPhone]);
@@ -226,18 +241,29 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
     setStep("done");
   };
 
+  /* Anything typed into the details step is work a stray backdrop tap used to
+     throw away without asking — a name and a phone number, mid-checkout. */
+  const dirty = step === "details" && !confirmSaved && (name.trim() !== "" || phone.trim() !== "");
+
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", zIndex: 60, display: "flex", justifyContent: "flex-end" }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--raised)", width: 420, maxWidth: "100%", height: "100%", display: "flex", flexDirection: "column", borderLeft: "1px solid var(--line)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "16px 20px", borderBottom: "1px solid var(--line)" }}>
+    <Dialog variant="drawer" onClose={onClose} hideHeader dirty={dirty}
+      dirtyMessage="You've typed your details but haven't placed the order. Close the bag anyway?"
+      ariaLabel={step === "done" ? "Order sent" : step === "details" ? "Your details" : "Your bag"}
+      panelStyle={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "16px 20px", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
             {step === "details" && !sending && (
               <button className="ph-btn" onClick={() => setStep("cart")} aria-label="Back to bag"
                 style={{ fontSize: 18, color: "var(--stone)", padding: "2px 4px", lineHeight: 1 }}>←</button>
             )}
+            {/* "order sent" while the body explains WhatsApp is still waiting
+                for you to press send was two different claims on one screen.
+                The header now agrees with whichever thing actually happened. */}
             <span className="ph-display" style={{ fontSize: 20, fontWeight: 600, color: "var(--ink)" }}>
-              {step === "done" ? "order sent" : step === "details" ? "your details" : `your bag (${cart.count})`}
+              {step === "done"
+                ? (sentKind === "enquiry" ? "almost there" : "order sent")
+                : step === "details" ? "your details" : `your bag (${cart.count})`}
             </span>
           </div>
           <button className="ph-btn" onClick={onClose} aria-label="Close" style={{ fontSize: 18, color: "var(--stone)", padding: 6 }}><Icon name="close" /></button>
@@ -259,9 +285,11 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
         )}
 
         {step === "done" ? (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, textAlign: "center", padding: 28 }}>
-            <div style={{ color: "var(--stone)" }}><Icon name="bag" size={44} /></div>
-            <div className="ph-display" style={{ fontSize: 22, fontWeight: 600, color: "var(--ink)" }}>the shop has your order</div>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, textAlign: "center", padding: 28, overflowY: "auto" }}>
+            <div style={{ color: "var(--ok)" }}><Icon name="bag" size={44} /></div>
+            <div className="ph-display" style={{ fontSize: 22, fontWeight: 600, color: "var(--ink)" }}>
+              {sentKind === "enquiry" ? "one more tap in WhatsApp" : "the shop has your order"}
+            </div>
             <p style={{ color: "var(--stone)", fontSize: 14, lineHeight: 1.6, maxWidth: 300, margin: 0 }}>
               {sentKind === "enquiry"
                 ? "We opened WhatsApp with your order — send that message to start the chat. The shop has the order either way, and will confirm payment and delivery."
@@ -277,13 +305,17 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
                 see it in your orders
               </Link>
             )}
-            <button className="ph-btn btn-violet" onClick={onKeepShopping} style={{ marginTop: 4 }}>keep shopping</button>
+            <button className="ph-btn btn-violet" onClick={onKeepShopping} data-autofocus style={{ marginTop: 4 }}>keep shopping</button>
           </div>
         ) : cart.lines.length === 0 ? (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, textAlign: "center", padding: 28 }}>
-            <div style={{ opacity: 0.5, color: "var(--stone)" }}><Icon name="bag" size={40} /></div>
+            <div style={{ color: "var(--stone)" }}><Icon name="bag" size={40} /></div>
             <p style={{ color: "var(--stone)", fontSize: 14, margin: 0 }}>Your bag is empty.</p>
-            <button className="ph-btn btn-violet" onClick={onKeepShopping}>browse the collection</button>
+            {/* "browse the collection" from an empty bag closes the drawer and
+                leaves you wherever you were, which on the product page is not
+                the collection. onKeepShopping is the caller's job — it now
+                actually navigates there. */}
+            <button className="ph-btn btn-violet" onClick={onKeepShopping} data-autofocus>browse the collection</button>
           </div>
         ) : step === "cart" ? (
           <>
@@ -294,14 +326,14 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
                   onRemove={() => cart.remove(l.garmentId, l.size)} />
               ))}
             </div>
-            <div style={{ borderTop: "1px solid var(--line)", padding: "12px 20px 14px", background: "var(--card)" }}>
+            <div style={{ borderTop: "1px solid var(--line)", padding: "12px 20px 14px", background: "var(--card)", flexShrink: 0 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 11.5, color: "var(--stone)" }}>Total</div>
                   <div className="ph-display" style={{ fontSize: 19, fontWeight: 600, color: "var(--ink)", lineHeight: 1.2 }}>{npr(cart.total)}</div>
                 </div>
                 <button className="ph-btn" onClick={toDetails}
-                  style={{ background: "var(--violet)", color: "var(--on-accent)", fontWeight: 700, fontFamily: "'Baloo 2', cursive", fontSize: 14.5, padding: "9px 22px", borderRadius: 999, flexShrink: 0 }}>
+                  style={{ background: "var(--violet)", color: "var(--on-accent)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif", fontSize: 14.5, padding: "9px 22px", borderRadius: "var(--radius-pill)", flexShrink: 0 }}>
                   checkout →
                 </button>
               </div>
@@ -347,7 +379,7 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
               {confirmSaved ? (
                 <>
                   <div className="ph-display" style={{ fontSize: 16, fontWeight: 600, color: "var(--ink)", marginBottom: 8 }}>Confirm your details</div>
-                  <div style={{ border: "1px solid var(--violet)", borderRadius: 14, padding: "12px 14px", background: "var(--card)", display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <div style={{ border: "1px solid var(--violet)", borderRadius: "var(--radius-lg)", padding: "12px 14px", background: "var(--card)", display: "flex", alignItems: "flex-start", gap: 10 }}>
                     <span style={{ color: "var(--violet)", marginTop: 2 }}><Icon name="person" /></span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
@@ -355,7 +387,7 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
                       <div style={{ fontSize: 11.5, color: "var(--stone)", marginTop: 4 }}>from your peeq account · saved to your orders</div>
                     </div>
                     <button className="ph-btn" onClick={() => { setEditing(true); setTimeout(() => nameRef.current?.focus(), 30); }}
-                      style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--violet)", border: "1px solid var(--violet)", borderRadius: 999, padding: "6px 14px" }}>
+                      style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--violet)", border: "1px solid var(--violet)", borderRadius: "var(--radius-pill)", padding: "6px 14px" }}>
                       change
                     </button>
                   </div>
@@ -373,39 +405,46 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
                     )}
                   </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {/* A real <form> with a real submit button (down in the
+                      footer). It wasn't one: Enter in the phone field placed
+                      the order outright with no confirmation, Enter in the
+                      name field did nothing, and no browser autofill or
+                      password manager recognised it as a checkout. */}
+                  <form id={detailsFormId} onSubmit={(e) => { e.preventDefault(); send("order"); }} noValidate
+                    style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)" }}>Your name</span>
-                      <input ref={nameRef} value={name} maxLength={80} placeholder="e.g. Sunita Shrestha" autoComplete="name" aria-invalid={!!errors.name}
+                      <input ref={nameRef} value={name} maxLength={80} placeholder="e.g. Sunita Shrestha" autoComplete="name"
+                        aria-invalid={!!errors.name} aria-describedby={errors.name ? "co-name-err" : undefined}
                         onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((x) => ({ ...x, name: undefined })); }}
-                        style={{ padding: "12px 15px", borderRadius: 14, border: "1px solid " + (errors.name ? "var(--danger)" : "var(--line)"), background: "var(--card)", color: "var(--ink)", fontSize: 15 }} />
-                      {errors.name && <div style={fieldErrorStyle}>{errors.name}</div>}
+                        style={{ padding: "12px 15px", borderRadius: "var(--radius-field)", border: "1px solid " + (errors.name ? "var(--danger)" : "var(--line)"), background: "var(--card)", color: "var(--ink)", fontSize: 15 }} />
+                      {errors.name && <div id="co-name-err" style={fieldErrorStyle}>{errors.name}</div>}
                     </label>
                     <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)" }}>Phone number</span>
-                      <input value={phone} maxLength={30} inputMode="tel" placeholder="98XXXXXXXX" autoComplete="tel" aria-invalid={!!errors.phone}
+                      <input value={phone} maxLength={30} inputMode="tel" placeholder="98XXXXXXXX" autoComplete="tel"
+                        aria-invalid={!!errors.phone} aria-describedby={errors.phone ? "co-phone-err" : undefined}
                         onChange={(e) => { setPhone(e.target.value.replace(/[^0-9+ ]/g, "")); if (errors.phone) setErrors((x) => ({ ...x, phone: undefined })); }}
-                        onKeyDown={(e) => { if (e.key === "Enter") send("order"); }}
-                        style={{ padding: "12px 15px", borderRadius: 14, border: "1px solid " + (errors.phone ? "var(--danger)" : "var(--line)"), background: "var(--card)", color: "var(--ink)", fontSize: 15 }} />
-                      {errors.phone && <div style={fieldErrorStyle}>{errors.phone}</div>}
+                        style={{ padding: "12px 15px", borderRadius: "var(--radius-field)", border: "1px solid " + (errors.phone ? "var(--danger)" : "var(--line)"), background: "var(--card)", color: "var(--ink)", fontSize: 15 }} />
+                      {errors.phone && <div id="co-phone-err" style={fieldErrorStyle}>{errors.phone}</div>}
                     </label>
-                  </div>
+                  </form>
                 </>
               )}
 
             </div>
             <div style={{ borderTop: "1px solid var(--line)", padding: "12px 20px 14px", background: "var(--card)" }}>
               {sendError && (
-                <div style={{ ...fieldErrorStyle, textAlign: "center", marginBottom: 8 }}>{sendError}</div>
+                <div role="alert" style={{ ...fieldErrorStyle, textAlign: "center", marginBottom: 8, fontWeight: 600 }}>{sendError}</div>
               )}
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="ph-btn" disabled={!!sending} onClick={() => send("order")}
-                  style={{ flex: 1, background: "var(--violet)", color: "var(--on-accent)", fontWeight: 700, fontFamily: "'Baloo 2', cursive", fontSize: 14, padding: "10px 0", borderRadius: 999, opacity: sending ? 0.6 : 1 }}>
+                <button className="ph-btn" type="submit" form={detailsFormId} disabled={!!sending} onClick={() => send("order")}
+                  style={{ flex: 1, background: "var(--violet)", color: "var(--on-accent)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif", fontSize: 14, padding: "10px 0", borderRadius: "var(--radius-pill)", opacity: sending ? 0.6 : 1 }}>
                   {sending === "order" ? "sending…" : "place order"}
                 </button>
                 {canWa && (
                   <button className="ph-btn" disabled={!!sending} onClick={() => send("enquiry")}
-                    style={{ flex: 1, background: "transparent", color: "var(--whatsapp)", border: "1px solid var(--whatsapp)", fontWeight: 700, fontFamily: "'Baloo 2', cursive", fontSize: 14, padding: "10px 0", borderRadius: 999, opacity: sending ? 0.6 : 1 }}>
+                    style={{ flex: 1, background: "transparent", color: "var(--whatsapp)", border: "1px solid var(--whatsapp)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif", fontSize: 14, padding: "10px 0", borderRadius: "var(--radius-pill)", opacity: sending ? 0.6 : 1 }}>
                     {sending === "enquiry" ? "opening…" : "enquire on WhatsApp"}
                   </button>
                 )}
@@ -416,8 +455,8 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
             </div>
           </>
         )}
-      </div>
-    </div>
+      </>
+    </Dialog>
   );
 }
 
@@ -432,8 +471,17 @@ function CheckoutSignIn({ signedIn }: { signedIn: boolean }) {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  /* Two channels, like the full auth page: "you already have an account" is
+     information and rendered as such, not as an error in --danger — and
+     neither was rendered in --stone, which is where every message in this box
+     used to end up regardless of what it meant. */
   const [message, setMessage] = useState("");
+  const [notice, setNotice] = useState("");
+  const emailId = useId();
+  const pwId = useId();
 
   /* Local mode has no accounts at all, so offering one would be a dead end. */
   if (!isSupabaseConfigured()) return null;
@@ -464,9 +512,9 @@ function CheckoutSignIn({ signedIn }: { signedIn: boolean }) {
         const taken = error
           ? /already registered|already exists/i.test(error.message)
           : !!data.user && !data.session && data.user.identities?.length === 0;
-        if (taken) { setMode("signin"); setMessage("You already have an account — sign in."); return; }
+        if (taken) { setMode("signin"); setNotice("You already have an account — sign in."); return; }
         if (error) throw error;
-        if (!data.session) { setMode("signin"); setMessage("Check your email to confirm, then sign in."); return; }
+        if (!data.session) { setMode("signin"); setNotice("Check your email to confirm, then sign in."); return; }
       } else {
         const { error } = await signInWithEmail(trimmed, password);
         if (error) throw error;
@@ -476,48 +524,95 @@ function CheckoutSignIn({ signedIn }: { signedIn: boolean }) {
       await ensureRole("shopper");
       setOpen(false);
     } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : "Could not sign in — please try again.");
+      const raw = err instanceof Error ? err.message : "";
+      setMessage(
+        /invalid login credentials|invalid_grant/i.test(raw)
+          ? "That email and password don't match."
+          : /rate limit|too many/i.test(raw)
+          ? "Too many attempts — wait a minute and try again."
+          : "Could not sign in just now — please try again."
+      );
     } finally {
       setBusy(false);
     }
   };
 
-  const field: React.CSSProperties = {
-    padding: "9px 12px", borderRadius: 12, border: "1px solid var(--line)",
-    background: "var(--card)", color: "var(--ink)", fontSize: 14, width: "100%",
+  const forgot = async () => {
+    const trimmed = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) { setMessage("Enter your email above first."); return; }
+    setResetting(true);
+    setMessage("");
+    await sendPasswordReset(trimmed);
+    setResetting(false);
+    setNotice("If an account exists for that email, we've sent it a link to set a new password.");
   };
 
+  const field: React.CSSProperties = {
+    padding: "9px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--line)",
+    background: "var(--card)", color: "var(--ink)", fontSize: 14, width: "100%",
+  };
+  const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "var(--ink)", display: "block", marginBottom: 4 };
+
   return (
-    <div style={{ border: "1px solid var(--line)", borderRadius: 14, padding: "10px 12px", background: "var(--cream)" }}>
+    <div style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: "10px 12px", background: "var(--card)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
         <div style={{ fontSize: 12.5, color: "var(--stone)", lineHeight: 1.4 }}>
           <b style={{ color: "var(--ink)" }}>Save this order to your account</b><br />
           Keep your order history and skip typing next time.
         </div>
-        <button className="ph-btn" onClick={() => setOpen((v) => !v)}
-          style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--violet)", border: "1px solid var(--violet)", borderRadius: 999, padding: "6px 14px" }}>
-          {open ? "not now" : "sign in"}
+        {/* "not when expanded" said "not now", which reads as dismissing the
+            offer — it only collapses the panel. It says what it does. */}
+        <button className="ph-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+          style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--violet)", border: "1px solid var(--violet)", borderRadius: "var(--radius-pill)", padding: "6px 14px" }}>
+          {open ? "hide" : "sign in"}
         </button>
       </div>
 
       {open && (
         <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-          <input style={field} type="email" value={email} maxLength={120} placeholder="Email" autoComplete="email"
-            onChange={(e) => setEmail(e.target.value)} />
-          <input style={field} type="password" value={password} maxLength={72} placeholder="Password"
-            autoComplete={mode === "signin" ? "current-password" : "new-password"}
-            onChange={(e) => setPassword(e.target.value)} />
-          {message && <div style={{ ...fieldErrorStyle, color: "var(--stone)" }}>{message}</div>}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div>
+            <label htmlFor={emailId} style={label}>Email</label>
+            <input id={emailId} style={field} type="email" value={email} maxLength={120} placeholder="you@email.com" autoComplete="email"
+              onChange={(e) => { setEmail(e.target.value); setMessage(""); }} />
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+              <label htmlFor={pwId} style={label}>Password</label>
+              {mode === "signin" && (
+                <button type="button" className="ph-btn" onClick={forgot} disabled={resetting}
+                  style={{ fontSize: 11.5, fontWeight: 600, color: "var(--violet)", textDecoration: "underline", textUnderlineOffset: 3, padding: 0, marginBottom: 4 }}>
+                  {resetting ? "sending…" : "forgot?"}
+                </button>
+              )}
+            </div>
+            <div style={{ position: "relative" }}>
+              <input id={pwId} style={{ ...field, paddingRight: 42 }} type={reveal ? "text" : "password"} value={password} maxLength={72}
+                placeholder={mode === "signup" ? "at least 6 characters" : "your password"}
+                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                onChange={(e) => { setPassword(e.target.value); setMessage(""); }} />
+              <button type="button" className="ph-btn" onClick={() => setReveal((v) => !v)}
+                aria-label={reveal ? "Hide password" : "Show password"} aria-pressed={reveal}
+                style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", padding: 7, color: "var(--stone)", fontSize: 15 }}>
+                <Icon name="eye" />
+              </button>
+            </div>
+          </div>
+          {notice && <div style={{ fontSize: 12.5, color: "var(--ok)", fontWeight: 600 }}>{notice}</div>}
+          {message && <div role="alert" style={{ ...fieldErrorStyle, fontWeight: 600 }}>{message}</div>}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <button className="ph-btn" type="submit" disabled={busy}
-              style={{ background: "var(--violet)", color: "var(--on-accent)", fontWeight: 700, fontSize: 13, padding: "8px 18px", borderRadius: 999, opacity: busy ? 0.6 : 1 }}>
+              style={{ background: "var(--violet)", color: "var(--on-accent)", fontWeight: 700, fontSize: 13, padding: "8px 18px", borderRadius: "var(--radius-pill)", opacity: busy ? 0.6 : 1 }}>
               {busy ? "one moment…" : mode === "signin" ? "sign in" : "create account"}
             </button>
-            <button className="ph-btn" type="button" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); }}
+            <button className="ph-btn" type="button" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); setNotice(""); }}
               style={{ fontSize: 12, color: "var(--stone)", textDecoration: "underline", textUnderlineOffset: 3 }}>
               {mode === "signin" ? "New here? Create one" : "Already have one? Sign in"}
             </button>
           </div>
+          <p style={{ fontSize: 11.5, color: "var(--stone)", margin: "2px 0 0", lineHeight: 1.5 }}>
+            {mode === "signup" ? "By creating an account you agree to our " : "How we handle your data: "}
+            <Link href="/privacy" target="_blank" style={{ color: "var(--violet)", fontWeight: 600 }}>privacy policy</Link>.
+          </p>
         </form>
       )}
     </div>
@@ -528,7 +623,7 @@ function CheckoutSignIn({ signedIn }: { signedIn: boolean }) {
 function StepDot({ label, active = false, done = false }: { label: string; active?: boolean; done?: boolean }) {
   const filled = active || done;
   return (
-    <span aria-hidden style={{ width: 18, height: 18, borderRadius: 999, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10.5, fontWeight: 700, background: filled ? "var(--violet)" : "transparent", color: filled ? "var(--on-accent)" : "var(--stone)", border: filled ? "none" : "1px solid var(--line)" }}>
+    <span aria-hidden style={{ width: 18, height: 18, borderRadius: "var(--radius-pill)", flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10.5, fontWeight: 700, background: filled ? "var(--violet)" : "transparent", color: filled ? "var(--on-accent)" : "var(--stone)", border: filled ? "none" : "1px solid var(--line)" }}>
       {done ? <Icon name="check" size={11} /> : label}
     </span>
   );
@@ -537,18 +632,21 @@ function StepDot({ label, active = false, done = false }: { label: string; activ
 function CartRow({ line, onQty, onRemove }: { line: CartLine; onQty: (q: number) => void; onRemove: () => void }) {
   return (
     <div style={{ display: "flex", gap: 12, padding: "12px 0", borderBottom: "1px solid var(--line)" }}>
-      <img src={line.image} alt={line.name} style={{ width: 62, height: 82, objectFit: "cover", borderRadius: 12, background: "var(--sage-mist)", flexShrink: 0 }} />
+      <img src={line.image} alt="" style={{ width: 62, height: 82, objectFit: "cover", borderRadius: "var(--radius-md)", background: "var(--paper-deep)", flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.name}</div>
         {line.size && <div style={{ fontSize: 12.5, color: "var(--stone)", marginTop: 1 }}>Size {line.size}</div>}
         <div style={{ fontSize: 13, color: "var(--stone)", fontWeight: 500, marginTop: 2 }}>{npr(line.price)}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: "auto", paddingTop: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", border: "1px solid var(--line)", borderRadius: 999, overflow: "hidden" }}>
-            <button className="ph-btn" onClick={() => onQty(line.qty - 1)} aria-label="Decrease" style={{ width: 32, height: 32, fontSize: 16, color: "var(--ink)" }}>−</button>
-            <span style={{ minWidth: 24, textAlign: "center", fontSize: 13, fontWeight: 600 }}>{line.qty}</span>
-            <button className="ph-btn" onClick={() => onQty(line.qty + 1)} aria-label="Increase" style={{ width: 32, height: 32, fontSize: 16, color: "var(--ink)" }}>+</button>
+          {/* 40px, not 32: WCAG 2.5.8 asks for 24 and these sit a thumb-width
+              apart from "remove", which used to be a 12px underlined link. */}
+          <div style={{ display: "flex", alignItems: "center", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-pill)", overflow: "hidden" }}>
+            <button className="ph-btn" onClick={() => onQty(line.qty - 1)} aria-label={"Decrease quantity of " + line.name} style={{ width: 40, height: 40, fontSize: 17, color: "var(--ink)" }}>−</button>
+            <span aria-live="polite" style={{ minWidth: 26, textAlign: "center", fontSize: 14, fontWeight: 600 }}>{line.qty}</span>
+            <button className="ph-btn" onClick={() => onQty(line.qty + 1)} aria-label={"Increase quantity of " + line.name} style={{ width: 40, height: 40, fontSize: 17, color: "var(--ink)" }}>+</button>
           </div>
-          <button className="ph-btn" onClick={onRemove} style={{ fontSize: 12, color: "var(--stone)", textDecoration: "underline", textUnderlineOffset: 3 }}>remove</button>
+          <button className="ph-btn" onClick={onRemove} aria-label={"Remove " + line.name + " from your bag"}
+            style={{ fontSize: 12.5, fontWeight: 600, color: "var(--stone)", padding: "10px 12px", minHeight: 40, textDecoration: "underline", textUnderlineOffset: 3 }}>remove</button>
         </div>
       </div>
       <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--ink)", flexShrink: 0 }}>{npr(line.price * line.qty)}</div>

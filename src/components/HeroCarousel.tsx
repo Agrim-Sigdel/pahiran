@@ -99,8 +99,11 @@ export default function HeroCarousel({ slides, slug, priority = true }: {
               <>
                 {/* Same src and sizes as the photo in front, so the blurred
                     fill costs a cache hit rather than a second download. */}
+                {/* blend={false}: this copy exists to fill the frame corner
+                    to corner, and feathering it just puts the dead margin it
+                    was added to cover back again. */}
                 <div className="hero-fill" aria-hidden>
-                  <GarmentImage src={g.image} alt="" priority={priority && i === 0}
+                  <GarmentImage src={g.image} alt="" priority={priority && i === 0} blend={false}
                     sizes="(max-width: 1200px) 100vw, 460px" />
                 </div>
                 <div className="hero-fit">

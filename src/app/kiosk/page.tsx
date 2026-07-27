@@ -2,16 +2,18 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import dynamic from "next/dynamic";
-import Kiosk from "@/components/Kiosk";
+import KioskV2 from "@/components/KioskV2";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { loadCatalog, loadPublishedCompositions, loadShop } from "@/lib/storage";
 import type { Wearable, Shop } from "@/lib/types";
 
 /* Vendor's own kiosk (launched from the dashboard). Public shopper links
-   go to /k/[slug] instead. ?v=2 opens the v2 fitting room. */
+   go to /k/[slug] instead.
 
-const KioskV2 = dynamic(() => import("@/components/KioskV2"), { ssr: false });
+   There used to be two of these, with the older one on by default and the
+   fixed one reachable only via ?v=2 — so every QR scan and every storefront
+   link opened the version whose own source file listed three defects it was
+   written to fix. There is one kiosk now. */
 
 function KioskOwn() {
   const router = useRouter();
@@ -74,7 +76,7 @@ function KioskOwn() {
     initialGarmentId: params.get("g"),
     shared: true,
   };
-  return params.get("v") === "2" ? <KioskV2 {...kiosk} /> : <Kiosk {...kiosk} />;
+  return <KioskV2 {...kiosk} />;
 }
 
 export default function KioskPage() {

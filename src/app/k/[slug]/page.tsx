@@ -2,19 +2,18 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
-import dynamic from "next/dynamic";
-import Kiosk from "@/components/Kiosk";
+import Link from "next/link";
+import KioskV2 from "@/components/KioskV2";
 import { getShopBySlug, loadCatalog, loadPublishedCompositions } from "@/lib/storage";
 import type { Wearable, Shop } from "@/lib/types";
 
 /* Public per-shop kiosk: pahiran.app/k/{slug}. No auth — shoppers land here
    from the shop's kiosk screen or a hanger QR (?g=<garmentId> preselects).
 
-   ?v=2 opens the v2 fitting room instead (same flow, uncropped stage, rack
-   that never leaves). Loaded on demand so shoppers who get the default kiosk
-   never download the other one — this page opens on a phone in a shop. */
-
-const KioskV2 = dynamic(() => import("@/components/KioskV2"), { ssr: false });
+   One kiosk. There were two, and the one every QR scan reached was the one
+   that cropped renders, hid the rack after a single try-on and painted its
+   progress bar in a colour that vanished — all documented in the other file's
+   header as the reasons it existed. */
 
 function PublicKiosk() {
   const router = useRouter();
@@ -50,6 +49,10 @@ function PublicKiosk() {
         <p style={{ color: "var(--stone)", maxWidth: 380, margin: 0 }}>
           This try-on link doesn't match any shop. Double-check the QR code or ask the vendor for a new one.
         </p>
+        {/* A dead end with no way out is not an error page, it's a trap — and
+            this one is reached by scanning a printed QR, so the shopper has no
+            back button to fall back on either. */}
+        <Link href="/" className="ph-btn btn-violet" style={{ marginTop: 4 }}>browse shops on peeq</Link>
       </div>
     );
   }
@@ -71,6 +74,10 @@ function PublicKiosk() {
         <p style={{ color: "var(--stone)", maxWidth: 380, margin: 0 }}>
           nothing listed yet — check back soon.
         </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", marginTop: 4 }}>
+          <Link href={"/s/" + slug} className="ph-btn btn-violet">visit the shop</Link>
+          <Link href="/" className="ph-btn btn-outline">browse other shops</Link>
+        </div>
       </div>
     );
   }
@@ -84,7 +91,7 @@ function PublicKiosk() {
     initialGarmentId: params.get("g"),
     shared: params.get("shared") === "1",
   };
-  return params.get("v") === "2" ? <KioskV2 {...kiosk} /> : <Kiosk {...kiosk} />;
+  return <KioskV2 {...kiosk} />;
 }
 
 export default function PublicKioskPage() {

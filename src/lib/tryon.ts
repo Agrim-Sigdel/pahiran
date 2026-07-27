@@ -33,10 +33,16 @@ export async function runTryOn(
        in Supabase mode either way. */
     compositionId?: string | null;
   },
-  finish: TryOnFinish = "studio"
+  finish: TryOnFinish = "studio",
+  /* So the kiosk can offer a way out of a wait it started. The shopper gets
+     their minute back and the tab stops holding the connection; the render
+     the provider already began is not recalled, which is why the kiosk asks
+     before it starts rather than only offering to stop afterwards. */
+  signal?: AbortSignal
 ): Promise<string> {
   const res = await fetch("/api/tryon", {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       personImage: personDataUrl,

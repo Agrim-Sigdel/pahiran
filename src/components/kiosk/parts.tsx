@@ -15,6 +15,8 @@ import type { Wearable, Shop } from "@/lib/types";
 import Icon from "@/components/Icon";
 import EeMark from "@/components/EeMark";
 import LookViewer from "@/components/LookViewer";
+import Dialog, { confirmAsync } from "@/components/Dialog";
+import { toastFailure } from "@/lib/toast";
 
 /* Kiosk pieces shared by every version of the shopper flow.
 
@@ -25,7 +27,7 @@ import LookViewer from "@/components/LookViewer";
 
 export const barBtn: React.CSSProperties = {
   padding: "8px 14px", fontSize: 13, fontWeight: 600, color: "var(--ink)",
-  border: "1px solid var(--line)", borderRadius: 999, background: "var(--card)",
+  border: "1px solid var(--line)", borderRadius: "var(--radius-pill)", background: "var(--card)",
 };
 
 export interface KioskProps {
@@ -68,8 +70,8 @@ export function LooksGallery({ onClose, onCountChange }: { onClose: () => void; 
   const sorted = looks ? [...looks].sort((a, b) => Number(b.favorite) - Number(a.favorite)) : [];
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "var(--paper)", zIndex: 55, display: "flex", flexDirection: "column", color: "var(--ink)" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", flexWrap: "wrap", gap: 10, background: "var(--card)", borderBottom: "1px solid var(--line)" }}>
+    <Dialog variant="full" onClose={onClose} title={t.myLooksTitle} hideHeader>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", flexWrap: "wrap", gap: 10, background: "var(--card)", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
         <div>
           <span className="ph-display" style={{ fontSize: 20, fontWeight: 600, color: "var(--ink)" }}>{t.myLooksTitle}</span>
           <span style={{ fontSize: 12, color: "var(--stone)", marginLeft: 10 }}>{t.myLooksSub}</span>
@@ -78,13 +80,19 @@ export function LooksGallery({ onClose, onCountChange }: { onClose: () => void; 
           {looks && looks.length > 0 && (
             <button className="ph-btn"
               onClick={async () => {
-                if (confirm(t.confirmDeleteAll)) {
+                if (!(await confirmAsync({
+                  title: t.deleteAll, body: t.confirmDeleteAll,
+                  confirmLabel: t.deleteAll, cancelLabel: t.cancel, destructive: true,
+                }))) return;
+                try {
                   await clearAllLooks();
                   forgetProfile();
                   refresh();
+                } catch (e) {
+                  toastFailure("Could not delete your looks", e);
                 }
               }}
-              style={{ color: "var(--stone)", fontSize: 12, padding: "9px 12px" }}>
+              style={{ color: "var(--danger)", fontSize: 12, padding: "9px 12px", fontWeight: 600 }}>
               {t.deleteAll}
             </button>
           )}
@@ -102,15 +110,15 @@ export function LooksGallery({ onClose, onCountChange }: { onClose: () => void; 
       ) : (
         <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 26px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 14, alignContent: "start" }}>
           {sorted.map((l) => (
-            <div key={l.id} className="peek" style={{ background: "var(--card)", borderRadius: 18, overflow: "hidden", border: "1px solid " + (l.favorite ? "var(--violet)" : "var(--line)") }}>
+            <div key={l.id} className="peek" style={{ background: "var(--card)", borderRadius: "var(--radius-xl)", overflow: "hidden", border: "1px solid " + (l.favorite ? "var(--violet)" : "var(--line)") }}>
               <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--paper-deep)" }}>
                 <button onClick={() => setViewing(l)} title={l.garmentName}
                   style={{ display: "block", width: "100%", height: "100%", padding: 0, border: "none", background: "none", cursor: "zoom-in" }}>
-                  <img src={imgSrc(l)} alt={"You wearing " + l.garmentName} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  <img src={imgSrc(l)} alt={"You wearing " + l.garmentName} className="img-blend" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                 </button>
                 <button className="ph-btn"
                   onClick={async () => { await setLookFavorite(l.id, !l.favorite); refresh(); }}
-                  style={{ position: "absolute", top: 8, right: 8, background: "var(--card)", color: l.favorite ? "var(--violet)" : "var(--stone)", fontSize: 15, padding: "5px 9px", borderRadius: 999 }}>
+                  style={{ position: "absolute", top: 8, right: 8, background: "var(--card)", color: l.favorite ? "var(--violet)" : "var(--stone)", fontSize: 15, padding: "5px 9px", borderRadius: "var(--radius-pill)" }}>
                   <Icon name={l.favorite ? "heart-filled" : "heart"} />
                 </button>
               </div>
@@ -120,15 +128,19 @@ export function LooksGallery({ onClose, onCountChange }: { onClose: () => void; 
                 {l.shopName && <div style={{ fontSize: 10.5, color: "var(--stone)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.shopName}</div>}
                 <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                   <button className="ph-btn" onClick={() => shareLook(l).catch(() => {})}
-                    style={{ flex: 1, border: "1.5px solid var(--ink)", color: "var(--ink)", fontSize: 12, padding: "6px 0", fontWeight: 600, borderRadius: 999 }}>
+                    style={{ flex: 1, border: "1.5px solid var(--ink)", color: "var(--ink)", fontSize: 12, padding: "6px 0", fontWeight: 600, borderRadius: "var(--radius-pill)" }}>
                     <Icon name="share" /> {t.share}
                   </button>
                   <button className="ph-btn"
                     onClick={async () => {
-                      if (!confirm(t.confirmDeleteLook)) return;
-                      await deleteLook(l.id); refresh();
+                      if (!(await confirmAsync({
+                        title: t.deleteThisLook, body: t.confirmDeleteLook,
+                        confirmLabel: t.del, cancelLabel: t.cancel, destructive: true,
+                      }))) return;
+                      try { await deleteLook(l.id); refresh(); }
+                      catch (e) { toastFailure("Could not delete that look", e); }
                     }}
-                    style={{ color: "var(--stone)", fontSize: 11.5, padding: "6px 8px" }}>
+                    style={{ color: "var(--danger)", fontSize: 11.5, padding: "6px 8px", fontWeight: 600 }}>
                     {t.del}
                   </button>
                 </div>
@@ -141,9 +153,9 @@ export function LooksGallery({ onClose, onCountChange }: { onClose: () => void; 
       {viewing && (
         <LookViewer look={viewing} src={imgSrc(viewing)} onClose={() => setViewing(null)}
           onDelete={async () => { await deleteLook(viewing.id); refresh(); }}
-          labels={{ save: t.saveImage, share: t.share, del: t.deleteThisLook, confirmDelete: t.confirmDeleteLook }} />
+          labels={{ save: t.saveImage, share: t.share, del: t.deleteThisLook, confirmDelete: t.confirmDeleteLook, cancel: t.cancel }} />
       )}
-    </div>
+    </Dialog>
   );
 }
 
@@ -195,15 +207,20 @@ export function InterestedModal({ shop, garment, recommended, shared, onClose }:
   };
 
   const input: React.CSSProperties = {
-    width: "100%", padding: "12px 15px", borderRadius: 14, border: "1px solid var(--line)",
+    width: "100%", padding: "12px 15px", borderRadius: "var(--radius-field)", border: "1px solid var(--line)",
     background: "var(--card)", color: "var(--ink)", fontSize: 15,
   };
+  const labelStyle: React.CSSProperties = { fontSize: 12.5, fontWeight: 600, color: "var(--ink)" };
+
+  /* Typed contact details are exactly the kind of work a stray backdrop tap
+     used to bin without asking. */
+  const dirty = state === "form" && (name.trim() !== "" || phone.trim() !== "");
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 60, padding: 16 }}>
-      {/* bottom sheet — arrives with the peek, actions in the thumb zone */}
-      <div onClick={(e) => e.stopPropagation()} className="peek"
-        style={{ background: "var(--card)", borderRadius: "var(--radius-card)", width: 380, maxWidth: "100%", padding: "26px 24px", textAlign: "center", marginBottom: 8 }}>
+    <Dialog variant="sheet" onClose={onClose} title={state === "done" ? t.shopKnows : t.tellShop}
+      hideHeader dirty={dirty} width={380}
+      panelStyle={{ padding: "26px 24px", textAlign: "center" }}>
+      <div>
         {state === "done" ? (
           <>
             <div className="ph-display" style={{ fontSize: 24, fontWeight: 600, color: "var(--ink)", marginBottom: 4 }}>{t.shopKnows}</div>
@@ -240,7 +257,7 @@ export function InterestedModal({ shop, garment, recommended, shared, onClose }:
                       return (
                         <button key={s} className="ph-btn" onClick={() => setSize(s)}
                           style={{
-                            padding: "8px 16px", fontSize: 13, borderRadius: 999, fontWeight: 600,
+                            padding: "8px 16px", fontSize: 13, borderRadius: "var(--radius-pill)", fontWeight: 600,
                             background: size === s ? "var(--violet)" : "var(--paper)",
                             color: size === s ? "var(--on-accent)" : "var(--stone)",
                             border: (size === s ? "1px solid var(--violet)"
@@ -253,27 +270,38 @@ export function InterestedModal({ shop, garment, recommended, shared, onClose }:
                   </div>
                 </div>
               )}
-              <input style={{ ...input, borderColor: errors.name ? "var(--danger)" : "var(--line)" }}
-                placeholder={t.yourName} value={name} maxLength={80} aria-invalid={!!errors.name}
-                onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((x) => ({ ...x, name: undefined })); }} />
-              {errors.name && <div style={{ fontSize: 12.5, color: "var(--danger)", marginTop: -4 }}>{errors.name}</div>}
-              <input style={{ ...input, borderColor: errors.phone ? "var(--danger)" : "var(--line)" }}
-                placeholder={t.phoneNumber} value={phone} maxLength={30} inputMode="tel" aria-invalid={!!errors.phone}
-                onChange={(e) => { setPhone(e.target.value.replace(/[^0-9+ ]/g, "")); if (errors.phone) setErrors((x) => ({ ...x, phone: undefined })); }} />
-              {errors.phone && <div style={{ fontSize: 12.5, color: "var(--danger)", marginTop: -4 }}>{errors.phone}</div>}
+              {/* Real labels, not placeholders. A placeholder disappears the
+                  moment you type into it, so a shopper who tabs back to check
+                  what a half-filled field was for finds nothing there. */}
+              <label style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <span style={labelStyle}>{t.yourName}</span>
+                <input style={{ ...input, borderColor: errors.name ? "var(--danger)" : "var(--line)" }}
+                  value={name} maxLength={80} autoComplete="name"
+                  aria-invalid={!!errors.name} aria-describedby={errors.name ? "lead-name-err" : undefined}
+                  onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((x) => ({ ...x, name: undefined })); }} />
+                {errors.name && <div id="lead-name-err" style={{ fontSize: 12.5, color: "var(--danger)" }}>{errors.name}</div>}
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <span style={labelStyle}>{t.phoneNumber}</span>
+                <input style={{ ...input, borderColor: errors.phone ? "var(--danger)" : "var(--line)" }}
+                  value={phone} maxLength={30} inputMode="tel" autoComplete="tel"
+                  aria-invalid={!!errors.phone} aria-describedby={errors.phone ? "lead-phone-err" : undefined}
+                  onChange={(e) => { setPhone(e.target.value.replace(/[^0-9+ ]/g, "")); if (errors.phone) setErrors((x) => ({ ...x, phone: undefined })); }} />
+                {errors.phone && <div id="lead-phone-err" style={{ fontSize: 12.5, color: "var(--danger)" }}>{errors.phone}</div>}
+              </label>
             </div>
             {state === "error" && (
-              <div style={{ fontSize: 12.5, color: "var(--danger)", marginTop: 10 }}>
+              <div role="alert" style={{ fontSize: 12.5, color: "var(--danger)", marginTop: 10 }}>
                 {t.sendFailed}
               </div>
             )}
             <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
               <button className="ph-btn" onClick={onClose}
-                style={{ flex: 1, border: "1px solid var(--line)", color: "var(--ink)", padding: 13, fontSize: 14, borderRadius: 999, fontWeight: 600 }}>
+                style={{ flex: 1, border: "1px solid var(--line)", color: "var(--ink)", padding: 13, fontSize: 14, borderRadius: "var(--radius-pill)", fontWeight: 600 }}>
                 {t.cancel}
               </button>
               <button className="ph-btn" disabled={state === "sending"} onClick={send}
-                style={{ flex: 2, background: "var(--ink)", color: "var(--paper)", padding: 13, fontSize: 14, borderRadius: 999, fontWeight: 700, fontFamily: "'Baloo 2', cursive", opacity: state === "sending" ? 0.6 : 1 }}>
+                style={{ flex: 2, background: "var(--ink)", color: "var(--paper)", padding: 13, fontSize: 14, borderRadius: "var(--radius-pill)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif", opacity: state === "sending" ? 0.6 : 1 }}>
                 {state === "sending" ? t.sending : t.sendToShop}
               </button>
             </div>
@@ -286,7 +314,7 @@ export function InterestedModal({ shop, garment, recommended, shared, onClose }:
           </>
         )}
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -305,7 +333,7 @@ export function SizeBadge({ rec, onEdit, dark }: { rec: SizeRec; onEdit: () => v
       aria-label={t.findMySize}
       style={{
         display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", fontSize: 13,
-        fontWeight: 600, borderRadius: 999,
+        fontWeight: 600, borderRadius: "var(--radius-pill)",
         border: "1px solid " + (dark ? "rgba(245,221,144,.55)" : "var(--violet)"),
         color: ink, background: dark ? "rgba(245,221,144,.10)" : "var(--card)",
       }}>
@@ -333,6 +361,13 @@ export function FindMySizeSheet({ initial, onClose, onSaved, onForget }: {
   const weightOk = weight.trim() === "" || (Number.isFinite(w) && w >= WEIGHT_MIN && w <= WEIGHT_MAX);
   const canSave = heightOk && weightOk;
 
+  /* Why the button is dim. It used to sit at opacity .6 saying nothing at
+     all: type 300 into height and the sheet simply stopped responding, with
+     no range shown and no error. Only complain about a field once it has
+     something in it — a blank form is not yet wrong. */
+  const heightErr = height.trim() !== "" && !heightOk ? t.errHeightRange(HEIGHT_MIN, HEIGHT_MAX) : "";
+  const weightErr = !weightOk ? t.errWeightRange(WEIGHT_MIN, WEIGHT_MAX) : "";
+
   const save = () => {
     if (!canSave) return;
     onSaved(saveProfile({
@@ -343,13 +378,13 @@ export function FindMySizeSheet({ initial, onClose, onSaved, onForget }: {
   };
 
   const input: React.CSSProperties = {
-    width: "100%", padding: "12px 15px", borderRadius: 14, border: "1px solid var(--line)",
+    width: "100%", padding: "12px 15px", borderRadius: "var(--radius-field)", border: "1px solid var(--line)",
     background: "var(--card)", color: "var(--ink)", fontSize: 15,
   };
   const genderChip = (g: Gender, label: string) => (
     <button key={g} className="ph-btn" onClick={() => setGender((cur) => (cur === g ? undefined : g))}
       style={{
-        flex: 1, padding: "9px 0", fontSize: 13, borderRadius: 999, fontWeight: 600,
+        flex: 1, padding: "9px 0", fontSize: 13, borderRadius: "var(--radius-pill)", fontWeight: 600,
         background: gender === g ? "var(--violet)" : "var(--paper)",
         color: gender === g ? "var(--on-accent)" : "var(--stone)",
         border: "1px solid " + (gender === g ? "var(--violet)" : "var(--line)"),
@@ -359,47 +394,54 @@ export function FindMySizeSheet({ initial, onClose, onSaved, onForget }: {
   );
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 60, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="peek"
-        style={{ background: "var(--card)", borderRadius: "var(--radius-card)", width: 380, maxWidth: "100%", padding: "26px 24px", textAlign: "center", marginBottom: 8 }}>
-        <div className="ph-display" style={{ fontSize: 24, fontWeight: 600, color: "var(--ink)", marginBottom: 4 }}><Icon name="ruler" /> {t.mySizeTitle}</div>
-        <p style={{ color: "var(--stone)", fontSize: 12.5, margin: "0 0 16px", lineHeight: 1.5 }}>{t.mySizePrivacy}</p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, textAlign: "left" }}>
-          <label style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600 }}>
-            {t.heightCmLabel}
-            <input style={{ ...input, marginTop: 5 }} value={height} inputMode="numeric" maxLength={3}
-              onChange={(e) => setHeight(e.target.value.replace(/\D/g, ""))} placeholder="165" />
-          </label>
-          <label style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600 }}>
-            {t.weightKgLabel}
-            <input style={{ ...input, marginTop: 5 }} value={weight} inputMode="numeric" maxLength={3}
-              onChange={(e) => setWeight(e.target.value.replace(/\D/g, ""))} placeholder="60" />
-          </label>
-          <div style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600 }}>
-            {t.forWhomLabel}
-            <div style={{ display: "flex", gap: 8, marginTop: 5 }}>
-              {genderChip("f", t.genderWomen)}
-              {genderChip("m", t.genderMen)}
-            </div>
+    <Dialog variant="sheet" onClose={onClose} title={t.mySizeTitle} hideHeader width={380}
+      panelStyle={{ padding: "26px 24px", textAlign: "center" }}>
+      <div className="ph-display" style={{ fontSize: 24, fontWeight: 600, color: "var(--ink)", marginBottom: 4 }}><Icon name="ruler" /> {t.mySizeTitle}</div>
+      <p style={{ color: "var(--stone)", fontSize: 12.5, margin: "0 0 16px", lineHeight: 1.5 }}>{t.mySizePrivacy}</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, textAlign: "left" }}>
+        <label style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600 }}>
+          {t.heightCmLabel}
+          <input style={{ ...input, marginTop: 5, borderColor: heightErr ? "var(--danger)" : "var(--line)" }}
+            value={height} inputMode="numeric" maxLength={3} data-autofocus
+            aria-invalid={!!heightErr} aria-describedby={heightErr ? "size-h-err" : undefined}
+            onChange={(e) => setHeight(e.target.value.replace(/\D/g, ""))} placeholder="165" />
+          {heightErr && <div id="size-h-err" style={{ color: "var(--danger)", fontWeight: 600, marginTop: 5 }}>{heightErr}</div>}
+        </label>
+        <label style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600 }}>
+          {t.weightKgLabel}
+          <input style={{ ...input, marginTop: 5, borderColor: weightErr ? "var(--danger)" : "var(--line)" }}
+            value={weight} inputMode="numeric" maxLength={3}
+            aria-invalid={!!weightErr} aria-describedby={weightErr ? "size-w-err" : undefined}
+            onChange={(e) => setWeight(e.target.value.replace(/\D/g, ""))} placeholder="60" />
+          {weightErr && <div id="size-w-err" style={{ color: "var(--danger)", fontWeight: 600, marginTop: 5 }}>{weightErr}</div>}
+        </label>
+        <div style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600 }}>
+          {t.forWhomLabel}
+          <div style={{ display: "flex", gap: 8, marginTop: 5 }}>
+            {genderChip("f", t.genderWomen)}
+            {genderChip("m", t.genderMen)}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-          <button className="ph-btn" onClick={onClose}
-            style={{ flex: 1, border: "1px solid var(--line)", color: "var(--ink)", padding: 13, fontSize: 14, borderRadius: 999, fontWeight: 600 }}>
-            {t.skipSize}
-          </button>
-          <button className="ph-btn" disabled={!canSave} onClick={save}
-            style={{ flex: 2, background: "var(--violet)", color: "var(--on-accent)", padding: 13, fontSize: 14, borderRadius: 999, fontWeight: 700, fontFamily: "'Baloo 2', cursive", opacity: canSave ? 1 : 0.6 }}>
-            {t.showMySize}
-          </button>
-        </div>
-        {initial && (
-          <button className="ph-btn" onClick={onForget}
-            style={{ color: "var(--stone)", fontSize: 12, marginTop: 12, textDecoration: "underline", textUnderlineOffset: 3 }}>
-            {t.forgetMySize}
-          </button>
-        )}
       </div>
-    </div>
+      <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+        <button className="ph-btn" onClick={onClose}
+          style={{ flex: 1, border: "1px solid var(--line)", color: "var(--ink)", padding: 13, fontSize: 14, borderRadius: "var(--radius-pill)", fontWeight: 600 }}>
+          {t.skipSize}
+        </button>
+        {/* aria-disabled rather than disabled: a disabled button can't be
+            focused, so a keyboard user tabbing through never reaches the one
+            control that would tell them what's wrong. */}
+        <button className="ph-btn" aria-disabled={!canSave} onClick={save}
+          style={{ flex: 2, background: "var(--violet)", color: "var(--on-accent)", padding: 13, fontSize: 14, borderRadius: "var(--radius-pill)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif", opacity: canSave ? 1 : 0.6, cursor: canSave ? "pointer" : "not-allowed" }}>
+          {t.showMySize}
+        </button>
+      </div>
+      {initial && (
+        <button className="ph-btn" onClick={onForget}
+          style={{ color: "var(--stone)", fontSize: 12, marginTop: 12, textDecoration: "underline", textUnderlineOffset: 3 }}>
+          {t.forgetMySize}
+        </button>
+      )}
+    </Dialog>
   );
 }

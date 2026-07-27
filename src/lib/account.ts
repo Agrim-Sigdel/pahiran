@@ -96,6 +96,30 @@ export async function signOut(): Promise<void> {
   await supabase().auth.signOut();
 }
 
+/* Forgotten password.
+
+   There was no reset flow anywhere in the codebase — no "forgot password?"
+   link on either auth surface or in the checkout drawer's inline sign-in.
+   Anyone who forgot theirs was locked out permanently: a shopper from their
+   saved looks and order history, a vendor from their entire shop.
+
+   Deliberately does not distinguish "no such account" from "email sent". The
+   caller shows the same confirmation either way, so this endpoint can't be
+   used to find out who has an account here. */
+export async function sendPasswordReset(email: string): Promise<{ error: Error | null }> {
+  if (!isSupabaseConfigured()) return { error: null };
+  const redirectTo =
+    typeof window === "undefined" ? undefined : `${window.location.origin}/reset`;
+  const { error } = await supabase().auth.resetPasswordForEmail(email, { redirectTo });
+  return { error: error ? new Error(error.message) : null };
+}
+
+/** Set a new password for the session the reset link established. */
+export async function updatePassword(password: string): Promise<{ error: Error | null }> {
+  const { error } = await supabase().auth.updateUser({ password });
+  return { error: error ? new Error(error.message) : null };
+}
+
 /* ---------- profiles / roles ---------- */
 
 /** Ensure a profile row exists, without downgrading an existing vendor.

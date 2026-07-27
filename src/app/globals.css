@@ -1,4 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Mukta:wght@300;400;500;600;700&display=swap');
+/* Fonts are loaded by next/font in app/layout.tsx, which self-hosts them,
+   emits a preload and hands the families down as --font-display (Baloo 2) and
+   --font-body (Mukta). They used to arrive through an @import of
+   fonts.googleapis.com here: a render-blocking request Next cannot see, so
+   every page painted in the fallback and reflowed when the real face landed.
+
+   Both stacks end in a *generic* fallback. `cursive` used to be the fallback
+   for the display face, which on the one network in ten where Baloo doesn't
+   arrive rendered every heading and button in Comic Sans or Apple Chancery. */
 
 /* ── peeq design tokens — v1 (from peeq-brand-direction.html) ──────────
    Warm stage, one loud guest: quiet paper/ink base, violet strictly for
@@ -9,7 +17,14 @@
   color-scheme: light;
   --ink: #1A1714;          /* text, primary buttons — warm black, never #000 */
   --paper: #FAF6F0;        /* default background — flatters skin in photos */
-  --violet: #000937b4;       /* interactive only: links, scan moments, active states */
+  /* The one loud guest. A near-black green: deep enough to read as ink-with-
+     intent on paper, green enough to be a hue rather than a shade of the text
+     colour. Fully opaque on purpose — this was an 8-digit hex (#000937b4, a
+     70%-opaque navy), which meant every violet fill composited with whatever
+     sat behind it. Over paper that was invisible-but-fine; over a garment
+     photo or the kiosk's dark stage it turned the progress bar into nothing.
+     11.7:1 on --paper, and --on-accent (#fff) is 12.6:1 on it. */
+  --violet: #123A2E;       /* interactive only: links, scan moments, active states */
   --butter: #F5DD90;       /* highlights, badges, empty states — small doses */
   --butter-deep: #C9A94E;  /* butter for light backgrounds (nav ee, badges on paper) */
   --stone: #6E675C;        /* secondary text, captions, prices — AA on paper (5.2:1) */
@@ -39,14 +54,15 @@
   /* Two weights of rule. --line is the hairline that separates rows inside one
      surface; --line-strong divides two things that are genuinely apart. --edge
      is for drawn strokes — borders, icon outlines, chart axes. In dark mode
-     --edge resolves to a colour that CANNOT carry text (2.9:1); use --mut. */
+     --edge resolves to a colour that CANNOT carry text (2.9:1); use --stone. */
   --line-strong: rgba(26, 23, 20, .18);
   --edge: rgba(26, 23, 20, .22);
 
   /* semantic status colours — these carry *meaning*, so they must never be
-     aliased onto a neutral. Before these existed, --camel doubled as both the
-     error colour and the accent colour while resolving to the same grey as
-     --mut, which made every form error invisible. All AA on paper and white. */
+     aliased onto a neutral. Before these existed, --camel (a legacy alias,
+     since retired) doubled as both the error colour and the accent colour
+     while resolving to body-text grey, which made every form error invisible.
+     All AA on paper and white. */
   --danger: #B3261E;       /* invalid fields, failures, destructive warnings */
   --warn: #8A5D00;         /* low credits, past-due — attention, not failure */
   --ok: #1F6B4A;           /* saved, sent, in stock */
@@ -59,18 +75,23 @@
   --warn-bg: rgba(138, 93, 0, .10);
   --ok-bg: rgba(31, 107, 74, .10);
 
-  /* legacy aliases (sage-era inline styles inherit the new theme) */
-  --forest: #1A1714;
-  --forest-deep: #1A1714;
-  --sage: #FAF6F0;
-  --sage-mist: #F1EAE0;
-  --cream: #FFFFFF;
-  --camel: #6E675C;        /* accent emphasis (prices, item codes, chart hover) */
-  --mut: #6E675C;          /* hint / de-emphasised text */
-  --plum: #1A1714;
-  --rani: #1A1714;
-  --rani-soft: #4A443B;
-  --marigold: #8A8378;
+  /* The sage-era aliases are gone.
+     --forest/--forest-deep → --ink, --sage → --paper, --sage-mist →
+     --paper-deep, --cream → --card, --camel/--mut → --stone, and
+     --plum/--rani/--rani-soft/--marigold were unused.
+
+     They pointed at the same values as the tokens above, so nothing looked
+     different — which is exactly what made them expensive. The product ran on
+     two names for every colour, vendor and admin surfaces using one set and
+     shopper surfaces the other, and the aliasing quietly ate meaning: --camel
+     was documented as "accent emphasis" while resolving to body-text grey, so
+     anything painted with it as an accent came out the colour of a paragraph.
+     Three separate bugs came from that one line — the dashboard's
+     orders-to-call-back alert, the analytics chart's hover state and the
+     PendingReview status heading were all invisible as signals.
+
+     One name per colour now. Anything that needs to *mean* something takes a
+     semantic token (--danger / --warn / --ok / --violet), never a neutral. */
 
   /* text that sits ON a --violet / --danger / --warn / --ok fill. A separate
      token because in dark mode those fills go bright and need dark text —
@@ -84,7 +105,7 @@
      on a dark page, going darker would say the opposite, so it becomes the
      lightest surface in the dark block.
 
-     Anything ON it takes --on-slab, never --paper or --cream: those flip dark
+     Anything ON it takes --on-slab, never --paper or --card: those flip dark
      when the theme does, and a dark heading on a slab is invisible. That is
      exactly how "put peeq in your shop" disappeared. --on-slab is light in
      both themes and so does not appear in the dark block. */
@@ -124,16 +145,56 @@
      green parks, blue water, grey buildings — and a warm red is the one hue
      none of those occupy. It also keeps the pin inside the brand's warm
      family rather than importing a generic map-red. */
-  --pin: #bc9790;
+  --pin: #4a241c;
   --pin-ring: #FFFFFF;     /* the ring separates the pin from a busy map */
   --pin-ink: #F5DD90;      /* fixed butter — 4.2:1 on --pin at 16px/800 */
+
+  /* Corner radius is a scale, not a set of three role tokens plus whatever
+     number the call site felt like. There were 13 hardcoded values in the
+     codebase against 3 tokens — inputs alone were 12px, 14px and 20px on
+     three different pages. Roles first (they carry intent), then the raw
+     rungs for the cases a role doesn't name. */
+  --radius-xs: 3px;        /* chips-on-photos, tiny badges */
+  --radius-sm: 6px;        /* inline tags, swatches */
+  --radius-md: 11px;       /* dense controls: qty steppers, size buttons */
+  --radius-lg: 14px;       /* tiles, inner cards, list rows */
+  --radius-xl: 16px;       /* feed tiles, look cards */
+  --radius-pill: 999px;
 
   --radius-card: 20px;
   --radius-btn: 20px;
   --radius-modal: 20px;
+  --radius-field: var(--radius-lg);   /* every text input, everywhere */
+
+  /* Stacking order, named. These were 8 bare numbers spread over 12 files
+     (40 kiosk, 50 modals, 55 studio, 58 viewer, 60 drawer *and* sheets, 80
+     menu, 90 toast), which is how the cart drawer and the try-on confirm
+     ended up on the same rung able to co-exist. One ladder, each rung a
+     distinct role, gaps left so a future layer can land between two. */
+  --z-sticky: 20;          /* sticky bars inside a page */
+  --z-kiosk: 40;           /* the fullscreen kiosk shell */
+  --z-overlay: 60;         /* the scrim behind any dialog */
+  --z-dialog: 61;          /* modals, drawers, sheets — one rung, one at a time */
+  --z-popover: 80;         /* menus anchored to a control */
+  --z-toast: 100;          /* transient messages — always on top */
+
   --shadow-soft: 0 6px 18px rgba(26, 23, 20, .10);
   --motion-peek: 240ms ease-out;
   --motion-blink: 140ms;
+
+  /* A photograph stops at a hard rectangle, which reads as pasted onto the
+     page rather than part of it. This feathers every photo's own edge —
+     strongest in the corners, barely there along the middle of each side —
+     so the picture settles into whatever surface it is sitting on.
+
+     A mask rather than a dark overlay on purpose. An overlay has to guess
+     the colour behind it, which means a second value to keep in sync with
+     every surface and both themes; a mask just lets the surface through, so
+     the same token melts into paper in light mode and into the fitting room
+     in dark. Alpha bottoms out at .55, not 0: the edge should soften, not
+     disappear and leave the piece looking cropped. */
+  --photo-blend: radial-gradient(ellipse 74% 74% at 50% 48%,
+    #000 52%, rgba(0, 0, 0, .9) 76%, rgba(0, 0, 0, .55) 100%);
 }
 
 /* ── dark ──────────────────────────────────────────────────────────────
@@ -185,16 +246,19 @@
   --paper-deep: #150D09;   /* wells: image placeholders, inset rows */
   --paper: #1E1310;        /* page */
   --card: #2B1B14;         /* cards, sheets, inputs */
-  --raised: #3A241B;       /* modals, popovers, sticky bars */
-  --slab: #4A2A20;         /* the loud panel — now the lightest, not the darkest */
+  --raised: #261717;       /* modals, popovers, sticky bars */
+  --slab: #180a05;         /* the loud panel — now the lightest, not the darkest */
 
   --ink: #F3EEE7;          /* text — warm off-white, never pure #fff */
   --stone: #C7B299;        /* secondary text — 8.1:1 on --card */
   --line: rgba(243, 238, 231, .11);  /* warm hairline; a white one greys the browns */
   --line-strong: #4A2A20;
-  --edge: #7B5B4A;         /* strokes only — 2.9:1, never text. Use --mut. */
+  --edge: #7B5B4A;         /* strokes only — 2.9:1, never text. Use --stone. */
 
-  --violet: #bbb288;       /* interactive: links, active states, scan moments */
+  /* the sage-mint the block comment above describes. The previous value
+     (#bbb288) was khaki — brown-family, so the one thing that was supposed
+     not to be brown was the same colour as the room. 9.6:1 on --card. */
+  --violet: #d3c38f;       /* interactive: links, active states, scan moments */
   --on-accent: #14261E;    /* the fills are bright now, so their text goes dark */
   --butter: #EFD79A;       /* pulled back from #F5DD90, which blooms on brown */
   --butter-deep: #E3C273;  /* on dark the "deep" variant has to get lighter */
@@ -210,19 +274,11 @@
   --warn: #E8BE6E;    --warn-bg: rgba(232, 190, 110, .13);
   --ok: #86D0A8;      --ok-bg: rgba(134, 208, 168, .13);
 
-  /* legacy aliases follow the same inversion, so sage-era inline styles
-     (--cream cards, --sage pages, --forest chips) come along untouched */
-  --forest: #F3EEE7;
-  --forest-deep: #F3EEE7;
-  --sage: #1E1310;
-  --sage-mist: #150D09;
-  --cream: #2B1B14;
-  --camel: #C7B299;
-  --mut: #A08872;          /* 4.9:1 on --card — the darkest readable tone */
-  --plum: #F3EEE7;
-  --rani: #F3EEE7;
-  --rani-soft: #C7B299;
-  --marigold: #C7B299;
+  /* The light block's legacy aliases are retired, so there is nothing to
+     re-point here. Worth recording what --mut used to be: #A08872, 4.9:1 on
+     --card, a full rung darker than --stone's 8.1:1 — folding it into --stone
+     RAISED the contrast of every "hint" in the vendor console rather than
+     lowering anything. */
 
   /* A soft black shadow is invisible on a dark page, and deepening it only
      makes a smudge. What actually reads as "raised" in a dark room is a lit
@@ -247,17 +303,42 @@ html, body {
 
 body {
   margin: 0;
-  font-family: 'Mukta', sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 400;
   color: var(--ink);
   background: var(--paper);
-  min-height: 100vh;
+  /* dvh, not vh: on mobile Safari and Chrome `100vh` is the viewport with the
+     URL bar *hidden*, so a "full height" page is always taller than the screen
+     and every such screen starts life with a phantom scroll. */
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
 }
 
+/* Visually hidden, still announced and still focusable-by-descendant. The
+   clip-path variant rather than `display:none` or `visibility:hidden` — both
+   of those take the node out of the accessibility tree, which is the opposite
+   of the point. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+}
+
+/* First tabbable node on every page. Off-screen until focused, then it lands
+   in the top-left corner as a real button. */
+.skip-link {
+  position: fixed; top: 8px; left: 8px; z-index: var(--z-toast);
+  transform: translateY(-160%);
+  background: var(--violet); color: var(--on-accent);
+  font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 14px;
+  padding: 10px 18px; border-radius: var(--radius-btn); text-decoration: none;
+  transition: transform .16s ease;
+}
+.skip-link:focus-visible { transform: none; outline: 3px solid var(--ink); outline-offset: 2px; }
+
 /* display type: Baloo 2 — round, friendly, lowercase */
 .ph-display {
-  font-family: 'Baloo 2', cursive;
+  font-family: var(--font-display), sans-serif;
   font-weight: 700;
   letter-spacing: -0.01em;
   line-height: 1.15;
@@ -266,7 +347,7 @@ body {
 .ph-btn {
   border: none;
   cursor: pointer;
-  font-family: 'Mukta', sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 500;
   border-radius: var(--radius-btn);
   transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease;
@@ -275,23 +356,23 @@ body {
 .ph-btn:active { transform: scale(.97); }
 .ph-btn:focus-visible { outline: 3px solid var(--violet); outline-offset: 2px; }
 
-input, select { font-family: 'Mukta', sans-serif; }
+input, select { font-family: var(--font-body), sans-serif; }
 input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); outline-offset: 1px; }
 
 /* ── shared building blocks ── */
-.btn-solid { font-family: 'Baloo 2', cursive; background: var(--ink); color: var(--paper); padding: 13px 30px; font-size: 16px; font-weight: 700; border-radius: var(--radius-btn); text-decoration: none; display: inline-block; text-align: center; }
+.btn-solid { font-family: var(--font-display), sans-serif; background: var(--ink); color: var(--paper); padding: 13px 30px; font-size: 16px; font-weight: 700; border-radius: var(--radius-btn); text-decoration: none; display: inline-block; text-align: center; }
 .btn-solid:hover { transform: translateY(-2px); }
-.btn-outline { font-family: 'Baloo 2', cursive; border: 2px solid var(--ink); color: var(--ink); padding: 11px 28px; font-size: 16px; font-weight: 700; border-radius: var(--radius-btn); background: transparent; text-decoration: none; display: inline-block; text-align: center; }
+.btn-outline { font-family: var(--font-display), sans-serif; border: 2px solid var(--ink); color: var(--ink); padding: 11px 28px; font-size: 16px; font-weight: 700; border-radius: var(--radius-btn); background: transparent; text-decoration: none; display: inline-block; text-align: center; }
 .btn-outline:hover { transform: translateY(-2px); }
-.btn-violet { font-family: 'Baloo 2', cursive; background: var(--violet); color: var(--on-accent); padding: 13px 30px; font-size: 16px; font-weight: 700; border-radius: var(--radius-btn); text-decoration: none; display: inline-block; text-align: center; }
+.btn-violet { font-family: var(--font-display), sans-serif; background: var(--violet); color: var(--on-accent); padding: 13px 30px; font-size: 16px; font-weight: 700; border-radius: var(--radius-btn); text-decoration: none; display: inline-block; text-align: center; }
 .btn-violet:hover { transform: translateY(-2px); }
-.btn-wa { font-family: 'Baloo 2', cursive; background: var(--whatsapp); color: #fff; padding: 13px 28px; font-size: 15px; font-weight: 700; border-radius: var(--radius-btn); text-decoration: none; display: inline-block; text-align: center; }
+.btn-wa { font-family: var(--font-display), sans-serif; background: var(--whatsapp); color: #fff; padding: 13px 28px; font-size: 15px; font-weight: 700; border-radius: var(--radius-btn); text-decoration: none; display: inline-block; text-align: center; }
 .linklike { text-decoration: underline; text-underline-offset: 4px; font-size: 14px; font-weight: 600; color: var(--violet); padding: 0; background: none; border: none; cursor: pointer; }
 .kicker { font-size: 13px; letter-spacing: .14em; text-transform: lowercase; color: var(--violet); font-weight: 600; }
-.wordmark { font-family: 'Baloo 2', cursive; font-weight: 800; letter-spacing: -0.03em; text-transform: lowercase; color: var(--ink); line-height: 1; }
+.wordmark { font-family: var(--font-display), sans-serif; font-weight: 800; letter-spacing: -0.03em; text-transform: lowercase; color: var(--ink); line-height: 1; }
 
 /* the ee — secondary mark. The blink is the brand's one signature animation. */
-.ee-mark { font-family: 'Baloo 2', cursive; font-weight: 800; line-height: 1; letter-spacing: -0.02em; display: inline-flex; align-items: center; justify-content: center; user-select: none; }
+.ee-mark { font-family: var(--font-display), sans-serif; font-weight: 800; line-height: 1; letter-spacing: -0.02em; display: inline-flex; align-items: center; justify-content: center; user-select: none; }
 .ee-mark span { display: inline-block; }
 .ee-blink span { animation: blink 4.5s infinite; }
 @keyframes blink {
@@ -337,7 +418,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
   border-radius: 7px 7px 13px 13px;
   box-shadow: 0 2px 8px rgba(26, 23, 20, .4);
   display: flex; align-items: center; justify-content: center;
-  font-family: 'Baloo 2', cursive; font-weight: 800; font-size: 16px;
+  font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 16px;
   color: var(--pin-ink); line-height: 1; letter-spacing: -0.02em;
 }
 .peeq-pin::before { /* handle */
@@ -347,14 +428,18 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 }
 .peeq-pin span { display: inline-block; animation: ee-wink 3.4s infinite; }
 
-.efc-chip { font-family: 'Baloo 2', cursive; padding: 8px 18px; font-size: 14px; font-weight: 600; border-radius: var(--radius-btn); white-space: nowrap; border: none; cursor: pointer; flex-shrink: 0; }
-.efc-chip.on { background: var(--violet); color: var(--on-accent); }
-.efc-chip.off { background: var(--card); color: var(--stone); border: 1px solid var(--line); }
+/* The border is on the BASE, not on .off. It used to be `border: none` here
+   with `.off` adding `1px solid`, so selecting a chip made it 2px smaller and
+   shoved every chip after it along the row — the filter row visibly twitched
+   on each tap. Transparent by default, coloured by state: same box, both ways. */
+.efc-chip { font-family: var(--font-display), sans-serif; padding: 8px 18px; font-size: 14px; font-weight: 600; border-radius: var(--radius-btn); white-space: nowrap; border: 1px solid transparent; cursor: pointer; flex-shrink: 0; }
+.efc-chip.on { background: var(--violet); color: var(--on-accent); border-color: var(--violet); }
+.efc-chip.off { background: var(--card); color: var(--stone); border-color: var(--line); }
 
 .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-card); padding: 22px 24px; margin-top: 16px; }
 
 /* A floating surface — modal, sheet, popover. Every dialog in the app used to
-   write `background: var(--cream)` inline, which put it at the same rung as
+   write `background: var(--cream)` inline (a legacy alias of --card), which put it at the same rung as
    the cards behind it: on paper the scrim still separated them, but in the
    dark room a card-coloured dialog over a page of card-coloured panels read as
    one more panel that happened to be centred. --raised out-ranks --card in
@@ -367,18 +452,25 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
   box-shadow: var(--shadow-soft);
 }
 .panel-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
-.panel-head .title { font-family: 'Baloo 2', cursive; font-weight: 600; font-size: 21px; color: var(--ink); }
+.panel-head .title { font-family: var(--font-display), sans-serif; font-weight: 600; font-size: 21px; color: var(--ink); }
 .panel-head .sub { font-size: 13px; color: var(--stone); }
 
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--stone); font-weight: 600; }
-.field input, .field textarea { padding: 12px 15px; border-radius: 14px; border: 1px solid var(--line); font-size: 15px; background: var(--card); color: var(--ink); font-weight: 400; letter-spacing: 0; text-transform: none; }
+.field input, .field select, .field textarea { padding: 12px 15px; border-radius: var(--radius-field); border: 1px solid var(--line); font-size: 15px; background: var(--card); color: var(--ink); font-weight: 400; letter-spacing: 0; text-transform: none; }
+/* A field that failed validation says so on its own border, not only in the
+   sentence underneath it — the sentence is easy to miss on a long form. */
+.field input[aria-invalid="true"], .field textarea[aria-invalid="true"], .field select[aria-invalid="true"] { border-color: var(--danger); }
+.field .err { color: var(--danger); font-size: 12.5px; font-weight: 600; }
+.field .hint { color: var(--stone); font-size: 12.5px; font-weight: 500; }
+/* the required marker, so it isn't spelled three different ways */
+.field .req { color: var(--danger); }
 /* textarea only: inherit the UI face rather than the browser's monospace
    default, and let it grow downward but never sideways out of its column */
 .field textarea { font-family: inherit; resize: vertical; min-height: 84px; }
 
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 22px; overflow-x: auto; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
-.tabs button { font-family: 'Baloo 2', cursive; padding: 12px 20px; font-size: 15px; font-weight: 600; color: var(--stone); border: none; white-space: nowrap; background: none; cursor: pointer; position: relative; }
+.tabs button { font-family: var(--font-display), sans-serif; padding: 12px 20px; font-size: 15px; font-weight: 600; color: var(--stone); border: none; white-space: nowrap; background: none; cursor: pointer; position: relative; }
 .tabs button.on { color: var(--ink); }
 /* the indicator: a short rounded bar sitting right on the hairline, drawn as
    a pseudo-element so it can't double up with the container border */
@@ -488,13 +580,23 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 }
 .hero-bar button { pointer-events: auto; }
 
+/* The dot you SEE is 8px; the dot you HIT is 24px. WCAG 2.5.8 asks for 24px
+   of target, and a bare 8px circle is a miss on a moving bus. The size comes
+   from padding + a transparent border so the row's visual rhythm is unchanged,
+   and background-clip keeps the fill inside the visible circle. */
 .hero-dot {
-  width: 8px; height: 8px; border-radius: 999px; padding: 0;
-  border: 1px solid rgba(255,255,255,.85); background: transparent;
-  cursor: pointer; transition: background .2s ease, transform .2s ease;
+  width: 24px; height: 24px; padding: 8px; border: 0; border-radius: 999px;
+  background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
 }
-.hero-dot[data-on] { background: #fff; transform: scale(1.25); }
-.hero-dot:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.hero-dot::before {
+  /* the visible dot — the button around it is the target */
+  content: ""; display: block; width: 8px; height: 8px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.85); background: transparent;
+  transition: background .2s ease, transform .2s ease;
+}
+.hero-dot[data-on]::before { background: #fff; transform: scale(1.25); }
+.hero-dot:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
 
 /* These sit on a photograph, not on the page, so they take no theme tokens:
    var(--ink) is near-white in dark mode, which put a white glyph on a white
@@ -508,9 +610,14 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
   backdrop-filter: blur(6px);
   font-size: 20px; line-height: 1; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  opacity: 0; transition: opacity .2s ease;
+  /* Resting at .72, not at 0. Hiding a control until hover means it does not
+     exist on a touchscreen and cannot be discovered on a desktop — and this
+     pair was also `hide-sm`, so on a phone they were invisible *and* removed.
+     Visible always, brighter on hover: the hover is polish, not the API. */
+  opacity: .72; transition: opacity .2s ease;
 }
-.hero-visual:hover .hero-arrow, .hero-arrow:focus-visible { opacity: 1; }
+.hero-visual:hover .hero-arrow, .hero-arrow:hover, .hero-arrow:focus-visible { opacity: 1; }
+.hero-arrow:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
 /* Below this the two columns are too narrow to be worth keeping: the copy
    wraps to three words a line and the photo becomes a sliver. Stack instead —
@@ -544,7 +651,36 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 @media (max-width: 640px) {
   .counter-result { grid-template-columns: 1fr; }
 }
-.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 18px; }
+/* Catalog showcase. Columns cap at 210px instead of stretching to 1fr: with
+   1fr a four-piece shop on a wide screen got four 250px cards and the same
+   shop one piece later got five 200px ones, so the tile — and the photo
+   inside it — was a different size on every viewport. Capped, the card is one
+   size everywhere and only the number of them per row changes.
+
+   Fixed tracks leave slack the row can't absorb, so the tracks are centred —
+   the leftover splits evenly instead of piling into a ragged right margin.
+   (justify-content, not justify-items: the tracks move as a set, so a lone
+   last piece still starts the row rather than floating in the middle.) */
+.shop-grid {
+  display: grid; gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 210px));
+  justify-content: center;
+}
+
+/* The photo frame inside that card: one fixed 3/4 box for every piece,
+   whatever shape the vendor shot.
+
+   The piece is *fitted* into it rather than cropped to fill it. Vendors shoot
+   portrait, square and flat-lay, and cover meant a square shot lost its
+   sleeves and a tall one lost the hem — the catalog cropped away the part of
+   the garment a shopper was scrolling to see.
+
+   The ground is --card, the card's own surface, not the --paper-deep well it
+   used to be. A well draws a hard rectangle around every off-ratio photo and
+   undoes the blending the mask is there to do; on the card colour the
+   leftover space simply *is* the card, and a 3/4 shot still fills the frame
+   edge to edge and feathers into it. */
+.shop-tile { position: relative; aspect-ratio: 3/4; background: var(--card); }
 
 /* ── landing hero — one look, two fits. The b-image crossfades in and out
    so the page opens on the product's whole promise with zero words. ── */
@@ -560,10 +696,21 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .hero2-right { display: flex; gap: 14px; align-items: stretch; justify-self: end; width: 100%; }
 .hero2-right .hero2-visual { justify-self: auto; flex: 1; }
 .hero2-rail { display: flex; flex-direction: column; gap: 12px; justify-content: center; width: 108px; flex-shrink: 0; }
-.hero2-rail-hint { font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 12.5px; color: var(--ink); text-align: center; letter-spacing: .02em; }
+.hero2-rail-hint { font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 12.5px; color: var(--ink); text-align: center; letter-spacing: .02em; }
 .hero2-fitcard { position: relative; padding: 0; border-radius: 16px; overflow: hidden; background: var(--card); border: 1.5px solid var(--line); cursor: pointer; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
-.hero2-fitcard img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
-.hero2-fitlabel { display: block; font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 11px; padding: 4px 0 6px; text-align: center; color: var(--stone); background: var(--card); }
+/* height: auto is load-bearing, not tidiness. The markup carries width={200}
+   height={200} so the card reserves its space before the photo lands, and
+   those attributes become presentational hints — which author CSS outranks,
+   but only for the properties it actually sets. Overriding `width` and
+   leaving `height` alone meant the box was 108px wide and 200px *tall*, both
+   dimensions definite, so aspect-ratio never got a say.
+
+   It cost more than four squashed thumbnails. Four 200px cards made the rail
+   taller than the photo beside it, and .hero2-right stretches its children to
+   the tallest one — so the rail ran ~350px past the bottom of the hero and
+   dragged the model's frame out of its 2:3 along the way. */
+.hero2-fitcard img { width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; display: block; }
+.hero2-fitlabel { display: block; font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 11px; padding: 4px 0 6px; text-align: center; color: var(--stone); background: var(--card); }
 .hero2-fitcard.on { border: 2.5px solid var(--violet); transform: scale(1.05); box-shadow: var(--shadow-soft); }
 .hero2-fitcard.on .hero2-fitlabel { color: var(--on-accent); background: var(--violet); }
 .hero2-fitcard:hover:not(.on) { transform: translateY(-3px); box-shadow: var(--shadow-soft); border-color: var(--butter-deep); }
@@ -577,7 +724,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 /* per-fit kinetic type — pops in with its image via .peek */
 .hero2-line {
   position: absolute; left: 20px; bottom: 18px; z-index: 3;
-  font-family: 'Baloo 2', cursive; font-weight: 800; line-height: 1;
+  font-family: var(--font-display), sans-serif; font-weight: 800; line-height: 1;
   font-size: clamp(30px, 4.2vw, 48px); letter-spacing: -0.02em; text-transform: lowercase;
   color: #fff; text-shadow: 0 2px 22px rgba(26, 23, 20, .55), 0 1px 4px rgba(26, 23, 20, .35);
   pointer-events: none;
@@ -625,7 +772,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
   position: absolute; left: 50%; bottom: 10px; transform: translate(-50%, 8px);
   text-align: center; white-space: nowrap;
   background: rgba(250, 246, 240, .94); color: var(--on-light);
-  font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 12px;
+  font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 12px;
   padding: 7px 18px; border-radius: 999px;
   /* the resting transform is set above and already carries the -50% that
      centres the pill — a second `transform` here would drop it */
@@ -633,7 +780,13 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
   transition: opacity .22s ease, transform .22s ease;
   pointer-events: none;
 }
-.feed-card:hover .feed-cta { opacity: 1; transform: translate(-50%, 0); }
+.feed-card:hover .feed-cta, .feed-card:focus-within .feed-cta { opacity: 1; transform: translate(-50%, 0); }
+/* On a touchscreen there is no hover, so a hover-only pill is a control that
+   simply does not exist — which is every phone, i.e. most of the traffic.
+   Where hover is unavailable it just sits there. */
+@media (hover: none) {
+  .feed-cta { opacity: 1; transform: translate(-50%, 0); }
+}
 .feed-meta { padding: 11px 2px 0; }
 .feed-shop { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--stone); text-decoration: none; margin-bottom: 3px; }
 .feed-shop:hover { color: var(--violet); }
@@ -651,8 +804,52 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 /* kiosk stage + camera: the photo is the interface. The box adopts the
    photo/video's own aspect ratio (set via --ar inline) so nothing gets
    cropped; height and width clamps keep the action bar above the fold. */
-.k-stage { aspect-ratio: var(--ar, 3/4); max-height: min(52vh, 560px); max-width: min(92vw, 460px); width: auto; }
-.k-cam { aspect-ratio: var(--ar, 3/4); max-height: min(46vh, 440px); max-width: min(88vw, 420px); width: auto; }
+/* svh at every width, not vh on desktop and svh on phones: the stage's whole
+   job is to keep the action bar above the fold, and vh is the tallest reading
+   of the viewport — exactly the one that pushes the bar off it. */
+.k-stage { aspect-ratio: var(--ar, 3/4); max-height: min(52svh, 560px); max-width: min(92vw, 460px); width: auto; }
+.k-cam { aspect-ratio: var(--ar, 3/4); max-height: min(46svh, 440px); max-width: min(88vw, 420px); width: auto; }
+
+/* ── photo blend ──────────────────────────────────────────────────────
+   Photographs, not every <img>. Three kinds of image are deliberately left
+   with hard edges:
+
+     QR codes      — a feathered finder pattern is a QR code that won't scan.
+     UI captures   — the owner page's dashboard and phone screenshots are
+                     rectangles of interface; fading their edges eats the
+                     very rows they were shot to show.
+     small thumbs  — a 30px avatar or a 38px cart thumbnail is nearly all
+                     edge, so a feather sized for a picture turns it to mush.
+
+   Every garment photo carries this through GarmentImage. The rules below
+   are the raw <img>s that aren't garments: hero photography, saved looks,
+   try-on renders.
+
+   Note the mask covers the border box, so anything painted outside it —
+   a box-shadow, most of all — is masked away too. A photo that blends is
+   not also floating, so the call sites here drop their frames rather than
+   keeping a shadow the mask would eat half of. */
+.img-blend,
+.hero2-visual img {
+  -webkit-mask-image: var(--photo-blend);
+  mask-image: var(--photo-blend);
+}
+
+/* ── out of stock ─────────────────────────────────────────────────────
+   A sold-out card used to be the whole card at opacity .6, which dims the
+   name and the price straight through the contrast floor — the information a
+   shopper needs in order to ask about it is the information that got hidden.
+   Grey the *photo*, badge the card, and leave the text at full strength. */
+.oos-img { filter: grayscale(1); opacity: .55; }
+.oos-badge {
+  display: inline-block; background: var(--card); color: var(--stone);
+  border: 1px solid var(--line-strong);
+  font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: var(--radius-sm);
+}
+/* the same idea for a handled/archived row: recede, stay readable */
+.done-row { background: var(--paper-deep); }
+.done-row .done-mark { color: var(--ok); font-weight: 700; }
 
 /* ── kiosk v2 — the fitting room ──────────────────────────────────────
    Same three beats as v1 (attract → capture → try on), three deliberate
@@ -786,9 +983,119 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
   .k-cam { max-height: 50svh; max-width: 92vw; }
 }
 
+/* Reduced motion is a request to stop things MOVING, not a request to stop
+   the interface responding. The blanket `* { transition: none }` that used to
+   live here took the decoration and the feedback together: a chip no longer
+   eased into its selected colour, a button no longer acknowledged a press, and
+   users who ask for reduced motion got an interface that felt broken instead
+   of one that felt calm.
+   So: looping and arrival animations stop dead, anything that translates or
+   scales stops, and colour/opacity transitions — the ones that say "I heard
+   you" — stay, just short. */
 @media (prefers-reduced-motion: reduce) {
-  * { animation: none !important; transition: none !important; }
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-property: color, background-color, border-color, outline-color,
+                         box-shadow, opacity, fill, stroke !important;
+    transition-duration: 140ms !important;
+  }
+  .btn-solid:hover, .btn-outline:hover, .btn-violet:hover, .ph-btn:active,
+  .feed-card:hover .feed-img img, .hero2-fitcard, .hero2-fitcard.on,
+  .hero-dot[data-on]::before, .feed-cta, .dlg-panel {
+    transform: none !important;
+  }
+  html { scroll-behavior: auto !important; }
 }
+
+/* ── dialog ───────────────────────────────────────────────────────────
+   One surface for all 23 overlays (see components/Dialog.tsx). The chrome
+   lives here so a call site only supplies width, padding and content; the
+   behaviour — focus trap, Escape, scroll lock, dirty guard — lives in the
+   component. Before this, every overlay was a hand-rolled fixed div with a
+   z-index picked by eye and no dialog semantics at all. */
+.dlg-scrim {
+  position: fixed; inset: 0; z-index: var(--z-overlay);
+  background: var(--scrim);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  animation: dlg-in 160ms ease-out both;
+}
+.dlg-scrim.sheet-bottom { align-items: flex-end; justify-content: center; padding: 0; }
+.dlg-scrim.drawer-right { align-items: stretch; justify-content: flex-end; padding: 0; }
+/* a whole-screen surface that is still a dialog — the saved-looks gallery,
+   which used to be a bare fixed div that a keyboard user tabbed straight out of */
+.dlg-scrim.dlg-full { padding: 0; background: var(--paper); }
+.dlg-full > .dlg-panel {
+  max-width: none; max-height: none; width: 100%; height: 100dvh;
+  border: 0; border-radius: 0; box-shadow: none; background: var(--paper);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.dlg-panel {
+  position: relative; z-index: var(--z-dialog);
+  background: var(--raised); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-modal);
+  box-shadow: var(--shadow-soft);
+  max-width: min(560px, 100%); max-height: min(88dvh, 100%);
+  width: 100%; overflow: auto;
+  animation: peek 200ms ease-out both;
+}
+.sheet-bottom > .dlg-panel {
+  border-radius: var(--radius-modal) var(--radius-modal) 0 0;
+  border-bottom: 0; max-height: 88dvh;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.drawer-right > .dlg-panel {
+  border-radius: var(--radius-modal) 0 0 var(--radius-modal);
+  max-width: min(420px, 100%); max-height: none; height: 100dvh;
+  animation: dlg-slide 220ms cubic-bezier(.2,.7,.3,1) both;
+}
+.dlg-panel:focus { outline: none; }
+@keyframes dlg-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes dlg-slide { from { transform: translateX(24px); opacity: 0 } to { transform: none; opacity: 1 } }
+
+/* the dialog's own header row — title on the left, one × on the right */
+.dlg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.dlg-title { font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 19px; line-height: 1.2; margin: 0; color: var(--ink); }
+.dlg-desc { font-size: 13.5px; color: var(--stone); margin: 4px 0 0; line-height: 1.5; }
+.dlg-x {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--card); color: var(--stone);
+  font-size: 17px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.dlg-x:hover { color: var(--ink); }
+
+/* ── toast ────────────────────────────────────────────────────────────
+   Replaces alert(). A native alert blocks the whole tab, cannot be styled,
+   cannot carry an action, and on a kiosk tablet in a shop it is a system
+   dialog with the site's origin in the title bar. */
+.toast-wrap {
+  position: fixed; z-index: var(--z-toast);
+  left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  width: min(420px, calc(100vw - 24px)); pointer-events: none;
+}
+.toast {
+  pointer-events: auto; width: 100%;
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--raised); color: var(--ink);
+  border: 1px solid var(--line); border-left: 3px solid var(--stone);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-soft);
+  padding: 12px 14px; font-size: 14px; line-height: 1.45; font-weight: 500;
+  animation: peek 200ms ease-out both;
+}
+.toast.err { border-left-color: var(--danger); }
+.toast.warn { border-left-color: var(--warn); }
+.toast.ok { border-left-color: var(--ok); }
+.toast .toast-body { flex: 1; min-width: 0; }
+.toast .toast-act {
+  flex-shrink: 0; background: none; border: 0; cursor: pointer; padding: 0 2px;
+  font-family: inherit; font-size: 13.5px; font-weight: 700; color: var(--violet);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.toast .toast-x { flex-shrink: 0; background: none; border: 0; cursor: pointer; color: var(--stone); font-size: 16px; line-height: 1; padding: 2px 4px; }
 
 @keyframes shimmer { 0% { background-position: -400px 0 } 100% { background-position: 400px 0 } }
 /* the peek — new content peeks up from the bottom edge. Cards, sheets,

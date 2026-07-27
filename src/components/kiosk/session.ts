@@ -18,6 +18,30 @@ import { signOut } from "@/lib/account";
 export const IDLE_MS = 90_000;
 export const IDLE_GRACE_MS = 15_000;
 
+/* ── which device am I? ───────────────────────────────────────────────
+   Shared mode used to be reachable only by appending ?shared=1 to the URL.
+   That is the switch deciding whether one shopper's face and phone number are
+   still on screen when the next one picks the tablet up, and it had no
+   interface, no indicator, and no memory: a staff member who reloaded the
+   tablet, or opened it from a bookmark, silently got personal-phone
+   behaviour on a device the whole street uses.
+
+   So it is a device setting now, stored here, with ?shared=1 kept as a way to
+   *set* it — an existing bookmarked link still does the right thing, and now
+   makes it stick. Nothing turns it off implicitly; only the toggle does. */
+const SHARED_KEY = "peeq:kiosk-shared";
+
+export function getDeviceShared(): boolean {
+  try { return localStorage.getItem(SHARED_KEY) === "1"; } catch { return false; }
+}
+
+export function setDeviceShared(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(SHARED_KEY, "1");
+    else localStorage.removeItem(SHARED_KEY);
+  } catch { /* private mode — the URL flag still works for this session */ }
+}
+
 /* Erase every trace of the person who just walked away: their body
    measurements, their account session, their face and saved looks on this
    device. Sign out first, then wipe device storage — and only device storage.

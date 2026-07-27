@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export default function ShopNotFound() {
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, textAlign: "center", padding: 24, background: "var(--sage)" }}>
+    <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, textAlign: "center", padding: 24, background: "var(--paper)" }}>
       <div className="ph-display" style={{ fontSize: 26, color: "var(--ink)" }}>shop not found</div>
       <p style={{ color: "var(--stone)", maxWidth: 380, margin: 0 }}>
         This link doesn&apos;t match any shop on peeq. It may have moved, or the shop may have changed its link.

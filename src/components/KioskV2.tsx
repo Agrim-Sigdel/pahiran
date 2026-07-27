@@ -19,10 +19,14 @@ import { LangContext, STRINGS, useLangState, useT } from "@/lib/i18n";
 import type { Wearable, Shop } from "@/lib/types";
 import Icon from "@/components/Icon";
 import EeMark from "@/components/EeMark";
+import Dialog from "@/components/Dialog";
+import { toastErr, toastWarn, toastFailure } from "@/lib/toast";
 import {
   LooksGallery, InterestedModal, SizeBadge, FindMySizeSheet, type KioskProps,
 } from "@/components/kiosk/parts";
-import { useIdleReset, wipeDeviceSession } from "@/components/kiosk/session";
+import {
+  useIdleReset, wipeDeviceSession, getDeviceShared, setDeviceShared,
+} from "@/components/kiosk/session";
 
 /* Kiosk v2 — the fitting room.
 
@@ -59,8 +63,10 @@ const REVEAL_HOLD_MS = 420;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+type Step = "attract" | "capture" | "tryon";
+
 export default function KioskV2({ shop, catalog, exit, initialGarmentId, shared = false }: KioskProps) {
-  const [step, setStep] = useState<"attract" | "capture" | "tryon">("attract");
+  const [step, setStep] = useState<Step>("attract");
   const [photo, setPhoto] = useState<string | null>(null);
   const [catFilter, setCatFilter] = useState("All");
   const [savedPhoto, setSavedPhoto] = useState<string | null>(null);
@@ -68,6 +74,7 @@ export default function KioskV2({ shop, catalog, exit, initialGarmentId, shared 
   const [showLooks, setShowLooks] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [contact, setContact] = useState({ name: "", phone: "" });
+  const [showSharedInfo, setShowSharedInfo] = useState(false);
   const [lang, toggleLang] = useLangState();
   const t = STRINGS[lang];
   const { user, configured } = useAccount();
@@ -80,16 +87,56 @@ export default function KioskV2({ shop, catalog, exit, initialGarmentId, shared 
   const rail = catFilter === "All" ? catalog : catalog.filter((g) => g.category === catFilter);
   const initialGarment = initialGarmentId ? catalog.find((g) => g.id === initialGarmentId) ?? null : null;
 
+  /* Is this a shop's tablet or somebody's phone? Until we know, assume the
+     tablet: everything shared mode turns off is something personal, so the
+     safe guess before localStorage has been read is the one that shows a
+     stranger nothing. `null` is "not resolved yet", and only an explicit
+     `false` unlocks the personal features.
+
+     ?shared=1 still works and now *sets* the device flag, so the link a
+     vendor bookmarked on the shop tablet keeps behaving correctly after a
+     reload — which it did not before, when the flag lived only in the URL. */
+  const [sharedState, setSharedState] = useState<boolean | null>(null);
   useEffect(() => {
-    if (shared) return; // a shared tablet never surfaces a previous shopper's photo or looks
+    if (shared) setDeviceShared(true);
+    setSharedState(shared || getDeviceShared());
+  }, [shared]);
+  const isShared = sharedState !== false;
+
+  useEffect(() => {
+    if (isShared) return; // a shared tablet never surfaces a previous shopper's photo or looks
     getRememberedPhoto().then(setSavedPhoto);
     listLooks().then((l) => setLooksCount(l.length));
-  }, [shared]);
+  }, [isShared]);
 
   // prefill checkout for signed-in shoppers, same as the storefront drawer
   useEffect(() => {
-    if (loggedIn && !shared) getContact().then((c) => c && setContact(c));
-  }, [loggedIn, shared]);
+    if (loggedIn && !isShared) getContact().then((c) => c && setContact(c));
+  }, [loggedIn, isShared]);
+
+  /* Android's back gesture. Both kiosks were `position: fixed` shells holding
+     their phase in React state, so on the phone of a shopper who arrived by
+     QR, Back left the shop's site entirely instead of stepping back a beat —
+     from the middle of a try-on, with no way to return except re-scanning.
+     Each forward step pushes an entry; popstate walks them back. Backing out
+     of `attract` still leaves, which is the one time that's the right answer. */
+  const goStep = useCallback((next: Step) => {
+    setStep(next);
+    try {
+      if (next === "attract") history.replaceState({ pqStep: "attract" }, "");
+      else history.pushState({ pqStep: next }, "");
+    } catch { /* history unavailable — the kiosk still works, Back just exits */ }
+  }, []);
+
+  useEffect(() => {
+    try { history.replaceState({ ...(history.state ?? {}), pqStep: "attract" }, ""); } catch {}
+    const onPop = (e: PopStateEvent) => {
+      const s = (e.state as { pqStep?: Step } | null)?.pqStep;
+      setStep(s === "capture" || s === "tryon" ? s : "attract");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   /* End of one shopper's session. On a personal phone this only returns to
      the attract screen — the saved photo and looks are that shopper's own. On
@@ -97,8 +144,8 @@ export default function KioskV2({ shop, catalog, exit, initialGarmentId, shared 
      it (see components/kiosk/session). */
   const reset = useCallback(() => {
     setPhoto(null);
-    setStep("attract");
-    if (!shared) return;
+    goStep("attract");
+    if (!isShared) return;
     setCatFilter("All");
     setShowLooks(false);
     setCartOpen(false);
@@ -110,9 +157,20 @@ export default function KioskV2({ shop, catalog, exit, initialGarmentId, shared 
     // depends on cart.clear, not cart: useCart returns a fresh object every
     // render, so depending on cart would change reset's identity every render
     // and re-arm the idle timers forever — they'd never actually fire.
-  }, [shared, clearCart, loggedIn]);
+  }, [isShared, clearCart, loggedIn, goStep]);
 
-  const [idleWarning, dismissIdle] = useIdleReset(shared && step !== "attract", reset);
+  const [idleWarning, dismissIdle] = useIdleReset(isShared && step !== "attract", reset);
+
+  /* Turning shared mode on wipes whatever the previous (personal) session
+     left behind — otherwise the staff member who flips it on hands the next
+     shopper the last one's face. Turning it off only stops the wiping. */
+  const toggleShared = () => {
+    const next = !isShared;
+    setDeviceShared(next);
+    setSharedState(next);
+    if (next) { setSavedPhoto(null); setLooksCount(0); void wipeDeviceSession(loggedIn); }
+    setShowSharedInfo(false);
+  };
 
   const contactWa = waLink(
     shop.whatsapp,
@@ -122,7 +180,7 @@ export default function KioskV2({ shop, catalog, exit, initialGarmentId, shared 
   const takePhoto = (p: string, remember: boolean) => {
     if (remember) { rememberPhoto(p); setSavedPhoto(p); }
     setPhoto(p);
-    setStep("tryon");
+    goStep("tryon");
   };
 
   return (
@@ -136,6 +194,15 @@ export default function KioskV2({ shop, catalog, exit, initialGarmentId, shared 
             {shop.name || "peeq"}
           </span>
           {shop.area && <span className="hide-sm" style={{ color: "var(--k2-quiet)", fontSize: 12 }}>{shop.area}</span>}
+          {/* Shared mode is a promise about privacy, so it has to be visible
+              while it is in force — not only in a query string nobody reads. */}
+          {isShared && (
+            <button className="ph-btn" onClick={() => setShowSharedInfo(true)}
+              title={t.sharedOnNote}
+              style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--k2-accent)", border: "1px solid var(--k2-hair)", background: "var(--k2-glass)", borderRadius: "var(--radius-pill)", padding: "4px 10px" }}>
+              {t.sharedBadge}
+            </button>
+          )}
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
           {/* language toggle: visible on every screen, never buried */}
@@ -152,7 +219,7 @@ export default function KioskV2({ shop, catalog, exit, initialGarmentId, shared 
               <Icon name="bag" /> ({cart.count})
             </button>
           )}
-          {looksCount > 0 && !shared && (
+          {looksCount > 0 && !isShared && (
             <button className="ph-btn k2-pill" onClick={() => setShowLooks(true)} aria-label={t.myLooksLabel}>
               <Icon name="heart-filled" /><span className="hide-sm"> {t.myLooksLabel}</span> ({looksCount})
             </button>
@@ -172,10 +239,10 @@ export default function KioskV2({ shop, catalog, exit, initialGarmentId, shared 
 
       {idleWarning && (
         <div role="status" aria-live="polite"
-          style={{ position: "fixed", left: "50%", top: 62, transform: "translateX(-50%)", zIndex: 90, background: "var(--butter)", color: "var(--on-light)", borderRadius: 999, padding: "11px 20px", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 12, boxShadow: "0 8px 26px rgba(0,0,0,.45)" }}>
+          style={{ position: "fixed", left: "50%", top: 62, transform: "translateX(-50%)", zIndex: "var(--z-toast)", background: "var(--butter)", color: "var(--on-light)", borderRadius: "var(--radius-pill)", padding: "11px 20px", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 12, boxShadow: "0 8px 26px rgba(0,0,0,.45)" }}>
           {t.stillThere}
           <button className="ph-btn" onClick={dismissIdle}
-            style={{ background: "#1A1714", color: "#FAF6F0", fontWeight: 700, borderRadius: 999, padding: "7px 16px", fontSize: 13.5 }}>
+            style={{ background: "#1A1714", color: "#FAF6F0", fontWeight: 700, borderRadius: "var(--radius-pill)", padding: "7px 16px", fontSize: 13.5 }}>
             {t.stillThereYes}
           </button>
         </div>
@@ -189,18 +256,36 @@ export default function KioskV2({ shop, catalog, exit, initialGarmentId, shared 
 
       {step === "attract" && (
         <AttractV2 catalog={catalog} highlight={initialGarment}
-          start={() => setStep("capture")}
+          start={() => goStep("capture")}
           savedPhoto={savedPhoto}
-          useSaved={() => { setPhoto(savedPhoto); setStep("tryon"); }}
+          useSaved={() => { setPhoto(savedPhoto); goStep("tryon"); }}
           forgetSaved={() => { forgetPhoto(); setSavedPhoto(null); }}
-          loggedIn={loggedIn} showAccount={configured && !shared} />
+          loggedIn={loggedIn} showAccount={configured && !isShared}
+          isShared={isShared} onSharedInfo={() => setShowSharedInfo(true)} />
       )}
-      {step === "capture" && <CaptureV2 onPhoto={takePhoto} loggedIn={loggedIn} shared={shared} />}
+      {step === "capture" && <CaptureV2 onPhoto={takePhoto} loggedIn={loggedIn} shared={isShared} />}
       {step === "tryon" && photo && (
         <MirrorV2 photo={photo} shop={shop} rail={rail} cats={cats} catFilter={catFilter} setCatFilter={setCatFilter}
-          retakePhoto={() => setStep("capture")} initialGarment={initialGarment}
+          retakePhoto={() => goStep("capture")} initialGarment={initialGarment}
           cart={canShop ? cart : null} onLookSaved={() => setLooksCount((n) => n + 1)}
-          onOpenBag={() => setCartOpen(true)} shared={shared} />
+          onOpenBag={() => setCartOpen(true)} shared={isShared} />
+      )}
+
+      {showSharedInfo && (
+        <Dialog onClose={() => setShowSharedInfo(false)} width={420}
+          title={isShared ? t.sharedOnNote : t.sharedTurnOn} desc={t.sharedExplain}
+          panelStyle={{ padding: "20px 22px 18px" }}>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16, flexWrap: "wrap" }}>
+            <button className="ph-btn" onClick={() => setShowSharedInfo(false)}
+              style={{ padding: "10px 20px", fontSize: 14, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)" }}>
+              {t.close}
+            </button>
+            <button className="ph-btn" onClick={toggleShared}
+              style={{ padding: "10px 22px", fontSize: 14, fontWeight: 700, fontFamily: "var(--font-display), sans-serif", background: "var(--violet)", color: "var(--on-accent)", borderRadius: "var(--radius-btn)" }}>
+              {isShared ? t.sharedTurnOff : t.sharedTurnOnCta}
+            </button>
+          </div>
+        </Dialog>
       )}
     </div>
     </LangContext.Provider>
@@ -208,21 +293,22 @@ export default function KioskV2({ shop, catalog, exit, initialGarmentId, shared 
 }
 
 /* ---------- attract: the shop's own rack, drifting ---------- */
-function AttractV2({ catalog, highlight, start, savedPhoto, useSaved, forgetSaved, loggedIn, showAccount }: {
+function AttractV2({ catalog, highlight, start, savedPhoto, useSaved, forgetSaved, loggedIn, showAccount, isShared, onSharedInfo }: {
   catalog: Wearable[]; highlight: Wearable | null; start: () => void;
   savedPhoto: string | null; useSaved: () => void; forgetSaved: () => void;
   loggedIn: boolean; showAccount: boolean;
+  isShared: boolean; onSharedInfo: () => void;
 }) {
   const t = useT();
   const strip = catalog.slice(0, 14);
   return (
-    <div className="k2-body" style={{ position: "relative" }}>
+    <div id="main" className="k2-body" style={{ position: "relative" }}>
       {/* what's actually inside this shop, before we ask anyone for a photo */}
       <div aria-hidden style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", overflow: "hidden", opacity: 0.3 }}>
         <div className="k2-drift">
           {[...strip, ...strip].map((g, i) => (
-            <img key={g.id + "-" + i} src={g.image} alt=""
-              style={{ width: 132, aspectRatio: "3/4", objectFit: "cover", borderRadius: 14, flexShrink: 0 }} />
+            <img key={g.id + "-" + i} src={g.image} alt="" className="img-blend"
+              style={{ width: 132, aspectRatio: "3/4", objectFit: "cover", borderRadius: "var(--radius-lg)", flexShrink: 0 }} />
           ))}
         </div>
       </div>
@@ -230,13 +316,18 @@ function AttractV2({ catalog, highlight, start, savedPhoto, useSaved, forgetSave
 
       <div style={{ position: "relative", flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "28px 24px" }}>
         <EeMark size={52} looking color="var(--k2-accent)" />
-        <div className="kicker" style={{ margin: "18px 0 10px", color: "var(--violet)" }}>{t.virtualTrialRoom}</div>
+        {/* --k2-accent, not --violet. They resolve to the same colour today,
+            which is exactly why it matters: the room reads its own variable
+            everywhere, so if the fitting room ever needs to fork its accent
+            again it forks in one place instead of leaving half the screen
+            behind. Mixed usage is how v2 ended up with two accents before. */}
+        <div className="kicker" style={{ margin: "18px 0 10px", color: "var(--k2-accent)" }}>{t.virtualTrialRoom}</div>
         <div className="ph-display" style={{ fontSize: "clamp(30px, 6.5vw, 46px)", lineHeight: 1.12 }}>
           {t.headline1}<br />{t.headline2}
         </div>
         {highlight ? (
-          <div className="peek" style={{ display: "flex", alignItems: "center", gap: 12, margin: "20px 0 26px", background: "var(--k2-glass)", border: "1px solid var(--k2-hair)", borderRadius: 18, padding: "10px 18px 10px 10px" }}>
-            <img src={highlight.image} alt={highlight.name} style={{ width: 50, height: 66, objectFit: "cover", borderRadius: 12 }} />
+          <div className="peek" style={{ display: "flex", alignItems: "center", gap: 12, margin: "20px 0 26px", background: "var(--k2-glass)", border: "1px solid var(--k2-hair)", borderRadius: "var(--radius-xl)", padding: "10px 18px 10px 10px" }}>
+            <img src={highlight.image} alt={highlight.name} style={{ width: 50, height: 66, objectFit: "cover", borderRadius: "var(--radius-md)" }} />
             <div style={{ textAlign: "left" }}>
               <div style={{ fontWeight: 600, fontSize: 14 }}>{highlight.name}</div>
               <div style={{ color: "var(--k2-quiet)", fontWeight: 500, fontSize: 14 }}>{npr(highlight.price)}</div>
@@ -248,7 +339,7 @@ function AttractV2({ catalog, highlight, start, savedPhoto, useSaved, forgetSave
           </p>
         )}
         <button className="ph-btn" onClick={start}
-          style={{ background: "var(--k2-accent)", color: "var(--k2-accent-ink)", fontFamily: "'Baloo 2', cursive", fontWeight: 700, padding: "16px 46px", fontSize: 18, borderRadius: 999 }}>
+          style={{ background: "var(--k2-accent)", color: "var(--k2-accent-ink)", fontFamily: "var(--font-display), sans-serif", fontWeight: 700, padding: "16px 46px", fontSize: 18, borderRadius: "var(--radius-pill)" }}>
           {highlight ? t.seeItOnYou : t.tapToBegin}
         </button>
         {savedPhoto && (
@@ -265,10 +356,19 @@ function AttractV2({ catalog, highlight, start, savedPhoto, useSaved, forgetSave
           </>
         )}
         {showAccount && (
-          <a href="/account" style={{ marginTop: 22, fontSize: 13, color: "var(--violet)", fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3 }}>
+          <a href="/account" style={{ marginTop: 22, fontSize: 13, color: "var(--k2-accent)", fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3 }}>
             {loggedIn ? <><Icon name="heart-filled" /> your saved looks</> : "sign in to save your looks"}
           </a>
         )}
+
+        {/* The one screen where staff, not shoppers, are looking — so this is
+            where the shared-tablet switch belongs. Quiet enough that a shopper
+            scrolls past it; present enough that setting up a tablet doesn't
+            require knowing about a query parameter. */}
+        <button className="ph-btn" onClick={onSharedInfo}
+          style={{ marginTop: 26, fontSize: 12, color: "var(--k2-quiet)", textDecoration: "underline", textUnderlineOffset: 3, padding: "6px 10px" }}>
+          {isShared ? t.sharedOnNote : t.sharedTurnOn}
+        </button>
       </div>
     </div>
   );
@@ -290,6 +390,7 @@ function CaptureV2({ onPhoto, loggedIn, shared = false }: { onPhoto: (dataUrl: s
   // opt-in, never opt-out: defaulting this on wrote each shopper's face to the
   // device. On a shared tablet the option does not exist at all.
   const [remember, setRemember] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const t = useT();
 
   useEffect(() => {
@@ -328,12 +429,25 @@ function CaptureV2({ onPhoto, loggedIn, shared = false }: { onPhoto: (dataUrl: s
 
   const handleUpload = async (file: File | undefined) => {
     if (!file) return;
+    if (!file.type.startsWith("image/")) { toastErr(t.notAnImage); return; }
     try { onPhoto(await fileToCompressedDataURL(file, 1000, 0.85), remember); }
-    catch { alert(t.couldNotReadPhoto); }
+    catch (e) { toastFailure(t.couldNotReadPhoto, e); }
   };
 
+  /* The box has a 2px dashed border, which is the universal "drop a file
+     here" convention — and it had no onDrop, so dropping a photo on it made
+     the browser navigate away from the kiosk to the file itself. Now the
+     convention is true. */
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    handleUpload(e.dataTransfer.files?.[0]);
+  };
+  const onDragOver = (e: React.DragEvent) => { e.preventDefault(); setDragging(true); };
+  const onDragLeave = () => setDragging(false);
+
   return (
-    <div className="k2-body">
+    <div id="main" className="k2-body">
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 20px 28px", gap: 12 }}>
         <div className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(19px, 3vw, 24px)", textAlign: "center" }}>
           {mode === "upload" ? t.uploadTitle : t.standBack}
@@ -342,55 +456,74 @@ function CaptureV2({ onPhoto, loggedIn, shared = false }: { onPhoto: (dataUrl: s
 
         {mode === "upload" ? (
           /* upload-first: the whole box is the file picker — no camera
-             permission is requested unless the shopper asks for the camera */
-          <div onClick={() => fileRef.current?.click()} className="k-cam"
+             permission is requested unless the shopper asks for the camera.
+
+             A <button>, not a <div onClick>. This is the entry point to the
+             entire product, and as a div with a display:none input behind it
+             it had no role, no tab stop and no keyboard activation: a keyboard
+             or screen-reader user could not upload a photo at all, which meant
+             they could not use peeq at all. */
+          <button type="button" onClick={() => fileRef.current?.click()} className="k-cam"
+            aria-label={t.uploadCta}
+            onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}
             style={{
-              "--ar": "3/4", borderRadius: 20, border: "2px dashed var(--violet)", background: "var(--k2-glass)",
+              "--ar": "3/4", borderRadius: "var(--radius-card)",
+              border: (dragging ? "2px solid " : "2px dashed ") + "var(--k2-accent)",
+              background: "var(--k2-glass)",
               display: "flex", flexDirection: "column", gap: 12, alignItems: "center", justifyContent: "center",
-              flexShrink: 0, padding: 24, cursor: "pointer", textAlign: "center",
+              flexShrink: 0, padding: 24, cursor: "pointer", textAlign: "center", color: "var(--ink)",
             } as React.CSSProperties}>
             <Icon name="person" size={40} />
             <div style={{ fontSize: 14, lineHeight: 1.6, color: "var(--k2-quiet)", maxWidth: 260 }}>{t.uploadHint}</div>
-            <span className="ph-btn" style={{ background: "var(--k2-accent)", color: "var(--k2-accent-ink)", fontFamily: "'Baloo 2', cursive", fontWeight: 700, padding: "12px 26px", fontSize: 15, borderRadius: 999 }}>
-              {t.uploadCta}
+            <span className="ph-btn" style={{ background: "var(--k2-accent)", color: "var(--k2-accent-ink)", fontFamily: "var(--font-display), sans-serif", fontWeight: 700, padding: "12px 26px", fontSize: 15, borderRadius: "var(--radius-pill)" }}>
+              {dragging ? t.dropNow : t.uploadCta}
             </span>
-          </div>
-        ) : (
-          <div onClick={camState === "denied" ? () => fileRef.current?.click() : undefined} className="k-cam"
+            {/* only where a drag is possible at all */}
+            <span className="hide-sm" style={{ fontSize: 12, color: "var(--k2-quiet)" }}>{t.dropHere}</span>
+          </button>
+        ) : camState === "denied" ? (
+          /* the camera-denied fallback is a file picker too, so it is a button
+             for the same reason the box above is */
+          <button type="button" onClick={() => fileRef.current?.click()} className="k-cam"
+            aria-label={t.uploadCta}
+            onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}
             style={{
               ...(camAr ? ({ "--ar": String(camAr) } as React.CSSProperties) : {}),
-              borderRadius: 20, overflow: "hidden", background: "var(--stage)", position: "relative",
+              borderRadius: "var(--radius-card)", overflow: "hidden", background: "var(--stage)", position: "relative",
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-              cursor: camState === "denied" ? "pointer" : "default",
+              cursor: "pointer", border: "2px dashed var(--k2-accent)",
             }}>
-            {camState !== "denied" ? (
-              <>
-                {/* contained, never cropped — the shopper sees exactly the
-                    frame that will be sent */}
-                <video ref={videoRef} playsInline muted
-                  onLoadedMetadata={(e) => {
-                    const el = e.currentTarget;
-                    if (el.videoWidth && el.videoHeight) setCamAr(el.videoWidth / el.videoHeight);
-                  }}
-                  style={{ width: "100%", height: "100%", objectFit: "contain", transform: "scaleX(-1)" }} />
-                {/* framing guide: a render is only as good as the photo, and
-                    the commonest bad photo is a close-up selfie */}
-                {camState === "live" && (
-                  <svg viewBox="0 0 100 150" preserveAspectRatio="xMidYMid meet" aria-hidden
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", opacity: 0.5 }}>
-                    <g fill="none" stroke="var(--butter)" strokeWidth="0.7" strokeDasharray="3 3" strokeLinecap="round">
-                      <circle cx="50" cy="34" r="12" />
-                      <path d="M27 84c0-13 10-24 23-24s23 11 23 24" />
-                      <path d="M31 84v42M69 84v42" />
-                    </g>
-                  </svg>
-                )}
-              </>
-            ) : (
-              <div style={{ textAlign: "center", color: "var(--k2-quiet)", padding: 24, fontSize: 14, lineHeight: 1.6 }}>
-                {t.cameraUnavailable}<br />
-                <span style={{ color: "var(--violet)", fontWeight: 600 }}>{t.tapAnywhere}</span><br />{t.uploadInstead}
-              </div>
+            <div style={{ textAlign: "center", color: "rgba(255,255,255,.75)", padding: 24, fontSize: 14, lineHeight: 1.6 }}>
+              {t.cameraUnavailable}<br />
+              <span style={{ color: "var(--butter)", fontWeight: 600 }}>{t.tapAnywhere}</span><br />{t.uploadInstead}
+            </div>
+          </button>
+        ) : (
+          <div className="k-cam"
+            style={{
+              ...(camAr ? ({ "--ar": String(camAr) } as React.CSSProperties) : {}),
+              borderRadius: "var(--radius-card)", overflow: "hidden", background: "var(--stage)", position: "relative",
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            }}>
+            {/* contained, never cropped — the shopper sees exactly the
+                frame that will be sent */}
+            <video ref={videoRef} playsInline muted
+              onLoadedMetadata={(e) => {
+                const el = e.currentTarget;
+                if (el.videoWidth && el.videoHeight) setCamAr(el.videoWidth / el.videoHeight);
+              }}
+              style={{ width: "100%", height: "100%", objectFit: "contain", transform: "scaleX(-1)" }} />
+            {/* framing guide: a render is only as good as the photo, and
+                the commonest bad photo is a close-up selfie */}
+            {camState === "live" && (
+              <svg viewBox="0 0 100 150" preserveAspectRatio="xMidYMid meet" aria-hidden
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", opacity: 0.5 }}>
+                <g fill="none" stroke="var(--butter)" strokeWidth="0.7" strokeDasharray="3 3" strokeLinecap="round">
+                  <circle cx="50" cy="34" r="12" />
+                  <path d="M27 84c0-13 10-24 23-24s23 11 23 24" />
+                  <path d="M31 84v42M69 84v42" />
+                </g>
+              </svg>
             )}
             {camState === "starting" && (
               <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", justifyContent: "center", color: "var(--k2-quiet)", fontSize: 13 }}>
@@ -401,9 +534,9 @@ function CaptureV2({ onPhoto, loggedIn, shared = false }: { onPhoto: (dataUrl: s
           </div>
         )}
 
-        <div style={{ maxWidth: 360, textAlign: "left", background: "var(--k2-glass)", border: "1px solid var(--k2-hair)", borderRadius: 18, padding: "13px 17px", fontSize: 13, lineHeight: 1.6, color: "var(--k2-quiet)" }}>
+        <div style={{ maxWidth: 360, textAlign: "left", background: "var(--k2-glass)", border: "1px solid var(--k2-hair)", borderRadius: "var(--radius-xl)", padding: "13px 17px", fontSize: 13, lineHeight: 1.6, color: "var(--k2-quiet)" }}>
           <b style={{ color: "var(--ink)" }}>{t.consentTitle}</b> {t.consentBody}{" "}
-          <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "var(--violet)", textUnderlineOffset: 2 }}>
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "var(--k2-accent)", textUnderlineOffset: 2 }}>
             {t.privacyLink}
           </a>
         </div>
@@ -417,7 +550,7 @@ function CaptureV2({ onPhoto, loggedIn, shared = false }: { onPhoto: (dataUrl: s
             <>
               {camState === "live" && (
                 <button className="ph-btn" onClick={snap}
-                  style={{ background: "var(--k2-accent)", color: "var(--k2-accent-ink)", fontFamily: "'Baloo 2', cursive", fontWeight: 700, padding: "14px 32px", fontSize: 16, borderRadius: 999 }}>
+                  style={{ background: "var(--k2-accent)", color: "var(--k2-accent-ink)", fontFamily: "var(--font-display), sans-serif", fontWeight: 700, padding: "14px 32px", fontSize: 16, borderRadius: "var(--radius-pill)" }}>
                   {t.agreeTakePhoto}
                 </button>
               )}
@@ -434,7 +567,7 @@ function CaptureV2({ onPhoto, loggedIn, shared = false }: { onPhoto: (dataUrl: s
         {!shared && (
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--k2-quiet)", cursor: "pointer" }}>
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}
-              style={{ accentColor: "var(--violet)", width: 16, height: 16 }} />
+              style={{ accentColor: "var(--k2-accent)", width: 16, height: 16 }} />
             {t.rememberPhoto}
           </label>
         )}
@@ -451,7 +584,7 @@ function CaptureV2({ onPhoto, loggedIn, shared = false }: { onPhoto: (dataUrl: s
    The ee blinks over the dimmed photo, as everywhere else in peeq. The one
    change from v1: `ready` — the render has landed AND decoded, so the bar can
    honestly finish. Without it the bar sits at 99% through the download. */
-function RevealOverlay({ garment, ready }: { garment: Wearable | null; ready: boolean }) {
+function RevealOverlay({ garment, ready, onCancel }: { garment: Wearable | null; ready: boolean; onCancel: () => void }) {
   const t = useT();
   const [msg, setMsg] = useState(0);
   /* Asymptotic progress — quick at first, easing toward a finish it never
@@ -492,12 +625,20 @@ function RevealOverlay({ garment, ready }: { garment: Wearable | null; ready: bo
      is left ABOVE the text block, so on a short stage they can never overlap. */
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      {/* The whole wait used to be silent to a screen reader: an animated
+          blink, a bar with no text tied to it, and nothing announced. One
+          polite live region carries the state; the rotating flavour messages
+          deliberately stay out of it, since re-announcing every 3.2s would be
+          noise rather than information. */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {ready ? t.genReady : t.genAria(garment?.name || "")}
+      </div>
       <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <EeMark size="clamp(38px, 12vw, 64px)" looking color="#fff" />
       </div>
       <div style={{ padding: "26px 14px 16px", background: "linear-gradient(transparent, rgba(13,11,10,.92) 45%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 9, textAlign: "center" }}>
         {garment && (
-          <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.16)", borderRadius: 999, padding: "5px 14px 5px 5px", maxWidth: "88%" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.16)", borderRadius: "var(--radius-pill)", padding: "5px 14px 5px 5px", maxWidth: "88%" }}>
             <img src={garment.image} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", display: "block", flexShrink: 0 }} />
             <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,.9)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{garment.name}</span>
           </div>
@@ -505,12 +646,22 @@ function RevealOverlay({ garment, ready }: { garment: Wearable | null; ready: bo
         <div key={ready ? "ready" : msg} className="peek ph-display" style={{ fontSize: "clamp(15px, 4.4vw, 18px)", lineHeight: 1.35, fontWeight: 600, color: ready ? "var(--butter)" : "#fff", maxWidth: 340, padding: "0 6px" }}>
           {ready ? t.genReady : t.genMessages[msg % t.genMessages.length]}
         </div>
-        <div style={{ width: "72%", maxWidth: 300, height: 5, borderRadius: 5, background: "rgba(255,255,255,.2)", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: pct + "%", borderRadius: 5, background: ready ? "var(--butter)" : "#fff", transition: "width .3s linear, background .3s ease" }} />
+        <div style={{ width: "72%", maxWidth: 300, height: 5, borderRadius: "var(--radius-sm)", background: "rgba(255,255,255,.2)", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: pct + "%", borderRadius: "var(--radius-sm)", background: ready ? "var(--butter)" : "#fff", transition: "width .3s linear, background .3s ease" }} />
         </div>
-        <div style={{ color: "rgba(255,255,255,.55)", fontSize: 11.5, lineHeight: 1.5, maxWidth: 320, padding: "0 8px" }}>
+        <div style={{ color: "rgba(255,255,255,.72)", fontSize: 12, lineHeight: 1.5, maxWidth: 320, padding: "0 8px" }}>
           {pct}%{ready ? "" : " · " + (slow ? t.genSlow : t.genFooter)}
         </div>
+        {/* A way out. There was none: a mis-tap committed the shopper to one
+            to two minutes of staring at their own dimmed photo with no button
+            on screen at all. Hidden once `ready` — stopping half a second
+            before the picture appears helps nobody. */}
+        {!ready && (
+          <button className="ph-btn" onClick={onCancel}
+            style={{ marginTop: 2, color: "rgba(255,255,255,.85)", fontSize: 13, fontWeight: 600, padding: "8px 18px", border: "1px solid rgba(255,255,255,.4)", borderRadius: "var(--radius-pill)" }}>
+            {t.genCancel}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -525,34 +676,32 @@ function RevealOverlay({ garment, ready }: { garment: Wearable | null; ready: bo
 function ConfirmTryOn({ garment, onCancel, onConfirm }: { garment: Wearable; onCancel: () => void; onConfirm: () => void }) {
   const t = useT();
   return (
-    <div onClick={onCancel}
-      style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 60, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="peek"
-        style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", width: 380, maxWidth: "100%", padding: "22px 22px 20px", marginBottom: 8, color: "var(--ink)" }}>
-        <div style={{ display: "flex", gap: 14, alignItems: "center", textAlign: "left" }}>
-          <img src={garment.image} alt="" style={{ width: 62, height: 82, objectFit: "cover", borderRadius: 12, flexShrink: 0 }} />
-          <div style={{ minWidth: 0 }}>
-            <div className="ph-display" style={{ fontSize: 21, fontWeight: 600 }}>{t.confirmTryTitle}</div>
-            <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{garment.name}</div>
-            <div style={{ fontSize: 13, color: "var(--k2-quiet)" }}>
-              {npr(garment.price)}{garment.stitchedToOrder ? " · " + t.madeToOrder.toLowerCase() : ""}
-            </div>
+    <Dialog variant="sheet" onClose={onCancel} title={t.confirmTryTitle} hideHeader width={380}
+      scrimStyle={{ backdropFilter: "blur(6px)" }}
+      panelStyle={{ padding: "22px 22px 20px" }}>
+      <div style={{ display: "flex", gap: 14, alignItems: "center", textAlign: "left" }}>
+        <img src={garment.image} alt="" style={{ width: 62, height: 82, objectFit: "cover", borderRadius: "var(--radius-lg)", flexShrink: 0 }} />
+        <div style={{ minWidth: 0 }}>
+          <div className="ph-display" style={{ fontSize: 21, fontWeight: 600 }}>{t.confirmTryTitle}</div>
+          <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{garment.name}</div>
+          <div style={{ fontSize: 13, color: "var(--k2-quiet)" }}>
+            {npr(garment.price)}{garment.stitchedToOrder ? " · " + t.madeToOrder.toLowerCase() : ""}
           </div>
         </div>
-        <p style={{ color: "var(--k2-quiet)", fontSize: 13, lineHeight: 1.55, margin: "14px 0 0" }}>
-          {t.confirmTryBody(garment.name)}
-        </p>
-        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-          <button className="ph-btn k2-pill" onClick={onCancel} style={{ flex: 1, justifyContent: "center", padding: 13, fontSize: 14 }}>
-            {t.cancel}
-          </button>
-          <button className="ph-btn k2-pill accent" onClick={onConfirm}
-            style={{ flex: 2, justifyContent: "center", padding: 13, fontSize: 15, fontFamily: "'Baloo 2', cursive" }}>
-            {t.confirmTryYes}
-          </button>
-        </div>
       </div>
-    </div>
+      <p style={{ color: "var(--k2-quiet)", fontSize: 13, lineHeight: 1.55, margin: "14px 0 0" }}>
+        {t.confirmTryBody(garment.name)}
+      </p>
+      <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+        <button className="ph-btn k2-pill" onClick={onCancel} style={{ flex: 1, justifyContent: "center", padding: 13, fontSize: 14 }}>
+          {t.cancel}
+        </button>
+        <button className="ph-btn k2-pill accent" onClick={onConfirm} data-autofocus
+          style={{ flex: 2, justifyContent: "center", padding: 13, fontSize: 15, fontFamily: "var(--font-display), sans-serif" }}>
+          {t.confirmTryYes}
+        </button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -581,71 +730,79 @@ function WantThisSheet({ garment, look, rec, canBag, bagged, saved, onAddToBag, 
     recSize && garment.sizes.includes(recSize) ? recSize : garment.sizes[0] || ""
   );
 
+  /* Radio group, not a row of unrelated buttons: arrow keys move between
+     sizes, and a screen reader announces "size M, 2 of 4, selected" instead
+     of four buttons whose relationship it can't see. */
+  const sizeGroupId = "want-size-label";
+
   return (
-    <div onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 60, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="peek"
-        style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", width: 400, maxWidth: "100%", maxHeight: "88vh", overflowY: "auto", padding: "20px 22px 22px", marginBottom: 8, color: "var(--ink)" }}>
-        <div style={{ display: "flex", gap: 14, alignItems: "center", textAlign: "left" }}>
-          {/* the render, not the flat-lay: this is the thing they liked */}
-          <img src={look || garment.image} alt="" style={{ width: 66, height: 88, objectFit: "cover", borderRadius: 12, flexShrink: 0, background: "var(--paper-deep)" }} />
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div className="ph-display" style={{ fontSize: 20, fontWeight: 600 }}>{t.iWantThis}</div>
-            <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{garment.name}</div>
-            <div style={{ fontSize: 13, color: "var(--stone)" }}>
-              {npr(garment.price)}{garment.stitchedToOrder ? " · " + t.madeToOrder.toLowerCase() : ""}
-            </div>
+    <Dialog variant="sheet" onClose={onClose} title={t.iWantThis} hideHeader width={400}
+      scrimStyle={{ backdropFilter: "blur(6px)" }}
+      panelStyle={{ padding: "20px 22px 22px" }}>
+      <div style={{ display: "flex", gap: 14, alignItems: "center", textAlign: "left" }}>
+        {/* the render, not the flat-lay: this is the thing they liked */}
+        <img src={look || garment.image} alt="" style={{ width: 66, height: 88, objectFit: "cover", borderRadius: "var(--radius-lg)", flexShrink: 0, background: "var(--paper-deep)" }} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="ph-display" style={{ fontSize: 20, fontWeight: 600 }}>{t.iWantThis}</div>
+          <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{garment.name}</div>
+          <div style={{ fontSize: 13, color: "var(--stone)" }}>
+            {npr(garment.price)}{garment.stitchedToOrder ? " · " + t.madeToOrder.toLowerCase() : ""}
           </div>
-        </div>
-
-        {garment.sizes.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600, marginBottom: 7 }}>
-              {t.chooseSize}
-              {recSize && garment.sizes.includes(recSize) && (
-                <span style={{ color: "var(--violet)", marginLeft: 8 }}>{t.recommendedForYou}: {recSize}</span>
-              )}
-            </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {garment.sizes.map((s) => {
-                const on = size === s;
-                const isRec = recSize === s;
-                return (
-                  <button key={s} className="ph-btn" onClick={() => setSize(s)}
-                    style={{
-                      padding: "9px 18px", fontSize: 13.5, borderRadius: 999, fontWeight: 600,
-                      background: on ? "var(--violet)" : "var(--paper)",
-                      color: on ? "var(--on-accent)" : "var(--stone)",
-                      border: on ? "1px solid var(--violet)" : isRec ? "1.5px dashed var(--violet)" : "1px solid var(--line)",
-                    }}>
-                    {s}{isRec ? <> <Icon name="star" /></> : ""}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 18 }}>
-          {canBag && (
-            <button className="ph-btn" onClick={() => onAddToBag(size)} disabled={bagged}
-              style={{ background: bagged ? "var(--ok)" : "var(--violet)", color: "var(--on-accent)", padding: 14, fontSize: 15, borderRadius: 999, fontWeight: 700, fontFamily: "'Baloo 2', cursive" }}>
-              <Icon name={bagged ? "check" : "bag"} /> {bagged ? t.addedToBag : t.addToBag}
-            </button>
-          )}
-          {/* works with no storefront and no bag — a shop with no slug still
-              gets the lead, which is the whole point of the kiosk */}
-          <button className="ph-btn" onClick={() => onTellShop(size)}
-            style={{ background: canBag ? "transparent" : "var(--ink)", color: canBag ? "var(--ink)" : "var(--paper)", border: canBag ? "1.5px solid var(--ink)" : "none", padding: 13, fontSize: 14.5, borderRadius: 999, fontWeight: 700, fontFamily: "'Baloo 2', cursive" }}>
-            <Icon name="phone" /> {t.tellShop}
-          </button>
-          <button className="ph-btn" onClick={onSaveLook} disabled={saved}
-            style={{ color: saved ? "var(--violet)" : "var(--stone)", fontSize: 13, padding: "8px 0", fontWeight: 600 }}>
-            <Icon name={saved ? "heart-filled" : "heart"} /> {saved ? t.savedLook : t.saveLook}
-          </button>
         </div>
       </div>
-    </div>
+
+      {garment.sizes.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div id={sizeGroupId} style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600, marginBottom: 7 }}>
+            {t.chooseSize}
+            {recSize && garment.sizes.includes(recSize) && (
+              <span style={{ color: "var(--violet)", marginLeft: 8 }}>{t.recommendedForYou}: {recSize}</span>
+            )}
+          </div>
+          <div role="radiogroup" aria-labelledby={sizeGroupId} style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {garment.sizes.map((s) => {
+              const on = size === s;
+              const isRec = recSize === s;
+              return (
+                <button key={s} className="ph-btn" onClick={() => setSize(s)}
+                  role="radio" aria-checked={on}
+                  style={{
+                    padding: "9px 18px", fontSize: 13.5, borderRadius: "var(--radius-pill)", fontWeight: 600,
+                    background: on ? "var(--violet)" : "var(--paper)",
+                    color: on ? "var(--on-accent)" : "var(--stone)",
+                    border: on ? "1px solid var(--violet)" : isRec ? "1.5px dashed var(--violet)" : "1px solid var(--line)",
+                  }}>
+                  {s}{isRec ? <> <Icon name="star" /></> : ""}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 18 }}>
+        {canBag && (
+          /* `bagged` stays true for as long as this sheet is open, rather than
+             reverting on a 2.2s timer: the label used to flip from "in your
+             bag" back to "add to bag" under a thumb still resting on it,
+             which reads as the add having failed. */
+          <button className="ph-btn" onClick={() => onAddToBag(size)} disabled={bagged}
+            style={{ background: bagged ? "var(--ok)" : "var(--violet)", color: "var(--on-accent)", padding: 14, fontSize: 15, borderRadius: "var(--radius-pill)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif" }}>
+            <Icon name={bagged ? "check" : "bag"} /> {bagged ? t.addedToBag : t.addToBag}
+          </button>
+        )}
+        {/* works with no storefront and no bag — a shop with no slug still
+            gets the lead, which is the whole point of the kiosk */}
+        <button className="ph-btn" onClick={() => onTellShop(size)}
+          style={{ background: canBag ? "transparent" : "var(--ink)", color: canBag ? "var(--ink)" : "var(--paper)", border: canBag ? "1.5px solid var(--ink)" : "none", padding: 13, fontSize: 14.5, borderRadius: "var(--radius-pill)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif" }}>
+          <Icon name="phone" /> {t.tellShop}
+        </button>
+        <button className="ph-btn" onClick={onSaveLook} disabled={saved}
+          style={{ color: saved ? "var(--violet)" : "var(--stone)", fontSize: 13, padding: "8px 0", fontWeight: 600 }}>
+          <Icon name={saved ? "heart-filled" : "heart"} /> {saved ? t.savedLook : t.saveLook}
+        </button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -686,6 +843,7 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
   const savedIds = useRef<Set<string>>(new Set()); // garments already saved to My Looks this session
   const stageRef = useRef<HTMLDivElement>(null);
   const requestSeq = useRef(0); // ignore stale responses if the shopper taps another piece mid-generation
+  const abortRef = useRef<AbortController | null>(null); // so "stop waiting" actually drops the request
   const autoStarted = useRef(false);
   const alive = useRef(true);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -714,6 +872,9 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
   const startTryOn = useCallback(async (garment: Wearable) => {
     const seq = ++requestSeq.current;
     const stale = () => seq !== requestSeq.current || !alive.current;
+    abortRef.current?.abort();
+    const ctl = new AbortController();
+    abortRef.current = ctl;
     setSelected(garment);
     setNotice("");
     setResultImage(null);
@@ -729,7 +890,7 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
            resolves it from its own table and refuses an unpublished one. */
         garmentId: garment.compositionId ? null : garment.id,
         compositionId: garment.compositionId ?? null,
-      });
+      }, "studio", ctl.signal);
       if (stale()) return;
       logLocalTryOn(garment.id, getKioskSessionId()); // no-op in Supabase mode (server logs it)
 
@@ -748,6 +909,10 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
       setReady(false);
     } catch (e) {
       if (stale()) return;
+      /* The shopper pressed "stop waiting" — that isn't a failure, and
+         showing them a red "something went wrong" for their own decision
+         would be. The cancel handler has already set the phase. */
+      if ((e as Error)?.name === "AbortError") return;
       /* Say it failed. This used to fall back to pasting the flat garment
          photo over the shopper's picture — which read as a bad try-on rather
          than none, and shoppers judged the piece on it. The server refunds the
@@ -765,6 +930,23 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
     }
   }, [photo, shop.id]);
 
+  /* Leaving a generation running is the same as leaving the fetch open. */
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  /* Stop waiting. Drops the request, invalidates any response still in
+     flight, and puts the shopper back on the rack with their own photo — not
+     on an error screen, because nothing went wrong. */
+  const cancelTryOn = () => {
+    requestSeq.current++;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setReady(false);
+    setNotice("");
+    setSelected(null);
+    setPhase("idle");
+    toastWarn(t.genCancelled);
+  };
+
   /* hanger QR / storefront deep link: start as soon as we have a photo */
   useEffect(() => {
     if (initialGarment && !autoStarted.current) {
@@ -781,6 +963,7 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
     const cached = results[garment.id];
     if (!cached) { setConfirming(garment); return; }
     requestSeq.current++; // drop any in-flight generation's response
+    abortRef.current?.abort();
     setSelected(garment);
     setResultImage(cached);
     setNotice("");
@@ -793,11 +976,15 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
 
   /* straight from the mirror into the bag — same per-slug cart the storefront
      checks out from, so the try-on high converts without re-finding the piece */
+  /* No timer. The old version flipped back to "add to bag" after 2200ms,
+     which on the open sheet meant the button changed colour and wording under
+     a thumb that hadn't moved — indistinguishable from the add having failed.
+     "Added" is now a fact about this look, cleared when the shopper moves to
+     another piece (see pick / startTryOn, which both reset bagState). */
   const addToBag = (size: string) => {
     if (!cart || !selected) return;
     cart.add(selected, size);
     setBagState("added");
-    setTimeout(() => setBagState("idle"), 2200);
   };
 
   /* save the look. Shared by the heart in the bar and the one in the sheet,
@@ -816,10 +1003,10 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
 
   const resultVisible = phase === "result" && !!resultImage && !showOriginal;
   const canBag = !!cart && !!selected?.inStock;
-  const chip: React.CSSProperties = { padding: "8px 14px", fontSize: 13, fontWeight: 600, borderRadius: 999 };
+  const chip: React.CSSProperties = { padding: "8px 14px", fontSize: 13, fontWeight: 600, borderRadius: "var(--radius-pill)" };
 
   return (
-    <div className="k2-body k2-mirror">
+    <div id="main" className="k2-body k2-mirror">
       {/* stage — a free box. Every layer is contained in it, so no photo and
           no render is ever cropped, whatever shape either of them is. */}
       <div ref={stageRef} className="k2-stage">
@@ -851,7 +1038,7 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
               {selected && (
                 <button className="ph-btn k2-pill accent" onClick={() => startTryOn(selected)}
-                  style={{ padding: "10px 22px", fontSize: 14, fontFamily: "'Baloo 2', cursive" }}>
+                  style={{ padding: "10px 22px", fontSize: 14, fontFamily: "var(--font-display), sans-serif" }}>
                   <Icon name="reset" /> {t.tryAgain}
                 </button>
               )}
@@ -863,16 +1050,25 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
           </div>
         )}
 
-        {phase === "generating" && <RevealOverlay garment={selected} ready={ready} />}
+        {phase === "generating" && <RevealOverlay garment={selected} ready={ready} onCancel={cancelTryOn} />}
 
         {phase === "result" && resultImage && (
-          <button className="ph-btn"
-            onPointerDown={(e) => { e.preventDefault(); setShowOriginal(true); }}
+          /* Hold with a pointer, or toggle with the keyboard. It was
+             pointer-only: onPointerDown/Up and nothing else, so a keyboard
+             user had no way to see their original photo at all — and
+             preventDefault on pointerdown also stopped the button ever taking
+             focus. aria-pressed makes the toggle readable to a screen
+             reader, which "hold to compare" never could be. */
+          <button className="ph-btn" aria-pressed={showOriginal}
+            aria-label={showOriginal ? t.showLookLabel : t.showOriginalLabel}
+            title={t.compareHint}
+            onPointerDown={(e) => { e.preventDefault(); e.currentTarget.focus(); setShowOriginal(true); }}
             onPointerUp={() => setShowOriginal(false)}
             onPointerLeave={() => setShowOriginal(false)}
             onPointerCancel={() => setShowOriginal(false)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setShowOriginal((v) => !v); } }}
             onContextMenu={(e) => e.preventDefault()}
-            style={{ position: "absolute", bottom: 12, left: 12, background: "var(--stage-veil)", color: "var(--on-slab)", fontSize: 12.5, fontWeight: 600, padding: "9px 15px", borderRadius: 999, userSelect: "none", WebkitUserSelect: "none", touchAction: "none", backdropFilter: "blur(8px)" }}>
+            style={{ position: "absolute", bottom: 12, left: 12, background: "var(--stage-veil)", color: "var(--on-slab)", fontSize: 12.5, fontWeight: 600, padding: "9px 15px", borderRadius: "var(--radius-pill)", userSelect: "none", WebkitUserSelect: "none", touchAction: "none", backdropFilter: "blur(8px)" }}>
             <Icon name="swap" /> {showOriginal ? t.originalPhoto : t.holdToCompare}
           </button>
         )}
@@ -898,7 +1094,7 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
               </div>
               <button className="ph-btn k2-pill" disabled={lookState !== "idle"} aria-label={t.saveLook}
                 onClick={saveThisLook}
-                style={{ padding: "10px 13px", color: lookState === "saved" ? "var(--violet)" : undefined }}>
+                style={{ padding: "10px 13px", color: lookState === "saved" ? "var(--k2-accent)" : undefined }}>
                 <Icon name={lookState === "saved" ? "heart-filled" : "heart"} />
               </button>
               {/* One way to act on a look, not a row of competing chips. Size,
@@ -906,7 +1102,7 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
                   just decided they like something, and that decision deserves
                   a screen rather than a chip they have to hunt for. */}
               <button className="ph-btn k2-pill accent" onClick={() => setWantOpen(true)}
-                style={{ padding: "11px 22px", fontSize: 14.5, fontFamily: "'Baloo 2', cursive", ...(bagState === "added" ? { background: "var(--ok)", borderColor: "var(--ok)", color: "var(--on-accent)" } : null) }}>
+                style={{ padding: "11px 22px", fontSize: 14.5, fontFamily: "var(--font-display), sans-serif", ...(bagState === "added" ? { background: "var(--ok)", borderColor: "var(--ok)", color: "var(--on-accent)" } : null) }}>
                 {bagState === "added"
                   ? <><Icon name="check" /> {t.addedToBag}</>
                   : <><Icon name="bag" /> {t.iWantThis}</>}
@@ -918,7 +1114,7 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
                 rec
                   ? <SizeBadge rec={rec} dark onEdit={() => setShowSize(true)} />
                   : <button className="ph-btn k2-pill" onClick={() => setShowSize(true)}
-                      style={{ ...chip, borderStyle: "dashed", color: "var(--violet)" }}>
+                      style={{ ...chip, borderStyle: "dashed", color: "var(--k2-accent)" }}>
                       <Icon name="ruler" /><span className="hide-sm"> {t.findMySize}</span>
                     </button>
               )}
@@ -926,7 +1122,10 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
                 onClick={async () => {
                   if (!resultImage) return;
                   setShareState("sharing");
-                  try { await shareImage(resultImage, selected.name, shop.name); } catch {}
+                  /* A share the shopper dismissed isn't a failure; anything
+                     else is, and used to vanish into an empty catch. */
+                  try { await shareImage(resultImage, selected.name, shop.name); }
+                  catch (e) { if ((e as Error)?.name !== "AbortError") toastFailure("Could not share that look", e); }
                   setShareState("idle");
                 }}
                 style={{ ...chip, opacity: shareState === "sharing" ? 0.6 : 1 }}>
@@ -936,7 +1135,8 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
                 onClick={async () => {
                   if (!resultImage) return;
                   setDownloading(true);
-                  try { await downloadImage(resultImage, selected.name); } catch {}
+                  try { await downloadImage(resultImage, selected.name); }
+                  catch (e) { toastFailure("Could not save that image", e); }
                   setDownloading(false);
                 }}
                 style={{ ...chip, opacity: downloading ? 0.6 : 1 }}>
@@ -944,12 +1144,15 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
               </button>
               {cart && cart.count > 0 && (
                 <button className="ph-btn" onClick={onOpenBag}
-                  style={{ ...chip, color: "var(--violet)", textDecoration: "underline", textUnderlineOffset: 3 }}>
+                  style={{ ...chip, color: "var(--k2-accent)", textDecoration: "underline", textUnderlineOffset: 3 }}>
                   {t.viewBag(cart.count)}
                 </button>
               )}
             </div>
-            <div style={{ fontSize: 11, color: "var(--k2-quiet)" }}>{t.aiResultNote}</div>
+            {/* 12.5px, not 11: this is the line telling the shopper the
+                picture they are about to buy from is a machine's guess, and
+                it was the smallest text on the screen. */}
+            <div style={{ fontSize: 12.5, color: "var(--k2-quiet)" }}>{t.aiResultNote}</div>
           </div>
         )}
 

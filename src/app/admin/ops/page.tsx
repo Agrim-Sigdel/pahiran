@@ -55,9 +55,9 @@ export default function OpsPage() {
         <div className="panel" style={{ padding: "6px 0", marginBottom: 30 }}>
           {actions.map((a) => (
             <Row key={a.id} time={a.createdAt}>
-              <b style={{ color: "var(--forest-deep)" }}>{a.action}</b>{" "}
+              <b style={{ color: "var(--ink)" }}>{a.action}</b>{" "}
               <span style={{ color: "var(--stone)" }}>{a.target}</span>
-              <div style={{ fontSize: 11.5, color: "var(--mut)", marginTop: 2 }}>
+              <div style={{ fontSize: 11.5, color: "var(--stone)", marginTop: 2 }}>
                 by {a.actor}
                 {a.detail ? " · " + a.detail : ""}
               </div>
@@ -81,7 +81,7 @@ export default function OpsPage() {
                 <div
                   style={{
                     fontSize: 11,
-                    color: "var(--mut)",
+                    color: "var(--stone)",
                     marginTop: 3,
                     fontFamily: "ui-monospace, monospace",
                     wordBreak: "break-all",
@@ -110,7 +110,7 @@ function Row({ time, children }: { time: string; children: React.ReactNode }) {
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
-      <div style={{ fontSize: 11.5, color: "var(--mut)", whiteSpace: "nowrap" }}>{when(time)}</div>
+      <div style={{ fontSize: 11.5, color: "var(--stone)", whiteSpace: "nowrap" }}>{when(time)}</div>
     </div>
   );
 }

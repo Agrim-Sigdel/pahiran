@@ -91,7 +91,7 @@ export default function UsersPage() {
             style={{ display: "flex", gap: 6 }}
           >
             <Field
-              placeholder="Search email, name, shop…"
+              placeholder="Search email, name, shop…" aria-label="Search users by email, name or shop"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               style={{ width: 220 }}
@@ -116,9 +116,9 @@ export default function UsersPage() {
             style={{
               padding: "7px 13px",
               fontSize: 12,
-              borderRadius: 999,
-              border: "1px solid " + (role === r ? "var(--forest-deep)" : "var(--line)"),
-              color: role === r ? "var(--forest-deep)" : "var(--mut)",
+              borderRadius: "var(--radius-pill)",
+              border: "1px solid " + (role === r ? "var(--ink)" : "var(--line)"),
+              color: role === r ? "var(--ink)" : "var(--stone)",
               background: role === r ? "rgba(47,109,79,.07)" : "transparent",
             }}
           >
@@ -129,7 +129,7 @@ export default function UsersPage() {
 
       <div
         className="panel"
-        style={{ padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "var(--mut)" }}
+        style={{ padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "var(--stone)" }}
       >
         Saved looks and remembered photos are private to the account that made them and are not viewable
         here. Deleting an account erases them permanently.
@@ -156,7 +156,7 @@ export default function UsersPage() {
                     <Pill tone={u.role === "vendor" ? "good" : "mute"}>{u.role}</Pill>
                     {!u.confirmed && <Pill tone="warn">unconfirmed</Pill>}
                   </div>
-                  <div style={{ fontSize: 12, color: "var(--mut)", marginTop: 4 }}>
+                  <div style={{ fontSize: 12, color: "var(--stone)", marginTop: 4 }}>
                     {u.name || "no name"} {u.phone ? "· " + u.phone : ""} · {u.savedLookCount} saved look
                     {u.savedLookCount === 1 ? "" : "s"}
                   </div>
@@ -170,7 +170,7 @@ export default function UsersPage() {
                     </div>
                   )}
                 </div>
-                <div style={{ fontSize: 11.5, color: "var(--mut)", textAlign: "right", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: 11.5, color: "var(--stone)", textAlign: "right", whiteSpace: "nowrap" }}>
                   joined {when(u.createdAt)}
                   <div>last seen {when(u.lastSignInAt)}</div>
                 </div>
@@ -196,7 +196,7 @@ export default function UsersPage() {
                   <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <Field
                       autoFocus
-                      placeholder={"type " + u.email}
+                      placeholder={"type " + u.email} aria-label={"Type " + u.email + " to confirm"}
                       value={confirmText}
                       onChange={(e) => setConfirmText(e.target.value)}
                       style={{ width: 200 }}
@@ -225,7 +225,7 @@ export default function UsersPage() {
         <Btn busy={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
           ← previous
         </Btn>
-        <span style={{ fontSize: 12, color: "var(--mut)", alignSelf: "center" }}>page {page}</span>
+        <span style={{ fontSize: 12, color: "var(--stone)", alignSelf: "center" }}>page {page}</span>
         <Btn busy={!hasMore} onClick={() => setPage((p) => p + 1)}>
           next →
         </Btn>
@@ -255,7 +255,7 @@ function Btn({
         fontSize: 12,
         borderRadius: "var(--radius-btn)",
         border: "1px solid var(--line)",
-        color: danger ? "var(--danger)" : "var(--mut)",
+        color: danger ? "var(--danger)" : "var(--stone)",
         opacity: busy ? 0.5 : 1,
       }}
     >

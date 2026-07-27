@@ -157,7 +157,7 @@ function ShopsTable() {
             style={{ display: "flex", gap: 6 }}
           >
             <Field
-              placeholder="Search name, slug, area…"
+              placeholder="Search name, slug, area…" aria-label="Search shops by name, slug or area"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               style={{ width: 220 }}
@@ -178,9 +178,9 @@ function ShopsTable() {
             style={{
               padding: "7px 13px",
               fontSize: 12,
-              borderRadius: 999,
-              border: "1px solid " + (tab === t ? "var(--forest-deep)" : "var(--line)"),
-              color: tab === t ? "var(--forest-deep)" : "var(--mut)",
+              borderRadius: "var(--radius-pill)",
+              border: "1px solid " + (tab === t ? "var(--ink)" : "var(--line)"),
+              color: tab === t ? "var(--ink)" : "var(--stone)",
               background: tab === t ? "rgba(47,109,79,.07)" : "transparent",
             }}
           >
@@ -206,7 +206,7 @@ function ShopsTable() {
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span className="ph-display" style={{ fontSize: 17, color: "var(--forest-deep)" }}>
+                    <span className="ph-display" style={{ fontSize: 17, color: "var(--ink)" }}>
                       {s.name || "(unnamed shop)"}
                     </span>
                     <Pill tone={TONE[s.status]}>{s.status}</Pill>
@@ -218,11 +218,11 @@ function ShopsTable() {
                     </Pill>
                     {s.planStatus !== "active" && <Pill tone="bad">{s.planStatus}</Pill>}
                   </div>
-                  <div style={{ fontSize: 12, color: "var(--mut)", marginTop: 4 }}>
+                  <div style={{ fontSize: 12, color: "var(--stone)", marginTop: 4 }}>
                     /{s.slug} · {s.ownerEmail || "unknown owner"} {s.area ? "· " + s.area : ""}
                     {s.vendorCode ? " · " + s.vendorCode : ""}
                   </div>
-                  <div style={{ fontSize: 12, color: "var(--mut)", marginTop: 3 }}>
+                  <div style={{ fontSize: 12, color: "var(--stone)", marginTop: 3 }}>
                     {CATEGORY_LABEL[s.category] || s.category}
                     {s.whatsapp ? (
                       <> · <a href={"tel:" + s.whatsapp} style={{ color: "var(--violet)" }}>{s.whatsapp}</a></>
@@ -244,12 +244,12 @@ function ShopsTable() {
                     {s.periodEnd && <> · renews {when(s.periodEnd)}</>}
                   </div>
                   {s.statusNote && (
-                    <div style={{ fontSize: 12, color: "var(--mut)", marginTop: 4, fontStyle: "italic" }}>
+                    <div style={{ fontSize: 12, color: "var(--stone)", marginTop: 4, fontStyle: "italic" }}>
                       note: {s.statusNote}
                     </div>
                   )}
                 </div>
-                <div style={{ fontSize: 11.5, color: "var(--mut)", textAlign: "right", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: 11.5, color: "var(--stone)", textAlign: "right", whiteSpace: "nowrap" }}>
                   joined {when(s.createdAt)}
                   {s.statusChangedAt && <div>changed {when(s.statusChangedAt)}</div>}
                 </div>
@@ -268,13 +268,13 @@ function ShopsTable() {
                     borderRadius: "var(--radius-btn)",
                   }}
                 >
-                  <span style={{ fontSize: 12, color: "var(--mut)" }}>
+                  <span style={{ fontSize: 12, color: "var(--stone)" }}>
                     Reason to {noting.status === "rejected" ? "reject" : "suspend"} (the vendor sees this):
                   </span>
                   <Field
                     autoFocus
                     maxLength={200}
-                    placeholder="e.g. shop details could not be verified"
+                    placeholder="e.g. shop details could not be verified" aria-label="Note for the vendor"
                     value={noteText}
                     onChange={(e) => setNoteText(e.target.value)}
                     style={{ flex: 1, minWidth: 200 }}
@@ -294,29 +294,29 @@ function ShopsTable() {
                   {/* Category is descriptive and changes nothing else, so it
                       saves on pick. Try-on entitlement is a money question, so
                       it needs a reason and an explicit apply. */}
-                  <label style={{ fontSize: 12, color: "var(--mut)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <label style={{ fontSize: 12, color: "var(--stone)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     Sells
                     <select
                       value={s.category}
                       disabled={busy === s.id + ":category"}
                       onChange={(e) => act(s, { action: "category", category: e.target.value }, "category")}
-                      style={{ padding: "8px 10px", fontSize: 12, borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)" }}
+                      style={{ padding: "8px 10px", fontSize: 12, borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)" }}
                     >
                       {Object.entries(CATEGORY_LABEL).map(([id, label]) => (
                         <option key={id} value={id}>{label}</option>
                       ))}
                     </select>
-                    <span style={{ color: "var(--mut)" }}>descriptive only — does not change try-on</span>
+                    <span style={{ color: "var(--stone)" }}>descriptive only — does not change try-on</span>
                   </label>
 
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 12, color: "var(--mut)" }}>
+                    <span style={{ fontSize: 12, color: "var(--stone)" }}>
                       Try-on is <b>{s.type === "apparel" ? "on" : "off"}</b> — turn it{" "}
                       {s.type === "apparel" ? "off" : "on"}?
                     </span>
                     <Field
                       maxLength={200}
-                      placeholder="reason (recorded in the audit trail)"
+                      placeholder="reason (recorded in the audit trail)" aria-label="Reason, recorded in the audit trail"
                       value={typeNote}
                       onChange={(e) => setTypeNote(e.target.value)}
                       style={{ flex: 1, minWidth: 200 }}
@@ -334,7 +334,7 @@ function ShopsTable() {
                   </div>
 
                   {!s.listedAllowed && (
-                    <div style={{ fontSize: 12, color: "var(--mut)" }}>
+                    <div style={{ fontSize: 12, color: "var(--stone)" }}>
                       The {s.plan} plan does not permit directory listing.
                     </div>
                   )}
@@ -379,7 +379,7 @@ function ShopsTable() {
                   target="_blank"
                   rel="noreferrer"
                   className="ph-btn"
-                  style={{ fontSize: 12, color: "var(--mut)", padding: "9px 6px" }}
+                  style={{ fontSize: 12, color: "var(--stone)", padding: "9px 6px" }}
                 >
                   storefront ↗
                 </a>
@@ -390,7 +390,7 @@ function ShopsTable() {
                   <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <Field
                       autoFocus
-                      placeholder={"type " + s.slug}
+                      placeholder={"type " + s.slug} aria-label={"Type " + s.slug + " to confirm"}
                       value={confirmText}
                       onChange={(e) => setConfirmText(e.target.value)}
                       style={{ width: 150 }}
@@ -440,7 +440,7 @@ function Btn({
         padding: "9px 14px",
         fontSize: 12,
         borderRadius: "var(--radius-btn)",
-        ...(solid ? {} : { border: "1px solid var(--line)", color: danger ? "var(--danger)" : "var(--mut)" }),
+        ...(solid ? {} : { border: "1px solid var(--line)", color: danger ? "var(--danger)" : "var(--stone)" }),
       }}
     >
       {busy ? "working…" : children}
