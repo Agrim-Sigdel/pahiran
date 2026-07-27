@@ -263,7 +263,7 @@ export function InterestedModal({ shop, garment, recommended, shared, onClose }:
               {errors.phone && <div style={{ fontSize: 12.5, color: "var(--danger)", marginTop: -4 }}>{errors.phone}</div>}
             </div>
             {state === "error" && (
-              <div style={{ fontSize: 12.5, color: "#C0554D", marginTop: 10 }}>
+              <div style={{ fontSize: 12.5, color: "var(--danger)", marginTop: 10 }}>
                 {t.sendFailed}
               </div>
             )}
@@ -299,7 +299,7 @@ export function SizeBadge({ rec, onEdit, dark }: { rec: SizeRec; onEdit: () => v
   /* On the v2 shell the violet-on-white pill is the one light object in a dark
      room, so the same badge inverts rather than being written twice. */
   const ink = dark ? "var(--butter)" : "var(--violet)";
-  const quiet = dark ? "rgba(255,255,255,.55)" : "var(--stone)";
+  const quiet = dark ? "var(--on-slab-quiet)" : "var(--stone)";
   return (
     <button className="ph-btn" onClick={onEdit}
       aria-label={t.findMySize}

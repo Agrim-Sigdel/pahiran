@@ -270,7 +270,7 @@ export default function Dashboard({
                             {g.category}
                           </span>
                           {tries > 0 && (
-                            <span style={{ position: "absolute", top: 10, right: 10, background: "rgba(26,23,20,.8)", color: "var(--on-slab)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
+                            <span style={{ position: "absolute", top: 10, right: 10, background: "var(--stage-veil)", color: "var(--on-slab)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
                               {tries} tr{tries === 1 ? "y" : "ies"}
                             </span>
                           )}
@@ -362,7 +362,7 @@ export default function Dashboard({
                           {familyLabel(f.family)}
                         </span>
                         {(compCount.get(f.id) ?? 0) > 0 && (
-                          <span style={{ position: "absolute", top: 10, right: 10, background: "rgba(26,23,20,.8)", color: "var(--on-slab)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
+                          <span style={{ position: "absolute", top: 10, right: 10, background: "var(--stage-veil)", color: "var(--on-slab)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
                             {compCount.get(f.id)} cut{compCount.get(f.id) !== 1 ? "s" : ""}
                           </span>
                         )}
@@ -617,7 +617,7 @@ function CutCard({ cut, onEdit }: { cut: Style; onEdit: () => void }) {
         )}
         {/* both branches sit on a photo, so both stay dark in either theme —
             --forest here would have flipped pale under --cream text */}
-        <span style={{ ...cutOwnerChip(mine), position: "absolute", top: 10, right: 10, background: mine ? "var(--slab)" : "rgba(26,23,20,.65)", color: "var(--on-slab)" }}>
+        <span style={{ ...cutOwnerChip(mine), position: "absolute", top: 10, right: 10, background: mine ? "var(--stage)" : "var(--stage-veil)", color: "var(--on-slab)" }}>
           {mine ? "YOURS" : "peeq library"}
         </span>
       </div>
@@ -847,9 +847,9 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
   const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 15, background: "var(--card)" };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 400, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: "28px 26px" }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="fade-up sheet"
+        style={{ width: 400, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: "28px 26px" }}>
         <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 18 }}>
           {initial ? "edit garment" : "add a garment"}
         </div>
@@ -950,9 +950,9 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
   const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 15, background: "var(--card)" };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 400, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: "28px 26px" }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="fade-up sheet"
+        style={{ width: 400, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: "28px 26px" }}>
         <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 18 }}>
           {initial ? "edit fabric" : "add a fabric"}
         </div>
@@ -1044,9 +1044,9 @@ function QRModal({ garment, url, crossDevice, onClose }: { garment: Garment; url
   };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 380, maxWidth: "100%", padding: "28px 26px", textAlign: "center" }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="fade-up sheet"
+        style={{ width: 380, maxWidth: "100%", padding: "28px 26px", textAlign: "center" }}>
         <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 4 }}>try-on QR</div>
         <div style={{ fontSize: 14, fontWeight: 500 }}>{garment.name}</div>
         <div style={{ fontSize: 12, color: "var(--mut)", marginBottom: 4 }}>
@@ -1182,8 +1182,8 @@ function TagSheetModal({ catalog, urlFor, onClose }: {
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 440, maxWidth: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column", padding: "22px 22px 18px" }}>
+      <div onClick={(e) => e.stopPropagation()} className="fade-up sheet"
+        style={{ width: 440, maxWidth: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column", padding: "22px 22px 18px" }}>
         <div className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>print qr hanger tags</div>
         <div style={{ fontSize: 13, color: "var(--mut)", margin: "4px 0 14px" }}>
           {count} tag{count !== 1 ? "s" : ""} selected · {pages} page{pages !== 1 ? "s" : ""} of 4 — cut along the dashed lines.

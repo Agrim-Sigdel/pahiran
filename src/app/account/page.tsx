@@ -339,7 +339,7 @@ function OrdersSection() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--sage)" }}>
-      <div style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-modal)", padding: "36px 32px", width: 400, maxWidth: "100%", textAlign: "center", boxShadow: "var(--shadow-soft)" }}>
+      <div className="sheet" style={{ padding: "36px 32px", width: 400, maxWidth: "100%", textAlign: "center" }}>
         {children}
       </div>
     </main>

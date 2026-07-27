@@ -66,7 +66,7 @@ export default function BillingPage() {
       />
 
       {err && (
-        <div className="panel" style={{ padding: "12px 16px", marginBottom: 12, color: "#9b3232", fontSize: 13 }}>
+        <div className="panel" style={{ padding: "12px 16px", marginBottom: 12, color: "var(--danger)", fontSize: 13 }}>
           {err}
         </div>
       )}

@@ -222,7 +222,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <div style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-modal)", padding: "40px 36px", width: 400, maxWidth: "100%", textAlign: "center", boxShadow: "var(--shadow-soft)" }}>
+        <div className="sheet" style={{ padding: "40px 36px", width: 400, maxWidth: "100%", textAlign: "center" }}>
           {children}
         </div>
       </div>

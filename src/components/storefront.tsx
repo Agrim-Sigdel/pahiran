@@ -227,9 +227,9 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
   };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", zIndex: 60, display: "flex", justifyContent: "flex-end" }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", zIndex: 60, display: "flex", justifyContent: "flex-end" }}>
       <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", width: 420, maxWidth: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
+        style={{ background: "var(--raised)", width: 420, maxWidth: "100%", height: "100%", display: "flex", flexDirection: "column", borderLeft: "1px solid var(--line)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "16px 20px", borderBottom: "1px solid var(--line)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
             {step === "details" && !sending && (

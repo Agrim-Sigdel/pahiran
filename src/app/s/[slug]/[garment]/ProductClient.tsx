@@ -209,7 +209,7 @@ function BuyPanel({ garment, slug, shop, tryOn, onAdd }: {
           {hasSizes && (
             <div style={{ marginTop: 22 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--stone)", marginBottom: 9 }}>
-                Size {err && <span style={{ color: "#C0554D" }}>· please pick one</span>}
+                Size {err && <span style={{ color: "var(--danger)" }}>· please pick one</span>}
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {garment.sizes.map((s) => (

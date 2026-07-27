@@ -132,11 +132,16 @@ export function Note({ children }: { children: React.ReactNode }) {
 
 /** Status pill shared by the shops table and the user list. */
 export function Pill({ tone, children }: { tone: "good" | "warn" | "bad" | "mute"; children: React.ReactNode }) {
+  // Straight off the semantic tokens. These were hand-mixed alphas before,
+  // which cost the pills their meaning in dark mode: the tints were built from
+  // light-mode ink and washed out to nothing, and "good" took --forest-deep as
+  // its text, which inverts to the page's off-white — so a live shop and a
+  // suspended one were told apart by a tint nobody could see.
   const colors = {
-    good: { bg: "rgba(47,109,79,.10)", fg: "var(--forest-deep)" },
-    warn: { bg: "rgba(214,158,46,.14)", fg: "var(--butter-deep)" },
-    bad: { bg: "rgba(180,60,60,.10)", fg: "#9b3232" },
-    mute: { bg: "rgba(0,0,0,.05)", fg: "var(--mut)" },
+    good: { bg: "var(--ok-bg)", fg: "var(--ok)" },
+    warn: { bg: "var(--warn-bg)", fg: "var(--warn)" },
+    bad: { bg: "var(--danger-bg)", fg: "var(--danger)" },
+    mute: { bg: "var(--line)", fg: "var(--mut)" },
   }[tone];
   return (
     <span

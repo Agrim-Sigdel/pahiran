@@ -9,7 +9,7 @@
   color-scheme: light;
   --ink: #1A1714;          /* text, primary buttons — warm black, never #000 */
   --paper: #FAF6F0;        /* default background — flatters skin in photos */
-  --violet: #00372b;       /* interactive only: links, scan moments, active states */
+  --violet: #000937b4;       /* interactive only: links, scan moments, active states */
   --butter: #F5DD90;       /* highlights, badges, empty states — small doses */
   --butter-deep: #C9A94E;  /* butter for light backgrounds (nav ee, badges on paper) */
   --stone: #6E675C;        /* secondary text, captions, prices — AA on paper (5.2:1) */
@@ -19,6 +19,30 @@
   --whatsapp: #25D366;
   --scrim: rgba(26, 23, 20, .48);
 
+  /* Surfaces are a *ramp*, not two colours. Light mode barely needs one —
+     white on paper is already separation — but dark mode has nothing else to
+     make depth out of (see the note on --shadow-soft below), so the whole app
+     names its surfaces by rung and both themes stay in step:
+
+       --paper-deep  wells      image placeholders, inset rows
+       --paper       page
+       --card        raised     cards, sheets, inputs
+       --raised      floating   modals, popovers, sticky bars
+       --slab        loud       the CTA block, page footers
+
+     The try-on stage is deliberately NOT on this ramp — see --stage below.
+
+     --raised is a rung above --card: a sheet sitting *on* a page of cards has
+     to out-rank them or it reads as one more card that happens to be centred. */
+  --raised: #FFFFFF;
+
+  /* Two weights of rule. --line is the hairline that separates rows inside one
+     surface; --line-strong divides two things that are genuinely apart. --edge
+     is for drawn strokes — borders, icon outlines, chart axes. In dark mode
+     --edge resolves to a colour that CANNOT carry text (2.9:1); use --mut. */
+  --line-strong: rgba(26, 23, 20, .18);
+  --edge: rgba(26, 23, 20, .22);
+
   /* semantic status colours — these carry *meaning*, so they must never be
      aliased onto a neutral. Before these existed, --camel doubled as both the
      error colour and the accent colour while resolving to the same grey as
@@ -26,6 +50,14 @@
   --danger: #B3261E;       /* invalid fields, failures, destructive warnings */
   --warn: #8A5D00;         /* low credits, past-due — attention, not failure */
   --ok: #1F6B4A;           /* saved, sent, in stock */
+
+  /* The tinted fill behind each status — error banners, "low credits" chips,
+     admin badges. These have to be tokens rather than an alpha of the status
+     colour written at the call site: the admin pages each hardcoded a 10%
+     red, which is a visible wash on paper and nothing at all on a dark page. */
+  --danger-bg: rgba(179, 38, 30, .08);
+  --warn-bg: rgba(138, 93, 0, .10);
+  --ok-bg: rgba(31, 107, 74, .10);
 
   /* legacy aliases (sage-era inline styles inherit the new theme) */
   --forest: #1A1714;
@@ -46,19 +78,34 @@
      white-on-pale the moment the theme flipped. */
   --on-accent: #FFFFFF;
 
-  /* Deliberately dark panels — the landing CTA slab, page footers, the photo
-     stage behind a try-on. These are dark by *design*, not because the page
-     is light, so they must not invert with the theme; they only shift enough
-     to still read as raised against a dark page.
+  /* The loud panel — the landing CTA block, page footers. Its job is "this
+     block out-shouts the page", which on paper it does by going dark. That is
+     a *relative* job, so unlike the fixed tokens below, --slab does invert:
+     on a dark page, going darker would say the opposite, so it becomes the
+     lightest surface in the dark block.
 
-     Anything ON one of these takes --on-slab, never --paper or --cream: those
-     flip dark when the theme does, and a dark heading on a permanently dark
-     panel is invisible. That is exactly how "put peeq in your shop"
-     disappeared. --on-slab does not appear in the dark block below because it
-     must not change. */
+     Anything ON it takes --on-slab, never --paper or --cream: those flip dark
+     when the theme does, and a dark heading on a slab is invisible. That is
+     exactly how "put peeq in your shop" disappeared. --on-slab is light in
+     both themes and so does not appear in the dark block. */
   --slab: #1A1714;
   --on-slab: rgba(250, 246, 240, .92);
   --on-slab-quiet: rgba(250, 246, 240, .6);
+
+  /* The photo stage — the ground behind a try-on render, a camera preview, a
+     fullscreen studio. This used to share --slab, which was true only while
+     the two happened to want the same colour. They don't: the slab's job is
+     relative to the page, but the stage's job is absolute — a garment photo
+     has to sit on a dark, neutral ground so the cloth reads true, in either
+     theme. Sharing the token meant inverting --slab for dark mode would have
+     lit the fitting room up, which is the one thing it must never do.
+
+     Deliberately a touch off --ink: pure #1A1714 behind a photo makes the
+     photo's own black pixels vanish into the page. Fixed, so absent from the
+     dark block. --stage-veil is the same ground at chip strength, for the
+     "made to order" / owner labels that lie directly on a photo. */
+  --stage: #17110D;
+  --stage-veil: rgba(23, 17, 13, .78);
 
   /* The mirror of the same trap: any fill that stays LIGHT in both themes —
      butter badges and buttons, the paper-coloured "peeq it" pill over a
@@ -66,6 +113,20 @@
      gave white-on-yellow (and an invisible "peeq it") the moment --ink
      inverted. Fixed, and absent from the dark block. */
   --on-light: #1A1714;
+
+  /* Map pin. Third member of the fixed-in-both-themes family, for the same
+     reason as --on-slab and --on-light: OSM raster tiles are always the pale
+     daytime map, so a pin painted in --violet followed the *app* into dark
+     mode and went pale-on-pale over a map that had not moved. These are the
+     only colours in the file chosen against something outside the app.
+
+     Terracotta because it has to clear every colour OSM draws — cream roads,
+     green parks, blue water, grey buildings — and a warm red is the one hue
+     none of those occupy. It also keeps the pin inside the brand's warm
+     family rather than importing a generic map-red. */
+  --pin: #bc9790;
+  --pin-ring: #FFFFFF;     /* the ring separates the pin from a busy map */
+  --pin-ink: #F5DD90;      /* fixed butter — 4.2:1 on --pin at 16px/800 */
 
   --radius-card: 20px;
   --radius-btn: 20px;
@@ -80,55 +141,97 @@
    included) reads these, so this block is the whole theme — nothing needs
    to know which mode it is in.
 
-   The one token that can't simply invert is --violet. At #00372b it is a
-   near-black green: perfect as the one loud guest on paper, invisible on a
-   dark ground. Dark mode lifts it to a mint that carries the same "a tap
-   happens here" job, and --on-accent goes dark to sit on it.
+   Dark mode is a warm brown room, not a grey one. The previous pass built it
+   out of near-neutral warm-blacks three percent of lightness apart, which cost
+   it two things: cards did not read as raised off the page, and the browns
+   were so desaturated the room read as "the light theme with the lamp off"
+   rather than as a place. The surfaces below are a proper five-rung ramp in a
+   single warm hue (~20°), each rung ~5% lighter than the last. Depth is made
+   of surface lightness, because in a dark room it is the only thing that makes
+   depth at all — see --shadow-soft.
 
-   Driven straight off the device preference — there is no in-app switch and
-   nothing to persist, so no script runs and there is no flash to avoid. */
+   Two tokens can't simply invert:
+
+   --violet, the brand's one loud guest. Whatever it is on paper it is a deep,
+   near-black tone chosen to carry on a pale page, and it cannot survive being
+   dropped onto a dark one — the previous pass flattened it to a desaturated
+   olive that passed contrast but read as chrome, which is why the kiosk forked
+   its own accent to escape it. Here it lifts to a sage-mint: legible, and cool
+   enough to stay the one thing in a brown room that isn't brown. The kiosk's
+   fork is gone with it.
+
+   --slab, the deliberately-loud panel. Its job is "this block out-shouts the
+   page", which on paper it does by going dark. On a dark page going darker
+   says the opposite, so in this theme it inverts and becomes the LIGHTEST
+   surface. --on-slab stays light in both themes and still sits on it.
+
+   Driven off the device preference, as before — still no script, no persisted
+   state and so no flash to avoid. The one addition is an escape hatch: the
+   selector is :root:not([data-theme="light"]), so putting data-theme="light"
+   on <html> pins a page to the paper theme whatever the device says. That is
+   the case a shop actually hits — a kiosk tablet set to dark by whoever
+   unboxed it, standing in a bright showroom where the dark room is unreadable.
+
+   Deliberately one-directional. Forcing *dark* on a light device would mean a
+   second copy of every declaration below (plain CSS has no way to share a
+   block across a media boundary), and two hand-maintained copies of a palette
+   drift. If that case ever comes up, the fix is a class on <html> set by a
+   blocking script — not a duplicate of this block. */
 @media (prefers-color-scheme: dark) {
-:root {
+:root:not([data-theme="light"]) {
   color-scheme: dark;
-  --ink: #F1EBE2;          /* text — warm off-white, never pure #fff */
-  --paper: #141210;        /* page */
-  --violet: #878976;       /* interactive: links, active states, scan moments */
-  --butter: #F5DD90;
-  --butter-deep: #F0D480;  /* on dark the "deep" variant has to get lighter */
-  --stone: #A79D8F;        /* secondary text — AA on --paper (5.6:1) */
-  --card: #1F1B18;         /* raised surfaces: cards, sheets, inputs */
-  --line: rgba(255, 255, 255, .13);
-  --paper-deep: #0E0C0B;   /* wells: image placeholders, alternate sections */
-  --scrim: rgba(0, 0, 0, .66);
 
-  --danger: #F08A82;
-  --warn: #E5B65C;
-  --ok: #6BCE9E;
-  --on-accent: #12211C;    /* the fills are bright now, so their text goes dark */
+  /* surfaces — five rungs, warm brown, ~5% of lightness apart */
+  --paper-deep: #150D09;   /* wells: image placeholders, inset rows */
+  --paper: #1E1310;        /* page */
+  --card: #2B1B14;         /* cards, sheets, inputs */
+  --raised: #3A241B;       /* modals, popovers, sticky bars */
+  --slab: #4A2A20;         /* the loud panel — now the lightest, not the darkest */
 
-  --slab: #241F1B;         /* still a dark panel, lifted off the dark page */
-  --on-slab: rgba(250, 246, 240, .92);
-  --on-slab-quiet: rgba(250, 246, 240, .55);
+  --ink: #F3EEE7;          /* text — warm off-white, never pure #fff */
+  --stone: #C7B299;        /* secondary text — 8.1:1 on --card */
+  --line: rgba(243, 238, 231, .11);  /* warm hairline; a white one greys the browns */
+  --line-strong: #4A2A20;
+  --edge: #7B5B4A;         /* strokes only — 2.9:1, never text. Use --mut. */
+
+  --violet: #bbb288;       /* interactive: links, active states, scan moments */
+  --on-accent: #14261E;    /* the fills are bright now, so their text goes dark */
+  --butter: #EFD79A;       /* pulled back from #F5DD90, which blooms on brown */
+  --butter-deep: #E3C273;  /* on dark the "deep" variant has to get lighter */
+
+  --on-slab: rgba(243, 238, 231, .94);
+  --on-slab-quiet: rgba(243, 238, 231, .62);
+
+  /* a black veil over a near-black page separates nothing — the dialog is
+     lifted to --raised to do that, and the scrim only has to darken */
+  --scrim: rgba(12, 7, 5, .74);
+
+  --danger: #F0958C;  --danger-bg: rgba(240, 149, 140, .13);
+  --warn: #E8BE6E;    --warn-bg: rgba(232, 190, 110, .13);
+  --ok: #86D0A8;      --ok-bg: rgba(134, 208, 168, .13);
 
   /* legacy aliases follow the same inversion, so sage-era inline styles
      (--cream cards, --sage pages, --forest chips) come along untouched */
-  --forest: #F1EBE2;
-  --forest-deep: #F1EBE2;
-  --sage: #141210;
-  --sage-mist: #0E0C0B;
-  --cream: #1F1B18;
-  --camel: #A79D8F;
-  --mut: #A79D8F;
-  --plum: #F1EBE2;
-  --rani: #F1EBE2;
-  --rani-soft: #CFC5B7;
-  --marigold: #A79D8F;
+  --forest: #F3EEE7;
+  --forest-deep: #F3EEE7;
+  --sage: #1E1310;
+  --sage-mist: #150D09;
+  --cream: #2B1B14;
+  --camel: #C7B299;
+  --mut: #A08872;          /* 4.9:1 on --card — the darkest readable tone */
+  --plum: #F3EEE7;
+  --rani: #F3EEE7;
+  --rani-soft: #C7B299;
+  --marigold: #C7B299;
 
-  /* a soft black shadow is invisible on a dark page — deepen it instead */
-  --shadow-soft: 0 8px 24px rgba(0, 0, 0, .55);
+  /* A soft black shadow is invisible on a dark page, and deepening it only
+     makes a smudge. What actually reads as "raised" in a dark room is a lit
+     top edge — the inset hairline — with the blur left as a faint anchor. */
+  --shadow-soft: 0 10px 30px rgba(0, 0, 0, .5),
+                 inset 0 1px 0 rgba(243, 238, 231, .06);
 
-  --note-ok-bg: #14301F;
-  --note-ok-line: #2E6B4A;
+  --note-ok-bg: #17301F;
+  --note-ok-line: #2F6B4A;
   --note-ok-ink: #8FE0B4;
 }
 
@@ -225,19 +328,21 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
   92%, 97% { transform: scaleY(.08); }
 }
 
-/* map pin — shopping bag with the blinking ee (Leaflet divIcon, see osm.ts) */
+/* map pin — shopping bag with the blinking ee (Leaflet divIcon, see osm.ts).
+   Every colour here is a fixed token, never a themed one: the pin is drawn on
+   OSM tiles, which stay the pale daytime map whatever the app is wearing. */
 .peeq-pin {
   position: relative; width: 36px; height: 32px;
-  background: var(--violet); border: 2.5px solid var(--card);
+  background: var(--pin); border: 2.5px solid var(--pin-ring);
   border-radius: 7px 7px 13px 13px;
   box-shadow: 0 2px 8px rgba(26, 23, 20, .4);
   display: flex; align-items: center; justify-content: center;
   font-family: 'Baloo 2', cursive; font-weight: 800; font-size: 16px;
-  color: var(--butter); line-height: 1; letter-spacing: -0.02em;
+  color: var(--pin-ink); line-height: 1; letter-spacing: -0.02em;
 }
 .peeq-pin::before { /* handle */
   content: ""; position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
-  width: 16px; height: 14px; border: 3px solid #fff; border-bottom: none;
+  width: 16px; height: 14px; border: 3px solid var(--pin-ring); border-bottom: none;
   border-radius: 9px 9px 0 0;
 }
 .peeq-pin span { display: inline-block; animation: ee-wink 3.4s infinite; }
@@ -247,6 +352,20 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .efc-chip.off { background: var(--card); color: var(--stone); border: 1px solid var(--line); }
 
 .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-card); padding: 22px 24px; margin-top: 16px; }
+
+/* A floating surface — modal, sheet, popover. Every dialog in the app used to
+   write `background: var(--cream)` inline, which put it at the same rung as
+   the cards behind it: on paper the scrim still separated them, but in the
+   dark room a card-coloured dialog over a page of card-coloured panels read as
+   one more panel that happened to be centred. --raised out-ranks --card in
+   both themes, and the border + shadow come along so no dialog has to
+   remember them. Size, padding and scroll behaviour stay at the call site. */
+.sheet {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-modal);
+  box-shadow: var(--shadow-soft);
+}
 .panel-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 .panel-head .title { font-family: 'Baloo 2', cursive; font-weight: 600; font-size: 21px; color: var(--ink); }
 .panel-head .sub { font-size: 13px; color: var(--stone); }
@@ -329,7 +448,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
   justify-self: start; align-self: center;
   border-radius: var(--radius-card); box-shadow: var(--shadow-soft); overflow: hidden;
   position: relative;
-  background: var(--sage-mist);
+  background: var(--paper-deep);
 }
 
 /* Stacked, cross-faded slides. Only the live one takes pointer events, so the
@@ -442,11 +561,11 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .hero2-right .hero2-visual { justify-self: auto; flex: 1; }
 .hero2-rail { display: flex; flex-direction: column; gap: 12px; justify-content: center; width: 108px; flex-shrink: 0; }
 .hero2-rail-hint { font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 12.5px; color: var(--ink); text-align: center; letter-spacing: .02em; }
-.hero2-fitcard { position: relative; padding: 0; border-radius: 16px; overflow: hidden; background: #fff; border: 1.5px solid var(--line); cursor: pointer; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.hero2-fitcard { position: relative; padding: 0; border-radius: 16px; overflow: hidden; background: var(--card); border: 1.5px solid var(--line); cursor: pointer; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
 .hero2-fitcard img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
-.hero2-fitlabel { display: block; font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 11px; padding: 4px 0 6px; text-align: center; color: var(--stone); background: #fff; }
+.hero2-fitlabel { display: block; font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 11px; padding: 4px 0 6px; text-align: center; color: var(--stone); background: var(--card); }
 .hero2-fitcard.on { border: 2.5px solid var(--violet); transform: scale(1.05); box-shadow: var(--shadow-soft); }
-.hero2-fitcard.on .hero2-fitlabel { color: #fff; background: var(--violet); }
+.hero2-fitcard.on .hero2-fitlabel { color: var(--on-accent); background: var(--violet); }
 .hero2-fitcard:hover:not(.on) { transform: translateY(-3px); box-shadow: var(--shadow-soft); border-color: var(--butter-deep); }
 /* pre-interaction nudge: idle cards breathe until the visitor plays once */
 .hero2-fitcard.nudge { animation: fit-nudge 2.6s ease-in-out infinite; }
@@ -552,9 +671,11 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
    The entire light/dark difference is the variables below; every rule in
    this section reads one of them rather than naming a colour.
 
-   The accent is the one judgement call. On paper it stays --violet, the
-   brand's one loud guest. In the dark room --violet is a near-black green
-   that disappears, so it becomes butter — same job, still legible. */
+   The accent used to be forked here: --violet was a near-black green that
+   disappeared in the dark room, so the kiosk swapped in butter to stay
+   legible. Dark mode's --violet is now a sage-mint that reads on brown, so
+   the fork is gone and the kiosk wears the brand's accent in both rooms —
+   one loud guest across the whole product, not two. */
 .k2-root {
   --k2-accent: var(--violet);
   --k2-accent-ink: var(--on-accent);
@@ -573,16 +694,20 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
   background: var(--paper); color: var(--ink); overflow: hidden;
 }
 @media (prefers-color-scheme: dark) {
-.k2-root {
-  --k2-accent: var(--butter);
-  --k2-accent-ink: var(--on-light);
-  --k2-glass: rgba(255, 255, 255, .09);
-  --k2-hair: rgba(255, 255, 255, .16);
-  --k2-quiet: rgba(255, 255, 255, .58);
-  --k2-chrome: rgba(20, 18, 16, .95);
-  --k2-stage-bg: #0D0B0A;
+:root:not([data-theme="light"]) .k2-root {
+  /* --k2-accent / --k2-accent-ink are deliberately absent: the room now takes
+     the brand accent in both themes (see the note above). */
+  --k2-glass: rgba(243, 238, 231, .07);
+  --k2-hair: rgba(243, 238, 231, .15);
+  --k2-quiet: rgba(243, 238, 231, .6);
+  /* chrome floats over the stage, so it sits a rung above it and stays
+     slightly translucent for the backdrop blur to have something to do */
+  --k2-chrome: rgba(43, 27, 20, .93);
+  /* darker than --paper-deep on purpose: in the dark room the only lit thing
+     on screen should be the person */
+  --k2-stage-bg: #100A07;
   --k2-blur-filter: blur(38px) brightness(.34) saturate(1.2);
-  --k2-attract-scrim: radial-gradient(ellipse at center, rgba(20, 18, 16, .86) 30%, rgba(20, 18, 16, .97) 75%);
+  --k2-attract-scrim: radial-gradient(ellipse at center, rgba(30, 19, 16, .86) 30%, rgba(30, 19, 16, .97) 75%);
 }
 }
 .k2-attract-scrim { position: absolute; inset: 0; background: var(--k2-attract-scrim); }

@@ -75,7 +75,7 @@ export default function OpsPage() {
         <div className="panel" style={{ padding: "6px 0" }}>
           {errors.map((e) => (
             <Row key={e.id} time={e.createdAt}>
-              <b style={{ color: "#9b3232" }}>{e.source}</b>{" "}
+              <b style={{ color: "var(--danger)" }}>{e.source}</b>{" "}
               <span style={{ color: "var(--ink)" }}>{e.message}</span>
               {e.detail && (
                 <div

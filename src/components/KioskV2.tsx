@@ -359,7 +359,7 @@ function CaptureV2({ onPhoto, loggedIn, shared = false }: { onPhoto: (dataUrl: s
           <div onClick={camState === "denied" ? () => fileRef.current?.click() : undefined} className="k-cam"
             style={{
               ...(camAr ? ({ "--ar": String(camAr) } as React.CSSProperties) : {}),
-              borderRadius: 20, overflow: "hidden", background: "var(--slab)", position: "relative",
+              borderRadius: 20, overflow: "hidden", background: "var(--stage)", position: "relative",
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
               cursor: camState === "denied" ? "pointer" : "default",
             }}>
@@ -872,7 +872,7 @@ function MirrorV2({ photo, shop, rail, cats, catFilter, setCatFilter, retakePhot
             onPointerLeave={() => setShowOriginal(false)}
             onPointerCancel={() => setShowOriginal(false)}
             onContextMenu={(e) => e.preventDefault()}
-            style={{ position: "absolute", bottom: 12, left: 12, background: "rgba(13,11,10,.66)", color: "#fff", fontSize: 12.5, fontWeight: 600, padding: "9px 15px", borderRadius: 999, userSelect: "none", WebkitUserSelect: "none", touchAction: "none", backdropFilter: "blur(8px)" }}>
+            style={{ position: "absolute", bottom: 12, left: 12, background: "var(--stage-veil)", color: "var(--on-slab)", fontSize: 12.5, fontWeight: 600, padding: "9px 15px", borderRadius: 999, userSelect: "none", WebkitUserSelect: "none", touchAction: "none", backdropFilter: "blur(8px)" }}>
             <Icon name="swap" /> {showOriginal ? t.originalPhoto : t.holdToCompare}
           </button>
         )}

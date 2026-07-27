@@ -337,7 +337,7 @@ function CaptureScreen({ onPhoto, loggedIn, shared = false }: { onPhoto: (dataUr
           className="k-cam"
           style={{
             ...(camAr ? ({ "--ar": String(camAr) } as React.CSSProperties) : {}),
-            borderRadius: 20, overflow: "hidden", background: "var(--slab)", position: "relative",
+            borderRadius: 20, overflow: "hidden", background: "var(--stage)", position: "relative",
             display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
             margin: "14px 0 16px", cursor: camState === "denied" ? "pointer" : "default",
           }}>
@@ -611,7 +611,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
         <div ref={stageRef} className="k-stage"
           style={{
             ...(photoAr ? ({ "--ar": String(photoAr) } as React.CSSProperties) : {}),
-            borderRadius: 20, overflow: "hidden", position: "relative", background: "var(--slab)",
+            borderRadius: 20, overflow: "hidden", position: "relative", background: "var(--stage)",
             boxShadow: "var(--shadow-soft)", flexShrink: 0,
           }}>
           <img
@@ -630,7 +630,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
               onPointerLeave={() => setShowOriginal(false)}
               onPointerCancel={() => setShowOriginal(false)}
               onContextMenu={(e) => e.preventDefault()}
-              style={{ position: "absolute", top: 10, left: 10, background: "rgba(26,23,20,.6)", color: "#fff", fontSize: 12.5, fontWeight: 600, padding: "9px 15px", borderRadius: 999, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}>
+              style={{ position: "absolute", top: 10, left: 10, background: "var(--stage-veil)", color: "var(--on-slab)", fontSize: 12.5, fontWeight: 600, padding: "9px 15px", borderRadius: 999, userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}>
               {showOriginal ? t.originalPhoto : t.holdToCompare}
             </button>
           )}
@@ -843,7 +843,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
                       more than on the result, because this is where the
                       shopper decides what they're looking at. */}
                   {g.stitchedToOrder && (
-                    <span style={{ position: "absolute", top: 6, left: 6, background: "rgba(26,23,20,.78)", color: "#fff", fontSize: 8.5, fontWeight: 600, letterSpacing: ".07em", padding: "3px 6px", borderRadius: 2 }}>
+                    <span style={{ position: "absolute", top: 6, left: 6, background: "var(--stage-veil)", color: "var(--on-slab)", fontSize: 8.5, fontWeight: 600, letterSpacing: ".07em", padding: "3px 6px", borderRadius: 2 }}>
                       {t.madeToOrder}
                     </span>
                   )}

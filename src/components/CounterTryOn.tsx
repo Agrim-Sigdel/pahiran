@@ -538,9 +538,9 @@ function CutPickerModal({ cuts, familyName, selectedId, onPick, onClose }: {
 
   return (
     <div onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.5)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 60, padding: 16, overflowY: "auto" }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 680, maxWidth: "100%", margin: "18px 0", padding: "22px 20px 24px", display: "flex", flexDirection: "column", maxHeight: "calc(100dvh - 68px)" }}>
+      style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 60, padding: 16, overflowY: "auto" }}>
+      <div onClick={(e) => e.stopPropagation()} className="fade-up sheet"
+        style={{ width: 680, maxWidth: "100%", margin: "18px 0", padding: "22px 20px 24px", display: "flex", flexDirection: "column", maxHeight: "calc(100dvh - 68px)" }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
           <div>
             <span className="ph-display" style={{ fontSize: 20, color: "var(--forest-deep)" }}>pick a cut</span>
@@ -638,9 +638,9 @@ function FabricPickerModal({ fabrics, selectedId, onPick, onClose }: {
 
   return (
     <div onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.5)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 60, padding: 16, overflowY: "auto" }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 680, maxWidth: "100%", margin: "18px 0", padding: "22px 20px 24px", display: "flex", flexDirection: "column", maxHeight: "calc(100dvh - 68px)" }}>
+      style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 60, padding: 16, overflowY: "auto" }}>
+      <div onClick={(e) => e.stopPropagation()} className="fade-up sheet"
+        style={{ width: 680, maxWidth: "100%", margin: "18px 0", padding: "22px 20px 24px", display: "flex", flexDirection: "column", maxHeight: "calc(100dvh - 68px)" }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
           <div>
             <span className="ph-display" style={{ fontSize: 20, color: "var(--forest-deep)" }}>pick a fabric</span>
@@ -887,7 +887,7 @@ function Result({ run, input, onKeep, onAddGarment, onStartOver }: {
         <div style={{ position: "relative" }}>
           <img src={run.tryonUrl} alt="The customer wearing the stitched piece"
             style={{ width: "100%", borderRadius: 8, display: "block", background: "var(--sage-mist)" }} />
-          <span style={{ position: "absolute", top: 10, left: 10, background: "rgba(26,23,20,.78)", color: "var(--on-slab)", fontSize: 9.5, fontWeight: 500, letterSpacing: ".09em", padding: "4px 9px", borderRadius: 2 }}>
+          <span style={{ position: "absolute", top: 10, left: 10, background: "var(--stage-veil)", color: "var(--on-slab)", fontSize: 9.5, fontWeight: 500, letterSpacing: ".09em", padding: "4px 9px", borderRadius: 2 }}>
             STYLE PREVIEW
           </span>
         </div>

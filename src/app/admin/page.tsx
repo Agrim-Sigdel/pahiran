@@ -85,7 +85,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "ba
     <div className="panel" style={{ padding: "14px 16px" }}>
       <div
         className="ph-display"
-        style={{ fontSize: 26, color: tone === "bad" ? "#9b3232" : "var(--forest-deep)", lineHeight: 1.1 }}
+        style={{ fontSize: 26, color: tone === "bad" ? "var(--danger)" : "var(--forest-deep)", lineHeight: 1.1 }}
       >
         {value.toLocaleString("en-GB")}
       </div>

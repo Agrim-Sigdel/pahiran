@@ -118,9 +118,9 @@ export default function FabricStudio({
 
   return (
     <div onClick={busy ? undefined : onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 55, padding: 16, overflowY: "auto" }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 760, maxWidth: "100%", margin: "24px 0", padding: "26px 26px 30px" }}>
+      style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 55, padding: 16, overflowY: "auto" }}>
+      <div onClick={(e) => e.stopPropagation()} className="fade-up sheet"
+        style={{ width: 760, maxWidth: "100%", margin: "24px 0", padding: "26px 26px 30px" }}>
 
         {/* ── the cloth ── */}
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start", marginBottom: 20 }}>
@@ -361,7 +361,7 @@ export function StitchingOverlay({
 
   return (
     <div onClick={(e) => e.stopPropagation()}
-      style={{ position: "fixed", inset: 0, zIndex: 58, background: "#151210", overflow: "hidden" }}>
+      style={{ position: "fixed", inset: 0, zIndex: 58, background: "var(--stage)", overflow: "hidden" }}>
 
       {/* the cloth itself, dimmed — the thing being worked on, not decoration */}
       <img src={image} alt="" aria-hidden
@@ -436,7 +436,7 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
           <div style={{ color: "var(--mut)", fontSize: 12 }}>stitching…</div>
         )}
         {c.status === "ready" && (
-          <span style={{ position: "absolute", top: 10, left: 10, background: "rgba(26,23,20,.78)", color: "var(--on-slab)", fontSize: 9.5, fontWeight: 500, letterSpacing: ".09em", padding: "4px 9px", borderRadius: 2 }}>
+          <span style={{ position: "absolute", top: 10, left: 10, background: "var(--stage-veil)", color: "var(--on-slab)", fontSize: 9.5, fontWeight: 500, letterSpacing: ".09em", padding: "4px 9px", borderRadius: 2 }}>
             STYLE PREVIEW
           </span>
         )}
@@ -589,9 +589,9 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
   };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 420, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: "28px 26px" }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="fade-up sheet"
+        style={{ width: 420, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: "28px 26px" }}>
         <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 4 }}>
           {mode === "edit" ? "change this cut" : mode === "copy" ? "make it your own" : "add your own cut"}
         </div>

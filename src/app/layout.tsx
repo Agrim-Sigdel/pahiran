@@ -21,8 +21,10 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   themeColor: [
+    // Must track --paper in globals.css, or the browser/OS chrome sits at a
+    // different colour from the page it is framing.
     { media: "(prefers-color-scheme: light)", color: "#FAF6F0" },
-    { media: "(prefers-color-scheme: dark)", color: "#141210" },
+    { media: "(prefers-color-scheme: dark)", color: "#1E1310" },
   ],
 };
 

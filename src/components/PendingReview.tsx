@@ -17,12 +17,12 @@ const COPY: Record<string, { tone: string; title: string; body: string }> = {
     body: "We review every new vendor before the shop goes live. Nothing more is needed from you — we'll give you a call to confirm, usually within a day.",
   },
   rejected: {
-    tone: "var(--rust, #b4432c)",
+    tone: "var(--danger)",
     title: "shop not approved",
     body: "Your shop isn't visible to shoppers and can't run try-ons. We'll call you to explain — you can ask us to review it again on that call.",
   },
   suspended: {
-    tone: "var(--rust, #b4432c)",
+    tone: "var(--danger)",
     title: "shop suspended",
     body: "Your storefront is hidden and try-ons are paused. Your catalog is safe — we'll call you to sort this out.",
   },
@@ -37,7 +37,7 @@ export default function PendingReview({ shop, signOut }: {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--sage)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div className="fade-up" style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-modal)", width: 440, maxWidth: "100%", padding: "34px 30px" }}>
+      <div className="fade-up sheet" style={{ width: 440, maxWidth: "100%", padding: "34px 30px" }}>
         <div className="wordmark" style={{ fontSize: 18, marginBottom: 18 }}>p<span className="ee" style={{ color: "var(--butter-deep)" }}>ee</span>q</div>
 
         <div className="ph-display" style={{ fontSize: 26, color: c.tone, marginBottom: 6 }}>{c.title}</div>

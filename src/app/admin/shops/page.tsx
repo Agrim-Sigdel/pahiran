@@ -190,7 +190,7 @@ function ShopsTable() {
       </div>
 
       {err && (
-        <div className="panel" style={{ padding: "12px 16px", marginBottom: 12, color: "#9b3232", fontSize: 13 }}>
+        <div className="panel" style={{ padding: "12px 16px", marginBottom: 12, color: "var(--danger)", fontSize: 13 }}>
           {err}
         </div>
       )}
@@ -227,18 +227,18 @@ function ShopsTable() {
                     {s.whatsapp ? (
                       <> · <a href={"tel:" + s.whatsapp} style={{ color: "var(--violet)" }}>{s.whatsapp}</a></>
                     ) : (
-                      <span style={{ color: "#9b3232" }}> · no phone number</span>
+                      <span style={{ color: "var(--danger)" }}> · no phone number</span>
                     )}
                     {" · "}{s.pinned ? "pin placed" : "no map pin"}
                   </div>
                   <div style={{ fontSize: 12, color: "var(--stone)", marginTop: 4 }}>
                     {usage(s.garmentCount, s.maxGarments)} garment{s.garmentCount === 1 ? "" : "s"} · plan{" "}
                     <b style={{ color: "var(--violet)" }}>{s.planName || s.plan}</b> ·{" "}
-                    <b style={{ color: short(s.tryonsUsed, s.tryonLimit) ? "#9b3232" : "inherit" }}>
+                    <b style={{ color: short(s.tryonsUsed, s.tryonLimit) ? "var(--danger)" : "inherit" }}>
                       {usage(s.tryonsUsed, s.tryonLimit)} try-ons
                     </b>
                     {" · "}
-                    <span style={{ color: short(s.studioUsed, s.studioLimit) ? "#9b3232" : "inherit" }}>
+                    <span style={{ color: short(s.studioUsed, s.studioLimit) ? "var(--danger)" : "inherit" }}>
                       {usage(s.studioUsed, s.studioLimit)} studio
                     </span>
                     {s.periodEnd && <> · renews {when(s.periodEnd)}</>}
@@ -264,7 +264,7 @@ function ShopsTable() {
                     marginTop: 12,
                     flexWrap: "wrap",
                     padding: "10px 12px",
-                    background: "rgba(0,0,0,.03)",
+                    background: "var(--paper-deep)",
                     borderRadius: "var(--radius-btn)",
                   }}
                 >
@@ -290,7 +290,7 @@ function ShopsTable() {
               )}
 
               {managing === s.id && (
-                <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(0,0,0,.03)", borderRadius: "var(--radius-btn)", display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ marginTop: 12, padding: "12px 14px", background: "var(--paper-deep)", borderRadius: "var(--radius-btn)", display: "flex", flexDirection: "column", gap: 12 }}>
                   {/* Category is descriptive and changes nothing else, so it
                       saves on pick. Try-on entitlement is a money question, so
                       it needs a reason and an explicit apply. */}
@@ -440,7 +440,7 @@ function Btn({
         padding: "9px 14px",
         fontSize: 12,
         borderRadius: "var(--radius-btn)",
-        ...(solid ? {} : { border: "1px solid var(--line)", color: danger ? "#9b3232" : "var(--mut)" }),
+        ...(solid ? {} : { border: "1px solid var(--line)", color: danger ? "var(--danger)" : "var(--mut)" }),
       }}
     >
       {busy ? "working…" : children}
