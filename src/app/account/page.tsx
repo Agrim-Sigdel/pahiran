@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAccount, signOut, getContact, saveContact } from "@/lib/account";
@@ -8,6 +8,8 @@ import {
   listLooks, deleteLook, setLookFavorite, clearAllLooks, lookImageURL, shareLook,
   deviceLooksCount, migrateDeviceLooksToCloud, type SavedLook,
 } from "@/lib/looks";
+import { getMyOrders } from "@/lib/storage";
+import type { OrderHistoryLine } from "@/lib/types";
 import { npr } from "@/lib/constants";
 import Icon from "@/components/Icon";
 import LookViewer from "@/components/LookViewer";
@@ -105,7 +107,7 @@ function SignedIn({ email }: { email: string }) {
   };
 
   const input: React.CSSProperties = {
-    padding: "11px 14px", borderRadius: 12, border: "1px solid var(--line)", background: "#fff", color: "var(--ink)", fontSize: 14, width: "100%",
+    padding: "11px 14px", borderRadius: 12, border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)", fontSize: 14, width: "100%",
   };
 
   const sorted = looks ? [...looks].sort((a, b) => Number(b.favorite) - Number(a.favorite)) : [];
@@ -117,7 +119,7 @@ function SignedIn({ email }: { email: string }) {
           <div className="wordmark" style={{ fontSize: 20 }}>p<span className="ee" style={{ color: "var(--butter-deep)" }}>ee</span>q</div>
           <div style={{ fontSize: 12, color: "var(--stone)", marginTop: 2 }}>{email}</div>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <Link href="/" className="ph-btn" style={{ fontSize: 13, color: "var(--stone)", padding: "8px 14px", border: "1px solid var(--line)", borderRadius: 999 }}>home</Link>
           <button className="ph-btn" onClick={async () => { await signOut(); window.location.href = "/"; }}
             style={{ fontSize: 13, color: "var(--stone)", padding: "8px 14px", border: "1px solid var(--line)", borderRadius: 999 }}>sign out</button>
@@ -127,12 +129,12 @@ function SignedIn({ email }: { email: string }) {
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 20px 50px" }}>
         {/* looks saved on this device before signing in — offer to keep them */}
         {pendingLooks > 0 && (
-          <section style={{ background: "var(--butter)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "16px 20px", marginBottom: 22, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+          <section style={{ background: "var(--butter)", color: "var(--on-light)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "16px 20px", marginBottom: 22, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
-              <div className="ph-display" style={{ fontSize: 16, fontWeight: 600, color: "var(--ink)" }}>
+              <div className="ph-display" style={{ fontSize: 16, fontWeight: 600, color: "var(--on-light)" }}>
                 {pendingLooks} look{pendingLooks !== 1 ? "s" : ""} saved on this device
               </div>
-              <div style={{ fontSize: 13, color: "var(--ink)", opacity: 0.75, marginTop: 2 }}>
+              <div style={{ fontSize: 13, color: "var(--on-light)", opacity: 0.75, marginTop: 2 }}>
                 Add them to your account so they're on every device you sign in on.
               </div>
             </div>
@@ -141,7 +143,7 @@ function SignedIn({ email }: { email: string }) {
                 {merging ? "adding…" : "add to my account"}
               </button>
               <button className="ph-btn" onClick={() => setPendingLooks(0)} disabled={merging}
-                style={{ fontSize: 13, color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3 }}>
+                style={{ fontSize: 13, color: "var(--on-light)", textDecoration: "underline", textUnderlineOffset: 3 }}>
                 not now
               </button>
             </div>
@@ -168,6 +170,9 @@ function SignedIn({ email }: { email: string }) {
             {savedMsg ? <><Icon name="check" /> saved</> : "save details"}
           </button>
         </section>
+
+        {/* orders placed from a storefront bag while signed in */}
+        <OrdersSection />
 
         {/* saved looks */}
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
@@ -223,6 +228,111 @@ function SignedIn({ email }: { email: string }) {
           onDelete={async () => { await deleteLook(viewing.id); refresh(); }} />
       )}
     </main>
+  );
+}
+
+/* ---------- order history ----------
+   Lines of one bag share an orderRef, so they regroup into one order here the
+   same way they do in the vendor's inbox. Only orders placed while signed in
+   appear: a guest order is deliberately unclaimable, since matching on a typed
+   phone number would hand anyone a stranger's history. */
+
+function OrdersSection() {
+  const [lines, setLines] = useState<OrderHistoryLine[] | null>(null);
+
+  useEffect(() => { getMyOrders().then(setLines).catch(() => setLines([])); }, []);
+
+  const orders = useMemo(() => {
+    if (!lines) return [];
+    const map = new Map<string, OrderHistoryLine[]>();
+    for (const l of lines) {
+      const key = l.orderRef ? "ref:" + l.orderRef : "solo:" + l.id;
+      const group = map.get(key);
+      if (group) group.push(l);
+      else map.set(key, [l]);
+    }
+    return Array.from(map.entries()).map(([key, ls]) => ({
+      key,
+      ref: ls[0].orderRef,
+      shopName: ls[0].shopName,
+      shopSlug: ls[0].shopSlug,
+      createdAt: ls[0].createdAt,
+      kind: ls[0].kind,
+      /* The vendor closes each line as they deal with it, so an order counts as
+         confirmed only once none of it is still waiting. */
+      confirmed: ls.every((l) => l.handled),
+      total: ls.reduce((n, l) => n + l.unitPrice * l.qty, 0),
+      lines: ls,
+    }));
+  }, [lines]);
+
+  if (lines === null) {
+    return (
+      <section style={{ marginBottom: 26 }}>
+        <h2 className="ph-display" style={{ fontSize: 20, fontWeight: 600, color: "var(--ink)", margin: "0 0 12px" }}>your orders</h2>
+        <p style={{ color: "var(--stone)" }}>loading…</p>
+      </section>
+    );
+  }
+
+  if (orders.length === 0) {
+    return (
+      <section style={{ marginBottom: 26 }}>
+        <h2 className="ph-display" style={{ fontSize: 20, fontWeight: 600, color: "var(--ink)", margin: "0 0 12px" }}>your orders</h2>
+        <div style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: 30, textAlign: "center", color: "var(--stone)", fontSize: 14, lineHeight: 1.6 }}>
+          No orders yet — anything you check out from a shop's bag while signed in shows up here.
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section style={{ marginBottom: 26 }}>
+      <h2 className="ph-display" style={{ fontSize: 20, fontWeight: 600, color: "var(--ink)", margin: "0 0 12px" }}>your orders</h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {orders.map((o) => (
+          <div key={o.key} style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "14px 16px" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>
+                  {o.shopSlug
+                    ? <Link href={`/s/${o.shopSlug}`} style={{ color: "var(--ink)", textDecoration: "none" }}>{o.shopName}</Link>
+                    : o.shopName}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--stone)", marginTop: 2 }}>
+                  {new Date(o.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                  {o.ref && <span style={{ marginLeft: 8, fontFamily: "ui-monospace, monospace" }}>{o.ref}</span>}
+                </div>
+              </div>
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "var(--ink)" }}>{npr(o.total)}</div>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: o.confirmed ? "var(--violet)" : "var(--stone)" }}>
+                  {o.confirmed ? "confirmed by shop" : o.kind === "enquiry" ? "enquiry sent" : "waiting for the shop"}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+              {o.lines.map((l) => (
+                <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {l.image
+                    ? <img src={l.image} alt="" style={{ width: 38, height: 48, objectFit: "cover", borderRadius: 8, flexShrink: 0, background: "var(--sage-mist)" }} />
+                    : <div style={{ width: 38, height: 48, borderRadius: 8, background: "var(--line)", flexShrink: 0 }} />}
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: "var(--ink)" }}>
+                    <b style={{ color: "var(--stone)" }}>{l.qty}×</b> {l.garmentName}
+                    {l.size && <span style={{ color: "var(--stone)", marginLeft: 6 }}>size {l.size}</span>}
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--stone)", flexShrink: 0 }}>{npr(l.unitPrice * l.qty)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p style={{ fontSize: 12, color: "var(--stone)", margin: "10px 2px 0", lineHeight: 1.5 }}>
+        peeq doesn't take payment — each shop confirms price, payment and delivery with you directly.
+      </p>
+    </section>
   );
 }
 

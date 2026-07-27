@@ -19,6 +19,19 @@ export interface ShopperContact {
   phone: string;
 }
 
+/** The signed-in user's access token, for server routes that insert on the
+    shopper's behalf and need to know who they are. The server verifies it —
+    sending a bare user id instead would be forgeable. */
+export async function currentAccessToken(): Promise<string | null> {
+  if (!isSupabaseConfigured()) return null;
+  try {
+    const { data } = await supabase().auth.getSession();
+    return data.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** The signed-in user's id, or null (not logged in / Supabase off). */
 export async function currentUserId(): Promise<string | null> {
   if (!isSupabaseConfigured()) return null;

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import QRCode from "qrcode";
 import { CATEGORIES, SIZES, FAMILIES, FABRIC_UNITS, npr, fabricPrice, familyLabel } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
-import { OverviewTab, LeadsTab, garmentTryCounts } from "@/components/Analytics";
+import { OverviewTab, LeadsTab, garmentTryCounts, groupLeads } from "@/components/Analytics";
 import LocationPicker from "@/components/LocationPicker";
 import PlanTab from "@/components/PlanTab";
 import FabricStudio, { CutModal } from "@/components/FabricStudio";
@@ -51,7 +51,7 @@ interface DashboardProps {
   leads: Lead[];
   onLeadHandled: (id: string, handled: boolean) => void;
   loading: boolean;
-  launchKiosk: () => void;
+  launchKiosk: (v2?: boolean) => void;
   signOut: (() => void) | null;
 }
 
@@ -79,7 +79,9 @@ export default function Dashboard({
   const [qrGarment, setQrGarment] = useState<Garment | null>(null);
   const [showTagSheet, setShowTagSheet] = useState(false);
 
-  const openLeads = leads.filter((l) => !l.handled).length;
+  /* Orders, not rows: a three-piece bag is one thing to call back about, so
+     counting its lines would read as three waiting shoppers. */
+  const openLeads = useMemo(() => groupLeads(leads).filter((o) => !o.handled).length, [leads]);
   const tryCounts = useMemo(() => garmentTryCounts(events), [events]);
   /* Vendors reading a code off a hanger tag type just the digits ("14") as
      often as the whole thing ("A7K2-0014"), so match on either. */
@@ -128,7 +130,7 @@ export default function Dashboard({
      the kiosk: a catalog-only shop never sees it. */
   const TABS: { key: Tab; label: string; badge?: number }[] = [
     { key: "overview", label: "Overview" },
-    { key: "leads", label: "Leads", badge: openLeads || undefined },
+    { key: "leads", label: "Orders", badge: openLeads || undefined },
     { key: "catalog", label: "Catalog" },
     ...(shop.type === "apparel"
       ? [{ key: "fabrics" as Tab, label: "Fabrics" }, { key: "designs" as Tab, label: "Designs" }, { key: "counter" as Tab, label: "Counter" }]
@@ -155,16 +157,28 @@ export default function Dashboard({
           {/* The kiosk is the try-on flow, so a catalog-only shop has no use
               for it — their storefront link is the thing to share. */}
           {shop.type === "apparel" ? (
-            <button
-              className="ph-btn btn-solid"
-              onClick={() => {
-                if (catalog.length === 0) {
-                  alert("Add at least one garment to your catalog first — the kiosk needs something to show shoppers.");
-                  setTab("catalog");
-                  return;
-                }
-                launchKiosk();
-              }}>launch kiosk</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button
+                className="ph-btn btn-solid"
+                onClick={() => {
+                  if (catalog.length === 0) {
+                    alert("Add at least one garment to your catalog first — the kiosk needs something to show shoppers.");
+                    setTab("catalog");
+                    return;
+                  }
+                  launchKiosk();
+                }}>launch kiosk</button>
+              {/* the fitting-room redesign, side by side with the current one
+                  until one of them wins */}
+              <button className="ph-btn"
+                onClick={() => {
+                  if (catalog.length === 0) { setTab("catalog"); return; }
+                  launchKiosk(true);
+                }}
+                style={{ color: "var(--mut)", fontSize: 12, letterSpacing: ".1em", textDecoration: "underline", textUnderlineOffset: 3 }}>
+                try v2
+              </button>
+            </div>
           ) : (
             shop.slug && (
               <a className="ph-btn btn-solid" href={"/s/" + shop.slug} target="_blank" rel="noopener noreferrer">
@@ -194,7 +208,7 @@ export default function Dashboard({
               {openLeads > 0 && (
                 <button className="ph-btn" onClick={() => setTab("leads")}
                   style={{ width: "100%", textAlign: "left", background: "var(--cream)", border: "1px solid var(--camel)", borderRadius: "var(--radius-card)", padding: "12px 16px", marginBottom: 14, fontSize: 13, color: "var(--forest-deep)" }}>
-                  <b style={{ color: "var(--camel)" }}>{openLeads} open lead{openLeads !== 1 ? "s" : ""}</b> — tap to view
+                  <b style={{ color: "var(--camel)" }}>{openLeads} order{openLeads !== 1 ? "s" : ""} to call back</b> — tap to view
                 </button>
               )}
               <OverviewTab events={events} catalog={catalog} />
@@ -256,7 +270,7 @@ export default function Dashboard({
                             {g.category}
                           </span>
                           {tries > 0 && (
-                            <span style={{ position: "absolute", top: 10, right: 10, background: "rgba(26,23,20,.8)", color: "var(--cream)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
+                            <span style={{ position: "absolute", top: 10, right: 10, background: "rgba(26,23,20,.8)", color: "var(--on-slab)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
                               {tries} tr{tries === 1 ? "y" : "ies"}
                             </span>
                           )}
@@ -348,7 +362,7 @@ export default function Dashboard({
                           {familyLabel(f.family)}
                         </span>
                         {(compCount.get(f.id) ?? 0) > 0 && (
-                          <span style={{ position: "absolute", top: 10, right: 10, background: "rgba(26,23,20,.8)", color: "var(--cream)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
+                          <span style={{ position: "absolute", top: 10, right: 10, background: "rgba(26,23,20,.8)", color: "var(--on-slab)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
                             {compCount.get(f.id)} cut{compCount.get(f.id) !== 1 ? "s" : ""}
                           </span>
                         )}
@@ -601,7 +615,9 @@ function CutCard({ cut, onEdit }: { cut: Style; onEdit: () => void }) {
             {cov.label}
           </span>
         )}
-        <span style={{ ...cutOwnerChip(mine), position: "absolute", top: 10, right: 10, background: mine ? "var(--forest)" : "rgba(26,23,20,.65)", color: "var(--cream)" }}>
+        {/* both branches sit on a photo, so both stay dark in either theme —
+            --forest here would have flipped pale under --cream text */}
+        <span style={{ ...cutOwnerChip(mine), position: "absolute", top: 10, right: 10, background: mine ? "var(--slab)" : "rgba(26,23,20,.65)", color: "var(--on-slab)" }}>
           {mine ? "YOURS" : "peeq library"}
         </span>
       </div>
@@ -726,7 +742,7 @@ function LinkBox({ url, children }: { url: string; children?: React.ReactNode })
   const [copied, setCopied] = useState(false);
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-      <code style={{ padding: "11px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 13, background: "#fff", color: "var(--ink)", flex: 1, minWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: 0, textTransform: "none", fontWeight: 400 }}>
+      <code style={{ padding: "11px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 13, background: "var(--card)", color: "var(--ink)", flex: 1, minWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: 0, textTransform: "none", fontWeight: 400 }}>
         {url}
       </code>
       <button className="ph-btn"
@@ -773,7 +789,7 @@ function SlugEditor({ slug, changeSlug }: { slug: string; changeSlug: (slug: str
         <input value={draft} autoFocus maxLength={40}
           onChange={(e) => { setDraft(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40)); setError(""); }}
           onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-          style={{ padding: "10px 13px", borderRadius: "var(--radius-btn)", border: "1px solid " + (valid ? "var(--line)" : "var(--danger)"), fontSize: 14, letterSpacing: 0, textTransform: "none", fontWeight: 400, width: 180, background: "#fff" }} />
+          style={{ padding: "10px 13px", borderRadius: "var(--radius-btn)", border: "1px solid " + (valid ? "var(--line)" : "var(--danger)"), fontSize: 14, letterSpacing: 0, textTransform: "none", fontWeight: 400, width: 180, background: "var(--card)" }} />
         <button className="ph-btn" disabled={!valid || busy} onClick={save}
           style={{ background: valid ? "var(--forest)" : "var(--line)", color: valid ? "var(--cream)" : "var(--mut)", padding: "10px 14px", fontSize: 11, letterSpacing: ".1em" }}>
           {busy ? "Saving…" : "Save"}
@@ -828,7 +844,7 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
     setSizes((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
 
   const canSave = Boolean(name.trim() && image && !busy);
-  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 15, background: "#fff" };
+  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 15, background: "var(--card)" };
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
@@ -931,7 +947,7 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
   };
 
   const canSave = Boolean(name.trim() && image && !busy);
-  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 15, background: "#fff" };
+  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 15, background: "var(--card)" };
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>

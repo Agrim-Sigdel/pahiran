@@ -7,7 +7,8 @@ import type { Garment, Lead, TryOnEvent } from "@/lib/types";
 
 /* Vendor analytics, split into dashboard tabs:
    - OverviewTab: stat tiles, 30-day daily chart, most-tried table, CSV, errors
-   - LeadsTab: "I want this" inbox with status chips + WhatsApp reply
+   - LeadsTab: the orders inbox — bag checkouts regrouped into one card per
+     order, plus lone kiosk "I want this" leads, with call/WhatsApp reply
    Aggregation happens here, client-side, from props. */
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -218,19 +219,63 @@ function DailyBars({ days }: { days: { key: string; label: string; count: number
 
 /* ── Leads ────────────────────────────────────────────── */
 
+export interface LeadOrder {
+  key: string;
+  ref: string | null;
+  lines: Lead[];
+  name: string;
+  phone: string;
+  kind: "order" | "enquiry";
+  createdAt: string;
+  handled: boolean; // every line dealt with
+}
+
+/** A bag checkout writes one lead row per line, all sharing an orderRef. The
+    inbox is about orders, not rows, so put them back together. Kiosk leads
+    have no ref and stay one-line orders of their own. */
+export function groupLeads(leads: Lead[]): LeadOrder[] {
+  const orders = new Map<string, LeadOrder>();
+  for (const l of leads) {
+    const key = l.orderRef ? "ref:" + l.orderRef : "solo:" + l.id;
+    const o = orders.get(key);
+    if (o) {
+      o.lines.push(l);
+      o.handled = o.handled && l.handled;
+      // the whole bag lands at once, but keep the earliest stamp as the order's
+      if (l.createdAt < o.createdAt) o.createdAt = l.createdAt;
+    } else {
+      orders.set(key, {
+        key, ref: l.orderRef, lines: [l], name: l.name, phone: l.phone,
+        kind: l.kind, createdAt: l.createdAt, handled: l.handled,
+      });
+    }
+  }
+  return Array.from(orders.values()).sort((a, b) => {
+    if (a.handled !== b.handled) return a.handled ? 1 : -1; // open first
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+}
+
+/** What one piece cost when it was ordered. Falls back to the catalog for
+    rows written before orders snapshotted their price — a vendor who edits a
+    price today must not silently restate what an old order was worth. */
+function linePrice(lead: Lead, garment?: Garment): number {
+  return lead.unitPrice ?? garment?.price ?? 0;
+}
+
 export function LeadsTab({ leads, catalog, onLeadHandled, shopName }: {
   leads: Lead[]; catalog: Garment[]; onLeadHandled: (id: string, handled: boolean) => void;
   shopName?: string;
 }) {
   const byId = useMemo(() => new Map(catalog.map((g) => [g.id, g])), [catalog]);
-  const open = leads.filter((l) => !l.handled);
-  const sorted = [...open, ...leads.filter((l) => l.handled)];
+  const orders = useMemo(() => groupLeads(leads), [leads]);
+  const openCount = orders.filter((o) => !o.handled).length;
 
   if (leads.length === 0) {
     return (
       <div className="panel" style={{ color: "var(--mut)", fontSize: 14, lineHeight: 1.6 }}>
-        No leads yet — when a shopper taps "I want this" after a try-on, it lands here
-        with their size and (optional) contact details.
+        No orders yet — when a shopper checks out from your storefront bag, or taps
+        "I want this" after a try-on, it lands here with their name, phone and sizes.
       </div>
     );
   }
@@ -238,51 +283,106 @@ export function LeadsTab({ leads, catalog, onLeadHandled, shopName }: {
   return (
     <div className="panel">
       <div className="panel-head">
-        <span className="title">Leads</span>
-        <span className="sub">shoppers who tapped "I want this" · newest first</span>
+        <span className="title">Orders</span>
+        <span className="sub">
+          {openCount > 0 ? `${openCount} to call back · ` : ""}{orders.length} total · newest first
+        </span>
       </div>
-      <div>
-        {sorted.slice(0, 50).map((l, i) => {
-          const g = byId.get(l.garmentId || "");
-          const wa = l.phone
-            ? waLink(l.phone, `Namaste${l.name ? " " + l.name : ""}! This is ${shopName || "the shop"} — about the ${g?.name || "garment"} you tried on with peeq. It's ready for you!`)
-            : null;
-          return (
-            <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderTop: i ? "1px solid var(--line)" : "none", opacity: l.handled ? 0.5 : 1, flexWrap: "wrap" }}>
-              {g && <img src={g.image} alt="" style={{ width: 40, height: 52, objectFit: "cover", borderRadius: 3, flexShrink: 0 }} />}
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 500 }}>
-                  {g?.name || "Removed garment"}
-                  {l.size && <span style={{ color: "var(--camel)", marginLeft: 8, fontWeight: 600 }}>size {l.size}</span>}
-                </div>
-                <div style={{ fontSize: 12, color: "var(--mut)", marginTop: 1 }}>
-                  {[l.name, l.phone].filter(Boolean).join(" · ") || "anonymous shopper"} · {timeAgo(l.createdAt)}
-                  {g && <b style={{ color: "var(--forest)", marginLeft: 8 }}>{npr(g.price)}</b>}
-                </div>
-              </div>
-              <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                <span style={{
-                  fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 999,
-                  background: l.handled ? "transparent" : "var(--butter)",
-                  color: l.handled ? "var(--stone)" : "var(--ink)",
-                  border: l.handled ? "1px solid var(--line)" : "none",
-                }}>
-                  {l.handled ? "done" : "new"}
-                </span>
-                {!l.handled && wa && (
-                  <a href={wa} target="_blank" rel="noopener noreferrer" className="ph-btn"
-                    style={{ fontSize: 11, letterSpacing: ".08em", padding: "7px 12px", border: "1px solid var(--whatsapp)", color: "var(--whatsapp)", borderRadius: "var(--radius-btn)", fontWeight: 500, textDecoration: "none" }}>
-                    WhatsApp
-                  </a>
-                )}
-                <button className="ph-btn" onClick={() => onLeadHandled(l.id, !l.handled)}
-                  style={{ fontSize: 11, letterSpacing: ".08em", padding: "7px 12px", border: "1px solid var(--forest)", color: "var(--forest)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
-                  {l.handled ? "Reopen" : <>Done <Icon name="check" /></>}
-                </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {orders.slice(0, 50).map((o) => (
+          <OrderCard key={o.key} order={o} byId={byId} shopName={shopName} onLeadHandled={onLeadHandled} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OrderCard({ order, byId, shopName, onLeadHandled }: {
+  order: LeadOrder; byId: Map<string, Garment>; shopName?: string;
+  onLeadHandled: (id: string, handled: boolean) => void;
+}) {
+  const items = order.lines.map((l) => ({ lead: l, garment: byId.get(l.garmentId || "") }));
+  const pieces = order.lines.reduce((n, l) => n + l.qty, 0);
+  /* Only priced pieces count: a removed garment with no snapshot has no price
+     to add, and inventing one would misstate what the vendor is owed. */
+  const total = items.reduce((n, it) => n + linePrice(it.lead, it.garment) * it.lead.qty, 0);
+  const missing = items.some((it) => !it.garment && it.lead.unitPrice === null);
+
+  const summary = items
+    .map((it) => `${it.lead.qty}× ${it.garment?.name || "a piece"}${it.lead.size ? ` (size ${it.lead.size})` : ""}`)
+    .join(", ");
+  const wa = order.phone
+    ? waLink(order.phone, `Namaste${order.name ? " " + order.name : ""}! This is ${shopName || "the shop"} — about your peeq order${order.ref ? " " + order.ref : ""}: ${summary}. It's ready for you!`)
+    : null;
+
+  /* One button, whole order: the vendor deals with a shopper, not with rows. */
+  const setHandled = (handled: boolean) => {
+    for (const l of order.lines) if (l.handled !== handled) onLeadHandled(l.id, handled);
+  };
+
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-card, 10px)", padding: "12px 14px", opacity: order.handled ? 0.55 : 1 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {order.name || "anonymous shopper"}
+            <span style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase",
+              padding: "3px 8px", borderRadius: 999,
+              background: order.kind === "enquiry" ? "transparent" : "var(--butter)",
+              color: order.kind === "enquiry" ? "var(--whatsapp)" : "var(--ink)",
+              border: order.kind === "enquiry" ? "1px solid var(--whatsapp)" : "none",
+            }}>
+              {order.kind === "enquiry" ? "WhatsApp enquiry" : "order"}
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--mut)", marginTop: 2 }}>
+            {order.phone || "no number"} · {timeAgo(order.createdAt)}
+            {order.ref && <span style={{ marginLeft: 8, fontFamily: "ui-monospace, monospace" }}>{order.ref}</span>}
+          </div>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--forest)" }}>{npr(total)}{missing && "+"}</div>
+          <div style={{ fontSize: 11, color: "var(--mut)" }}>{pieces} piece{pieces !== 1 ? "s" : ""}</div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, margin: "10px 0 0" }}>
+        {items.map(({ lead, garment }) => (
+          <div key={lead.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {garment
+              ? <img src={garment.image} alt="" style={{ width: 34, height: 44, objectFit: "cover", borderRadius: 3, flexShrink: 0 }} />
+              : <div style={{ width: 34, height: 44, borderRadius: 3, background: "var(--line)", flexShrink: 0 }} />}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <b style={{ color: "var(--mut)" }}>{lead.qty}×</b> {garment?.name || "Removed garment"}
+                {lead.size && <span style={{ color: "var(--camel)", marginLeft: 6, fontWeight: 600 }}>size {lead.size}</span>}
               </div>
             </div>
-          );
-        })}
+            {linePrice(lead, garment) > 0 && (
+              <div style={{ fontSize: 12.5, color: "var(--mut)", flexShrink: 0 }}>{npr(linePrice(lead, garment) * lead.qty)}</div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", marginTop: 10 }}>
+        {order.phone && (
+          <a href={"tel:" + order.phone} className="ph-btn"
+            style={{ fontSize: 11, letterSpacing: ".08em", padding: "7px 12px", border: "1px solid var(--line)", color: "var(--ink)", borderRadius: "var(--radius-btn)", fontWeight: 500, textDecoration: "none" }}>
+            Call
+          </a>
+        )}
+        {wa && (
+          <a href={wa} target="_blank" rel="noopener noreferrer" className="ph-btn"
+            style={{ fontSize: 11, letterSpacing: ".08em", padding: "7px 12px", border: "1px solid var(--whatsapp)", color: "var(--whatsapp)", borderRadius: "var(--radius-btn)", fontWeight: 500, textDecoration: "none" }}>
+            WhatsApp
+          </a>
+        )}
+        <button className="ph-btn" onClick={() => setHandled(!order.handled)}
+          style={{ fontSize: 11, letterSpacing: ".08em", padding: "7px 12px", border: "1px solid var(--forest)", color: "var(--forest)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
+          {order.handled ? "Reopen" : <>Done <Icon name="check" /></>}
+        </button>
       </div>
     </div>
   );

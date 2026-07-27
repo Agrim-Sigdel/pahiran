@@ -194,6 +194,31 @@ export interface Lead {
   name: string;
   phone: string;
   size: string;
+  /** Lines of one bag checkout share this; null for a lone kiosk lead. */
+  orderRef: string | null;
+  qty: number;
+  /** Price per piece when it was ordered. Null on rows written before order
+      snapshots existed — read it through leadUnitPrice(), never raw. */
+  unitPrice: number | null;
+  /** "enquiry" also opened WhatsApp, so the shopper may message first. */
+  kind: "order" | "enquiry";
+  handled: boolean;
+  createdAt: string;
+}
+
+/** One line of a shopper's own order history, denormalised at read time so it
+    survives the shop editing or deleting the piece afterwards. */
+export interface OrderHistoryLine {
+  id: string;
+  orderRef: string | null;
+  shopName: string;
+  shopSlug: string | null;
+  garmentName: string;
+  image: string | null;
+  size: string;
+  qty: number;
+  unitPrice: number;
+  kind: "order" | "enquiry";
   handled: boolean;
   createdAt: string;
 }

@@ -5,6 +5,7 @@
    Garment photos are data URLs locally, public bucket URLs on Supabase. */
 
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { currentAccessToken, currentUserId } from "@/lib/account";
 import { dataURLToBlob } from "@/lib/images";
 import { familyLabel } from "@/lib/constants";
 import { GLOBAL_STYLES } from "@/lib/style-library";
@@ -13,6 +14,7 @@ import {
   type Shop,
   type TryOnEvent,
   type Lead,
+  type OrderHistoryLine,
   type ErrorLog,
   type Fabric,
   type Style,
@@ -967,30 +969,79 @@ export async function submitLead(
   garment: Wearable,
   info: { name: string; phone: string; size: string }
 ): Promise<void> {
+  return submitOrder(shop, [{ garment, size: info.size, qty: 1 }], {
+    name: info.name,
+    phone: info.phone,
+    orderRef: null,
+    kind: "order",
+  });
+}
+
+export interface OrderLine {
+  garment: Wearable;
+  size: string;
+  qty: number;
+}
+
+/** A storefront bag checkout: every line of one bag in a single request, all
+    sharing an orderRef so the vendor's inbox shows them as one order. */
+export async function submitOrder(
+  shop: Shop,
+  lines: OrderLine[],
+  info: { name: string; phone: string; orderRef: string | null; kind: "order" | "enquiry" }
+): Promise<void> {
+  if (lines.length === 0) return;
+
+  /* Exactly one id per line: a composition is not a row in garments, so
+     sending its id as garmentId would fail the server's ownership check. */
+  const items = lines.map((l) => ({
+    garmentId: l.garment.compositionId ? null : l.garment.id,
+    compositionId: l.garment.compositionId ?? null,
+    size: l.size,
+    qty: l.qty,
+  }));
+
   if (!isSupabaseConfigured()) {
     const leads = JSON.parse(lsGet("leads") || "[]");
-    leads.unshift({
-      id: Date.now().toString(36),
-      garmentId: garment.id,
-      name: info.name,
-      phone: info.phone,
-      size: info.size,
-      handled: false,
-      createdAt: new Date().toISOString(),
-    });
+    const now = new Date().toISOString();
+    for (const l of lines) {
+      leads.unshift({
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        garmentId: l.garment.id,
+        name: info.name,
+        phone: info.phone,
+        size: l.size,
+        orderRef: info.orderRef,
+        qty: l.qty,
+        /* Supabase mode takes this from the server's own row; there is no
+           server here, but the price still has to be the one at order time. */
+        unitPrice: l.garment.price,
+        kind: info.kind,
+        handled: false,
+        createdAt: now,
+      });
+    }
     lsSet("leads", JSON.stringify(leads.slice(0, 500)));
     return;
   }
+
+  /* Signed in → the order joins their history. The server verifies this token
+     and stamps user_id from it; no token just means a guest order. */
+  const token = await currentAccessToken();
+
   const res = await fetch("/api/lead", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: "Bearer " + token } : {}),
+    },
     body: JSON.stringify({
       shopId: shop.id,
-      /* Exactly one of these: a composition is not a row in garments, so
-         sending its id as garmentId would fail the server's ownership check. */
-      garmentId: garment.compositionId ? null : garment.id,
-      compositionId: garment.compositionId ?? null,
-      ...info,
+      items,
+      name: info.name,
+      phone: info.phone,
+      orderRef: info.orderRef,
+      kind: info.kind,
     }),
   });
   if (!res.ok) throw new Error("Could not send — please tell the staff directly.");
@@ -999,27 +1050,83 @@ export async function submitLead(
 export async function getLeads(shopId: string | null): Promise<Lead[]> {
   if (!isSupabaseConfigured()) {
     try {
-      return JSON.parse(lsGet("leads") || "[]");
+      return (JSON.parse(lsGet("leads") || "[]") as any[]).map(normalizeLead);
     } catch {
       return [];
     }
   }
   if (!shopId) return [];
+  /* select * rather than a column list: the order columns arrived in a later
+     migration, and naming one that a not-yet-migrated project lacks would
+     fail the whole query and empty the vendor's inbox. */
   const { data } = await supabase()
     .from("leads")
-    .select("id, garment_id, name, phone, size, handled, created_at")
+    .select("*")
     .eq("shop_id", shopId)
     .order("created_at", { ascending: false })
     .limit(500);
-  return ((data as any[]) || []).map((r) => ({
+  return ((data as any[]) || []).map((r) =>
+    normalizeLead({ ...r, garmentId: r.garment_id, orderRef: r.order_ref, createdAt: r.created_at })
+  );
+}
+
+/** Fills the order fields for rows written before they existed (and for
+    local-mode leads), so the inbox can treat every lead the same way. */
+function normalizeLead(r: any): Lead {
+  return {
     id: r.id,
-    garmentId: r.garment_id,
+    garmentId: r.garmentId ?? null,
     name: r.name || "",
     phone: r.phone || "",
     size: r.size || "",
-    handled: r.handled,
-    createdAt: r.created_at,
-  }));
+    orderRef: r.orderRef ?? null,
+    qty: Number(r.qty) > 0 ? Number(r.qty) : 1,
+    unitPrice: Number.isFinite(Number(r.unitPrice)) && r.unitPrice !== null ? Number(r.unitPrice) : null,
+    kind: r.kind === "enquiry" ? "enquiry" : "order",
+    handled: !!r.handled,
+    createdAt: r.createdAt,
+  };
+}
+
+/** The signed-in shopper's own orders, newest first. Empty when signed out —
+    guest orders are deliberately unclaimable, since anyone could type a phone
+    number and inherit a stranger's history. RLS ("own orders read") is what
+    actually enforces this; the user_id filter is just to keep the query small. */
+export async function getMyOrders(): Promise<OrderHistoryLine[]> {
+  if (!isSupabaseConfigured()) return [];
+  const uid = await currentUserId();
+  if (!uid) return [];
+
+  /* The shop and garment names are joined in rather than stored on the lead:
+     a shopper's history should follow a shop's rename. Price is the exception —
+     that one is snapshotted, so an old order keeps what it actually cost. */
+  const { data } = await supabase()
+    .from("leads")
+    .select("id, order_ref, size, qty, unit_price, kind, handled, created_at, shops (name, slug), garments (name, image_url, price_npr)")
+    .eq("user_id", uid)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  return ((data as any[]) || []).map((r) => {
+    const shop = Array.isArray(r.shops) ? r.shops[0] : r.shops;
+    const garment = Array.isArray(r.garments) ? r.garments[0] : r.garments;
+    return {
+      id: r.id,
+      orderRef: r.order_ref ?? null,
+      shopName: shop?.name || "a shop",
+      shopSlug: shop?.slug ?? null,
+      garmentName: garment?.name || "a piece",
+      image: garment?.image_url ?? null,
+      size: r.size || "",
+      qty: Number(r.qty) > 0 ? Number(r.qty) : 1,
+      /* Pre-snapshot rows fall back to today's catalog price — the best guess
+         available — rather than showing an order that cost nothing. */
+      unitPrice: r.unit_price ?? garment?.price_npr ?? 0,
+      kind: r.kind === "enquiry" ? "enquiry" : "order",
+      handled: !!r.handled,
+      createdAt: r.created_at,
+    };
+  });
 }
 
 export async function setLeadHandled(leadId: string, handled: boolean): Promise<void> {
