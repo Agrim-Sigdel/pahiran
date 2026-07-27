@@ -11,6 +11,7 @@ import { useAccount, getContact } from "@/lib/account";
 import AccountMenu from "@/components/AccountMenu";
 import { ShopCard, CartDrawer } from "@/components/storefront";
 import GarmentImage from "@/components/GarmentImage";
+import HeroCarousel from "@/components/HeroCarousel";
 import TryOnCta, { offersTryOn, type TryOnState } from "@/components/TryOnCta";
 import Icon from "@/components/Icon";
 import type { Garment, Shop } from "@/lib/types";
@@ -68,6 +69,7 @@ export default function StorefrontClient({
     [catalog]
   );
 
+
   if (notFound) {
     return (
       <Centered>
@@ -88,6 +90,10 @@ export default function StorefrontClient({
   const tryonHref = "/k/" + slug;
   const inStock = catalog.filter((g) => g.inStock);
   const featured = inStock.slice(0, 4);
+  /* Enough to show the shop has range, few enough that a shopper reaches the
+     end of the loop before losing interest — and every one is a photo the
+     page has to load. */
+  const heroSlides = inStock.slice(0, 5);
 
   // collection pipeline: category / saved → search → sort
   let shown = savedOnly ? catalog.filter((g) => wish.has(g.id)) : (filter === "All" ? catalog : catalog.filter((g) => g.category === filter));
@@ -122,7 +128,7 @@ export default function StorefrontClient({
   return (
     <div style={{ background: "var(--sage)", minHeight: "100vh" }}>
       {/* announce bar */}
-      <div style={{ background: "var(--butter)", color: "var(--ink)", textAlign: "center", fontSize: 13, fontWeight: 500, padding: "9px 12px" }}>
+      <div style={{ background: "var(--butter)", color: "var(--on-light)", textAlign: "center", fontSize: 13, fontWeight: 500, padding: "9px 12px" }}>
         try it on before you buy · one photo, no account · order in a tap
       </div>
 
@@ -155,7 +161,7 @@ export default function StorefrontClient({
             style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--ink)", fontWeight: 600 }}>
              <Icon name="bag" /> bag
             {cart.count > 0 && (
-              <span style={{ background: "var(--violet)", color: "#fff", fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, borderRadius: 999, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
+              <span style={{ background: "var(--violet)", color: "var(--on-accent)", fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, borderRadius: 999, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
                 {cart.count}
               </span>
             )}
@@ -170,7 +176,10 @@ export default function StorefrontClient({
           <h1 className="ph-display" style={{ fontSize: "clamp(32px, 4.6vw, 50px)", lineHeight: 1.12, color: "var(--ink)", margin: 0 }}>
             look first,<br />then buy
           </h1>
-          <p style={{ color: "var(--stone)", fontSize: 15.5, maxWidth: 360, lineHeight: 1.7, margin: 0 }}>
+          {/* no maxWidth of its own — .hero-copy already holds the measure, and
+              a second, narrower cap made the paragraph wrap tighter than the
+              heading above it */}
+          <p style={{ color: "var(--stone)", fontSize: 15.5, lineHeight: 1.7, margin: 0 }}>
             {offersTryOn(shop)
               ? "Browse the collection, add your pieces to the bag, and order in one message — or take a photo and see anything on you first."
               : "Browse the collection, add what you want to the bag, and order in one message."}
@@ -180,9 +189,25 @@ export default function StorefrontClient({
             <TryOnCta shop={shop} state={tryOn} href={tryonHref} className="btn-outline" />
           </div>
         </div>
-        {featured[0] && (
-          <Link href={`/s/${slug}/${encodeURIComponent(featured[0].id)}`} className="hero-visual" style={{ background: "var(--sage-mist)", display: "block", position: "relative" }}>
-            <GarmentImage src={featured[0].image} alt={featured[0].name} priority sizes="(max-width: 900px) 100vw, 50vw" />
+        {/* The hero slides through the collection rather than betting the whole
+            landing page on one piece. Each slide keeps its own ratio (--ar)
+            instead of being cropped into a shared frame — vendors shoot
+            portrait, square and landscape, and a fixed frame beheads whoever
+            doesn't match. The CSS derives the width from a capped height, so a
+            tall photo gets narrow instead of getting tall.
+
+            A shop with nothing in stock used to render no hero at all, which
+            left the copy alone in a half-empty row. It falls back to a stock
+            try-on shot instead — the one thing that's true of every shop
+            here, and it points at the kiosk rather than at a product. */}
+        {heroSlides.length > 0 ? (
+          <HeroCarousel slides={heroSlides} slug={slug} />
+        ) : (
+          <Link href={offersTryOn(shop) ? tryonHref : "#collection"} className="hero-visual"
+            style={{ "--ar": "0.6667", background: "var(--sage-mist)", display: "block", position: "relative" } as React.CSSProperties}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/hero/hero-a.jpg" alt="Someone seeing a piece on themselves with peeq"
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           </Link>
         )}
       </div>
@@ -274,10 +299,10 @@ export default function StorefrontClient({
       </section>
 
       {/* footer */}
-      <footer className="section-pad" style={{ background: "var(--ink)", color: "var(--paper)", paddingBottom: 30 }}>
+      <footer className="section-pad" style={{ background: "var(--slab)", color: "var(--on-slab)", paddingBottom: 30 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 28, maxWidth: 900, margin: "0 auto" }}>
           <div>
-            <h4 className="ph-display" style={{ fontSize: 19, marginBottom: 12, color: "var(--paper)", fontWeight: 600 }}>
+            <h4 className="ph-display" style={{ fontSize: 19, marginBottom: 12, color: "var(--on-slab)", fontWeight: 600 }}>
               {shop.name || "The shop"}
             </h4>
             {shop.area && <p style={{ fontSize: 13, color: "rgba(250,246,240,.65)", lineHeight: 1.8, margin: 0 }}>{shop.area}</p>}
@@ -289,7 +314,7 @@ export default function StorefrontClient({
             )}
           </div>
           <div>
-            <h4 className="ph-display" style={{ fontSize: 19, marginBottom: 12, color: "var(--paper)", fontWeight: 600 }}>shop</h4>
+            <h4 className="ph-display" style={{ fontSize: 19, marginBottom: 12, color: "var(--on-slab)", fontWeight: 600 }}>shop</h4>
             <a href="#collection" style={{ fontSize: 13, color: "rgba(250,246,240,.65)", lineHeight: 1.8, textDecoration: "none", display: "block" }}>browse the collection</a>
             <TryOnCta shop={shop} state={tryOn} href={tryonHref}
               style={{ fontSize: 13, color: "rgba(250,246,240,.65)", lineHeight: 1.8, textDecoration: "none", display: "block" }} />
@@ -297,7 +322,7 @@ export default function StorefrontClient({
           </div>
           {askWa && (
             <div>
-              <h4 className="ph-display" style={{ fontSize: 19, marginBottom: 12, color: "var(--paper)", fontWeight: 600 }}>order &amp; ask</h4>
+              <h4 className="ph-display" style={{ fontSize: 19, marginBottom: 12, color: "var(--on-slab)", fontWeight: 600 }}>order &amp; ask</h4>
               <p style={{ fontSize: 13, color: "rgba(250,246,240,.65)", margin: "0 0 12px" }}>Fastest reply on WhatsApp:</p>
               <div style={{ display: "flex", gap: 8 }}>
                 <input value={ask} maxLength={200} onChange={(e) => setAsk(e.target.value)} placeholder="What are you looking for?"
@@ -311,7 +336,7 @@ export default function StorefrontClient({
           )}
         </div>
         <div style={{ textAlign: "center", fontSize: 12.5, color: "rgba(250,246,240,.45)", marginTop: 34 }}>
-          powered by <b className="wordmark" style={{ color: "var(--paper)", fontSize: 13 }}>p<span className="ee">ee</span>q</b> · a little look before you buy
+          powered by <b className="wordmark" style={{ color: "var(--on-slab)", fontSize: 13 }}>p<span className="ee">ee</span>q</b> · a little look before you buy
           {" · "}
           <Link href="/privacy" style={{ color: "rgba(250,246,240,.55)", textUnderlineOffset: 3 }}>privacy</Link>
         </div>

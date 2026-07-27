@@ -6,6 +6,7 @@
    variable names are aliased to the new values so pre-existing inline
    styles pick up the theme automatically. */
 :root {
+  color-scheme: light;
   --ink: #1A1714;          /* text, primary buttons — warm black, never #000 */
   --paper: #FAF6F0;        /* default background — flatters skin in photos */
   --violet: #00372b;       /* interactive only: links, scan moments, active states */
@@ -39,12 +40,98 @@
   --rani-soft: #4A443B;
   --marigold: #8A8378;
 
+  /* text that sits ON a --violet / --danger / --warn / --ok fill. A separate
+     token because in dark mode those fills go bright and need dark text —
+     before this existed every such button hardcoded #fff and would have gone
+     white-on-pale the moment the theme flipped. */
+  --on-accent: #FFFFFF;
+
+  /* Deliberately dark panels — the landing CTA slab, page footers, the photo
+     stage behind a try-on. These are dark by *design*, not because the page
+     is light, so they must not invert with the theme; they only shift enough
+     to still read as raised against a dark page.
+
+     Anything ON one of these takes --on-slab, never --paper or --cream: those
+     flip dark when the theme does, and a dark heading on a permanently dark
+     panel is invisible. That is exactly how "put peeq in your shop"
+     disappeared. --on-slab does not appear in the dark block below because it
+     must not change. */
+  --slab: #1A1714;
+  --on-slab: rgba(250, 246, 240, .92);
+  --on-slab-quiet: rgba(250, 246, 240, .6);
+
+  /* The mirror of the same trap: any fill that stays LIGHT in both themes —
+     butter badges and buttons, the paper-coloured "peeq it" pill over a
+     product photo. Text on them is always dark, so pairing them with --ink
+     gave white-on-yellow (and an invisible "peeq it") the moment --ink
+     inverted. Fixed, and absent from the dark block. */
+  --on-light: #1A1714;
+
   --radius-card: 20px;
   --radius-btn: 20px;
   --radius-modal: 20px;
   --shadow-soft: 0 6px 18px rgba(26, 23, 20, .10);
   --motion-peek: 240ms ease-out;
   --motion-blink: 140ms;
+}
+
+/* ── dark ──────────────────────────────────────────────────────────────
+   The same tokens, re-pointed. Every surface in the app (inline styles
+   included) reads these, so this block is the whole theme — nothing needs
+   to know which mode it is in.
+
+   The one token that can't simply invert is --violet. At #00372b it is a
+   near-black green: perfect as the one loud guest on paper, invisible on a
+   dark ground. Dark mode lifts it to a mint that carries the same "a tap
+   happens here" job, and --on-accent goes dark to sit on it.
+
+   Driven straight off the device preference — there is no in-app switch and
+   nothing to persist, so no script runs and there is no flash to avoid. */
+@media (prefers-color-scheme: dark) {
+:root {
+  color-scheme: dark;
+  --ink: #F1EBE2;          /* text — warm off-white, never pure #fff */
+  --paper: #141210;        /* page */
+  --violet: #878976;       /* interactive: links, active states, scan moments */
+  --butter: #F5DD90;
+  --butter-deep: #F0D480;  /* on dark the "deep" variant has to get lighter */
+  --stone: #A79D8F;        /* secondary text — AA on --paper (5.6:1) */
+  --card: #1F1B18;         /* raised surfaces: cards, sheets, inputs */
+  --line: rgba(255, 255, 255, .13);
+  --paper-deep: #0E0C0B;   /* wells: image placeholders, alternate sections */
+  --scrim: rgba(0, 0, 0, .66);
+
+  --danger: #F08A82;
+  --warn: #E5B65C;
+  --ok: #6BCE9E;
+  --on-accent: #12211C;    /* the fills are bright now, so their text goes dark */
+
+  --slab: #241F1B;         /* still a dark panel, lifted off the dark page */
+  --on-slab: rgba(250, 246, 240, .92);
+  --on-slab-quiet: rgba(250, 246, 240, .55);
+
+  /* legacy aliases follow the same inversion, so sage-era inline styles
+     (--cream cards, --sage pages, --forest chips) come along untouched */
+  --forest: #F1EBE2;
+  --forest-deep: #F1EBE2;
+  --sage: #141210;
+  --sage-mist: #0E0C0B;
+  --cream: #1F1B18;
+  --camel: #A79D8F;
+  --mut: #A79D8F;
+  --plum: #F1EBE2;
+  --rani: #F1EBE2;
+  --rani-soft: #CFC5B7;
+  --marigold: #A79D8F;
+
+  /* a soft black shadow is invisible on a dark page — deepen it instead */
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, .55);
+
+  --note-ok-bg: #14301F;
+  --note-ok-line: #2E6B4A;
+  --note-ok-ink: #8FE0B4;
+}
+
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -93,7 +180,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .btn-solid:hover { transform: translateY(-2px); }
 .btn-outline { font-family: 'Baloo 2', cursive; border: 2px solid var(--ink); color: var(--ink); padding: 11px 28px; font-size: 16px; font-weight: 700; border-radius: var(--radius-btn); background: transparent; text-decoration: none; display: inline-block; text-align: center; }
 .btn-outline:hover { transform: translateY(-2px); }
-.btn-violet { font-family: 'Baloo 2', cursive; background: var(--violet); color: #fff; padding: 13px 30px; font-size: 16px; font-weight: 700; border-radius: var(--radius-btn); text-decoration: none; display: inline-block; text-align: center; }
+.btn-violet { font-family: 'Baloo 2', cursive; background: var(--violet); color: var(--on-accent); padding: 13px 30px; font-size: 16px; font-weight: 700; border-radius: var(--radius-btn); text-decoration: none; display: inline-block; text-align: center; }
 .btn-violet:hover { transform: translateY(-2px); }
 .btn-wa { font-family: 'Baloo 2', cursive; background: var(--whatsapp); color: #fff; padding: 13px 28px; font-size: 15px; font-weight: 700; border-radius: var(--radius-btn); text-decoration: none; display: inline-block; text-align: center; }
 .linklike { text-decoration: underline; text-underline-offset: 4px; font-size: 14px; font-weight: 600; color: var(--violet); padding: 0; background: none; border: none; cursor: pointer; }
@@ -118,7 +205,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 /* success note — green light that slides in (email-confirm etc.) */
 .note-ok {
   display: flex; align-items: center; gap: 9px; text-align: left;
-  background: #E9F7EE; border: 1px solid #7BCB9A; color: #0B6B3A;
+  background: var(--note-ok-bg, #E9F7EE); border: 1px solid var(--note-ok-line, #7BCB9A); color: var(--note-ok-ink, #0B6B3A);
   border-radius: 14px; padding: 12px 16px; font-size: 13.5px; font-weight: 600;
   animation: note-slide .35s ease-out;
 }
@@ -141,7 +228,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 /* map pin — shopping bag with the blinking ee (Leaflet divIcon, see osm.ts) */
 .peeq-pin {
   position: relative; width: 36px; height: 32px;
-  background: var(--violet); border: 2.5px solid #fff;
+  background: var(--violet); border: 2.5px solid var(--card);
   border-radius: 7px 7px 13px 13px;
   box-shadow: 0 2px 8px rgba(26, 23, 20, .4);
   display: flex; align-items: center; justify-content: center;
@@ -156,7 +243,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .peeq-pin span { display: inline-block; animation: ee-wink 3.4s infinite; }
 
 .efc-chip { font-family: 'Baloo 2', cursive; padding: 8px 18px; font-size: 14px; font-weight: 600; border-radius: var(--radius-btn); white-space: nowrap; border: none; cursor: pointer; flex-shrink: 0; }
-.efc-chip.on { background: var(--violet); color: #fff; }
+.efc-chip.on { background: var(--violet); color: var(--on-accent); }
 .efc-chip.off { background: var(--card); color: var(--stone); border: 1px solid var(--line); }
 
 .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-card); padding: 22px 24px; margin-top: 16px; }
@@ -165,7 +252,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .panel-head .sub { font-size: 13px; color: var(--stone); }
 
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--stone); font-weight: 600; }
-.field input, .field textarea { padding: 12px 15px; border-radius: 14px; border: 1px solid var(--line); font-size: 15px; background: #fff; color: var(--ink); font-weight: 400; letter-spacing: 0; text-transform: none; }
+.field input, .field textarea { padding: 12px 15px; border-radius: 14px; border: 1px solid var(--line); font-size: 15px; background: var(--card); color: var(--ink); font-weight: 400; letter-spacing: 0; text-transform: none; }
 /* textarea only: inherit the UI face rather than the browser's monospace
    default, and let it grow downward but never sideways out of its column */
 .field textarea { font-family: inherit; resize: vertical; min-height: 84px; }
@@ -177,7 +264,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 /* the indicator: a short rounded bar sitting right on the hairline, drawn as
    a pseudo-element so it can't double up with the container border */
 .tabs button.on::after { content: ""; position: absolute; left: 18px; right: 18px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--violet); }
-.tabs .badge { background: var(--butter); color: var(--ink); font-size: 11px; font-weight: 700; border-radius: 10px; padding: 1px 8px; margin-left: 6px; }
+.tabs .badge { background: var(--butter); color: var(--on-light); font-size: 11px; font-weight: 700; border-radius: 10px; padding: 1px 8px; margin-left: 6px; }
 
 .garment-rail::-webkit-scrollbar { height: 0; }
 
@@ -206,9 +293,108 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .efc-nav .nav-tools a { color: inherit; text-decoration: none; white-space: nowrap; }
 
 /* two-pane hero: stacks on phones */
-.hero-grid { display: grid; grid-template-columns: 1.1fr 1fr; min-height: 420px; }
-.hero-copy { display: flex; flex-direction: column; justify-content: center; padding: 48px 24px 48px min(56px, 6vw); gap: 20px; }
-.hero-visual { margin: 36px 36px 36px 8px; min-height: 280px; border-radius: var(--radius-card); box-shadow: var(--shadow-soft); overflow: hidden; }
+/* One centred band, not two columns pinned to opposite edges of the viewport.
+   Stretching the grid full-width left the copy stopped at its reading measure
+   on the left and the photo stuck to the right rail, with a dead gap down the
+   middle that grew with the monitor. Both columns align inward instead, so
+   the slack lands outside the pair rather than between them. */
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(28px, 5vw, 72px);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: clamp(36px, 6vh, 72px) min(40px, 6vw);
+}
+.hero-copy {
+  display: flex; flex-direction: column; justify-content: center;
+  gap: 20px; padding: 0;
+  /* a line length that stays readable — the column is wider than the text
+     should ever be */
+  max-width: 470px; justify-self: end;
+}
+/* Storefront hero photo. The frame takes the picture's own ratio (--ar, set
+   inline once the image reports its size) instead of cropping it into a fixed
+   landscape box, which used to cut the head off any portrait shot.
+
+   Width is derived from a capped height rather than the other way round: a
+   tall photo then gets narrower instead of getting taller, so the hero never
+   outgrows the copy beside it. min(100%, …) keeps a very wide photo inside
+   its grid cell. */
+.hero-visual {
+  margin: 0;
+  aspect-ratio: var(--ar, 4/5);
+  width: min(100%, calc(min(58vh, 470px) * var(--ar, 0.8)));
+  justify-self: start; align-self: center;
+  border-radius: var(--radius-card); box-shadow: var(--shadow-soft); overflow: hidden;
+  position: relative;
+  background: var(--sage-mist);
+}
+
+/* Stacked, cross-faded slides. Only the live one takes pointer events, so the
+   invisible ones underneath can't swallow a tap meant for the piece on top. */
+.hero-slide {
+  position: absolute; inset: 0; display: block;
+  transition: opacity .35s ease;
+}
+.hero-slide:focus-visible { outline: 3px solid var(--violet); outline-offset: -3px; }
+
+/* The frame is one fixed size for every slide, so the cross-fade is the only
+   thing that moves — a box that resized per photo made each advance read as a
+   layout shift rather than a transition.
+
+   That means mixed-shape photos have to fit rather than fill: the piece is
+   shown whole (contain), and the leftover space is filled by the same photo
+   blown up and blurred behind it. Vendors shoot portrait, square and
+   landscape; this way none of them is cropped and none of them sits in a
+   dead grey margin. */
+.hero-fill {
+  position: absolute; inset: 0;
+  filter: blur(24px) saturate(1.2) brightness(.92);
+  /* Blur samples past the edges and leaves a pale halo — oversizing pushes
+     that outside the frame. */
+  transform: scale(1.2);
+  opacity: .9;
+}
+.hero-fit { position: absolute; inset: 0; }
+
+/* Caption + dots, over a scrim dark enough to carry white text on a pale
+   photo without dimming the piece itself. */
+.hero-bar {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+  padding: 26px 14px 12px; color: #fff; pointer-events: none;
+  background: linear-gradient(to top, rgba(26,23,20,.62), rgba(26,23,20,0));
+}
+.hero-bar button { pointer-events: auto; }
+
+.hero-dot {
+  width: 8px; height: 8px; border-radius: 999px; padding: 0;
+  border: 1px solid rgba(255,255,255,.85); background: transparent;
+  cursor: pointer; transition: background .2s ease, transform .2s ease;
+}
+.hero-dot[data-on] { background: #fff; transform: scale(1.25); }
+.hero-dot:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+.hero-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 32px; height: 32px; border-radius: 999px; border: none;
+  background: rgba(255,255,255,.86); color: var(--ink);
+  font-size: 20px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .2s ease;
+}
+.hero-visual:hover .hero-arrow, .hero-arrow:focus-visible { opacity: 1; }
+
+/* Below this the two columns are too narrow to be worth keeping: the copy
+   wraps to three words a line and the photo becomes a sliver. Stack instead —
+   well before the 640px phone breakpoint, which was far too late. */
+@media (max-width: 880px) {
+  .hero-grid { grid-template-columns: 1fr; gap: 26px; padding: 34px 22px 32px; }
+  .hero-copy { max-width: 560px; justify-self: start; align-items: flex-start; }
+  .hero-visual { justify-self: start; width: min(100%, calc(min(46vh, 400px) * var(--ar, 0.8))); }
+}
 
 /* section padding that tightens on phones */
 .section-pad { padding: 44px min(32px, 5vw); }
@@ -311,15 +497,18 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .feed-card .feed-img img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .55s cubic-bezier(.2,.6,.2,1); }
 .feed-card:hover .feed-img img { transform: scale(1.045); }
 .feed-cta {
-  position: absolute; left: 10px; right: 10px; bottom: 10px; text-align: center;
-  background: rgba(250, 246, 240, .94); color: var(--ink);
-  font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 13.5px;
-  padding: 10px 0; border-radius: 999px;
-  opacity: 0; transform: translateY(8px);
+  position: absolute; left: 50%; bottom: 10px; transform: translate(-50%, 8px);
+  text-align: center; white-space: nowrap;
+  background: rgba(250, 246, 240, .94); color: var(--on-light);
+  font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 12px;
+  padding: 7px 18px; border-radius: 999px;
+  /* the resting transform is set above and already carries the -50% that
+     centres the pill — a second `transform` here would drop it */
+  opacity: 0;
   transition: opacity .22s ease, transform .22s ease;
   pointer-events: none;
 }
-.feed-card:hover .feed-cta { opacity: 1; transform: translateY(0); }
+.feed-card:hover .feed-cta { opacity: 1; transform: translate(-50%, 0); }
 .feed-meta { padding: 11px 2px 0; }
 .feed-shop { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--stone); text-decoration: none; margin-bottom: 3px; }
 .feed-shop:hover { color: var(--violet); }
@@ -340,15 +529,117 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .k-stage { aspect-ratio: var(--ar, 3/4); max-height: min(52vh, 560px); max-width: min(92vw, 460px); width: auto; }
 .k-cam { aspect-ratio: var(--ar, 3/4); max-height: min(46vh, 440px); max-width: min(88vw, 420px); width: auto; }
 
+/* ── kiosk v2 — the fitting room ──────────────────────────────────────
+   Same three beats as v1 (attract → capture → try on), three deliberate
+   differences in how trying on *feels*:
+
+   1. The stage is a free box, not a box shaped like the shopper's photo.
+      Every image is *contained* inside it, so a 2:3 render on a 3:4 photo is
+      shown whole — v1 sized the stage to the photo and painted the render
+      with object-fit: cover, which cut the head or feet off every render
+      whose shape didn't happen to match.
+   2. The room takes the shopper's theme. Light is a paper room; dark is a
+      fitting room where the only lit thing on screen is the person.
+   3. The rack never leaves — in landscape it sits beside the stage, on a
+      phone under it. Trying the next piece is always one tap.
+
+   The entire light/dark difference is the variables below; every rule in
+   this section reads one of them rather than naming a colour.
+
+   The accent is the one judgement call. On paper it stays --violet, the
+   brand's one loud guest. In the dark room --violet is a near-black green
+   that disappears, so it becomes butter — same job, still legible. */
+.k2-root {
+  --k2-accent: var(--violet);
+  --k2-accent-ink: var(--on-accent);
+  --k2-glass: rgba(26, 23, 20, .045);
+  --k2-hair: var(--line);
+  --k2-quiet: var(--stone);
+  --k2-chrome: var(--card);
+  --k2-stage-bg: var(--paper-deep);
+  --k2-blur-filter: blur(38px) brightness(1.04) saturate(1.15);
+  /* the attract screen dims its drifting rack so the invitation reads — the
+     dimming has to be made of the page colour, or the light room keeps a
+     near-black body under a light bar */
+  --k2-attract-scrim: radial-gradient(ellipse at center, rgba(250, 246, 240, .84) 30%, rgba(250, 246, 240, .96) 74%);
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; flex-direction: column;
+  background: var(--paper); color: var(--ink); overflow: hidden;
+}
+@media (prefers-color-scheme: dark) {
+.k2-root {
+  --k2-accent: var(--butter);
+  --k2-accent-ink: var(--on-light);
+  --k2-glass: rgba(255, 255, 255, .09);
+  --k2-hair: rgba(255, 255, 255, .16);
+  --k2-quiet: rgba(255, 255, 255, .58);
+  --k2-chrome: rgba(20, 18, 16, .95);
+  --k2-stage-bg: #0D0B0A;
+  --k2-blur-filter: blur(38px) brightness(.34) saturate(1.2);
+  --k2-attract-scrim: radial-gradient(ellipse at center, rgba(20, 18, 16, .86) 30%, rgba(20, 18, 16, .97) 75%);
+}
+}
+.k2-attract-scrim { position: absolute; inset: 0; background: var(--k2-attract-scrim); }
+
+.k2-bar { display: flex; align-items: center; gap: 8px; justify-content: space-between; flex-shrink: 0; padding: 9px 12px; background: var(--k2-chrome); border-bottom: 1px solid var(--k2-hair); backdrop-filter: blur(14px); }
+.k2-pill { display: inline-flex; align-items: center; gap: 6px; padding: 8px 13px; font-size: 13px; font-weight: 600; border-radius: 999px; white-space: nowrap; text-decoration: none; color: var(--ink); background: var(--k2-glass); border: 1px solid var(--k2-hair); cursor: pointer; }
+.k2-pill.ghost { background: transparent; border-color: transparent; color: var(--k2-quiet); }
+.k2-pill.accent { background: var(--k2-accent); border-color: var(--k2-accent); color: var(--k2-accent-ink); font-weight: 700; }
+.k2-pill.wa { color: var(--whatsapp); border-color: rgba(37, 211, 102, .45); }
+
+/* body = stage + dock. Column on a phone, side-by-side once there's width —
+   a shop's kiosk tablet is usually landscape, where a single column would
+   leave half the screen empty. */
+.k2-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.k2-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--k2-stage-bg); }
+/* the letterbox is filled with a blur of the image itself, so a portrait
+   render on a landscape screen reads as framed rather than as a mistake */
+.k2-blur { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: var(--k2-blur-filter); transform: scale(1.25); }
+/* every photo layer: contained, never cropped, crossfading with its siblings */
+.k2-shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 10px; transition: opacity .34s ease, filter .3s ease; }
+.k2-reveal { position: absolute; inset: 0; animation: k2-reveal 420ms cubic-bezier(.2, .7, .3, 1) both; }
+@keyframes k2-reveal { from { opacity: 0; transform: scale(1.015); } to { opacity: 1; transform: none; } }
+
+.k2-dock { flex-shrink: 0; display: flex; flex-direction: column; gap: 9px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--k2-chrome); border-top: 1px solid var(--k2-hair); }
+
+.k2-rail { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.k2-rail::-webkit-scrollbar { height: 0; }
+.k2-tile { position: relative; flex-shrink: 0; width: 76px; padding: 0; border-radius: 14px; overflow: hidden; text-align: left; background: var(--k2-glass); border: 2px solid transparent; cursor: pointer; }
+.k2-tile.on { border-color: var(--k2-accent); }
+.k2-tile > img { width: 100%; aspect-ratio: 3/4; object-fit: cover; display: block; }
+.k2-tile .nm { display: block; font-size: 10px; font-weight: 600; color: var(--ink); padding: 4px 6px 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.k2-tile .pr { display: block; font-size: 10px; color: var(--k2-quiet); padding: 0 6px 6px; }
+/* a piece already tried wears the shopper's own render; this chip keeps it
+   identifiable as a garment on the rack */
+.k2-tile .worn { position: absolute; top: 5px; left: 5px; width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 1.5px solid var(--card); }
+.k2-tile .mto { position: absolute; top: 5px; right: 5px; background: rgba(26, 23, 20, .8); color: #fff; font-size: 7.5px; font-weight: 700; letter-spacing: .06em; padding: 2px 5px; border-radius: 3px; }
+
+/* the attract screen's backdrop: the shop's own rack, drifting past */
+.k2-drift { display: flex; gap: 12px; width: max-content; animation: k2-drift 52s linear infinite; }
+@keyframes k2-drift { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+.k2-actions { display: flex; flex-direction: column; gap: 8px; }
+.k2-actions-head { display: flex; align-items: center; gap: 10px; }
+.k2-chiprow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+@media (min-width: 880px) {
+  /* only the mirror splits — attract and capture are single centred columns */
+  .k2-body.k2-mirror { flex-direction: row; }
+  .k2-dock { width: 348px; flex-shrink: 0; overflow-y: auto; border-top: none; border-left: 1px solid var(--k2-hair); padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); }
+  .k2-rail { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow-x: visible; }
+  .k2-tile { width: auto; }
+}
+
 @media (max-width: 640px) {
   .efc-nav { grid-template-columns: 1fr auto; grid-template-areas: "logo tools" "links links"; padding: 12px 16px 10px; }
   .efc-nav .nav-logo { grid-area: logo; text-align: left; }
   .efc-nav .nav-tools { grid-area: tools; }
   .efc-nav .nav-links { grid-area: links; padding-top: 8px; -webkit-overflow-scrolling: touch; }
 
-  .hero-grid { grid-template-columns: 1fr; min-height: 0; }
-  .hero-copy { padding: 36px 20px 24px; }
-  .hero-visual { margin: 0 20px 28px; min-height: 240px; }
+  .hero-grid { grid-template-columns: 1fr; min-height: 0; gap: 22px; padding: 28px 20px 30px; }
+  /* phones: a shallower cap, and centred once it stops filling the width */
+  .hero-visual { width: min(100%, calc(min(44vh, 360px) * var(--ar, 0.8))); justify-self: center; }
 
   .section-pad { padding: 30px 16px; }
   .card-grid, .shop-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }

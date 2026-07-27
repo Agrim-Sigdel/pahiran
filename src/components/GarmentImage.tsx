@@ -16,15 +16,19 @@ export default function GarmentImage({
   sizes = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 260px",
   priority = false,
   grayscale = false,
+  objectFit = "cover",
 }: {
   src: string;
   alt: string;
   sizes?: string;
   priority?: boolean;
   grayscale?: boolean;
+  /* "contain" for frames that show the piece whole rather than filling — a
+     fixed-size hero can't crop every shape to fit without beheading someone. */
+  objectFit?: "cover" | "contain";
 }) {
   const fit = {
-    objectFit: "cover" as const,
+    objectFit,
     ...(grayscale ? { filter: "grayscale(.7)" } : {}),
   };
 
