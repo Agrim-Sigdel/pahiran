@@ -4,23 +4,26 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { npr, waLink } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
 import { runTryOn, getKioskSessionId } from "@/lib/tryon";
-import { logLocalTryOn, submitLead } from "@/lib/storage";
+import { logLocalTryOn } from "@/lib/storage";
 import { reportError } from "@/lib/logging";
 import {
   getRememberedPhoto, rememberPhoto, forgetPhoto,
-  saveLook, listLooks, setLookFavorite, deleteLook, clearAllLooks, clearDeviceSession,
-  lookImageURL, shareLook, shareImage, downloadImage, type SavedLook,
+  saveLook, listLooks, shareImage, downloadImage,
 } from "@/lib/looks";
-import { getProfile, saveProfile, forgetProfile, type Profile } from "@/lib/profile";
-import { useAccount, getContact, signOut } from "@/lib/account";
+import { getProfile, forgetProfile, type Profile } from "@/lib/profile";
+import { useAccount, getContact } from "@/lib/account";
 import { useCart } from "@/lib/cart";
 import { CartDrawer } from "@/components/storefront";
-import { recommendSize, HEIGHT_MIN, HEIGHT_MAX, WEIGHT_MIN, WEIGHT_MAX, type Gender, type SizeRec } from "@/lib/sizing";
+import { recommendSize, type SizeRec } from "@/lib/sizing";
 import { LangContext, STRINGS, useLangState, useT } from "@/lib/i18n";
 import type { Wearable, Shop } from "@/lib/types";
 import Icon from "@/components/Icon";
 import EeMark from "@/components/EeMark";
-import LookViewer from "@/components/LookViewer";
+import { useImageAspect } from "@/lib/use-image-aspect";
+import {
+  barBtn, LooksGallery, InterestedModal, SizeBadge, FindMySizeSheet, type KioskProps,
+} from "@/components/kiosk/parts";
+import { useIdleReset, wipeDeviceSession } from "@/components/kiosk/session";
 
 /* Kiosk — light, touch-first shopper flow:
    attract (saved-photo fast path) → capture (consent inline) → try on.
@@ -31,48 +34,6 @@ import LookViewer from "@/components/LookViewer";
    photo's own aspect ratio — nothing is cropped), violet only where a tap
    does something, the blink is the loading state, everything touchable is
    round, primary actions live in the bottom third. */
-
-const barBtn: React.CSSProperties = {
-  padding: "8px 14px", fontSize: 13, fontWeight: 600, color: "var(--ink)",
-  border: "1px solid var(--line)", borderRadius: 999, background: "var(--card)",
-};
-
-/* natural aspect ratio of an image src — drives the stage size so the
-   photo is never cropped by a fixed-ratio box */
-function useImageAspect(src: string | null): number | null {
-  const [ar, setAr] = useState<number | null>(null);
-  useEffect(() => {
-    if (!src) { setAr(null); return; }
-    let cancelled = false;
-    const img = new Image();
-    img.onload = () => {
-      if (!cancelled && img.naturalWidth && img.naturalHeight) {
-        setAr(img.naturalWidth / img.naturalHeight);
-      }
-    };
-    img.src = src;
-    return () => { cancelled = true; };
-  }, [src]);
-  return ar;
-}
-
-/* how long a shared tablet may sit untouched before it wipes the session,
-   and how much warning the shopper gets before that happens */
-const IDLE_MS = 90_000;
-const IDLE_GRACE_MS = 15_000;
-
-interface KioskProps {
-  shop: Shop;
-  catalog: Wearable[];
-  exit: () => void;
-  initialGarmentId?: string | null;
-  /* Shared-device mode: this tablet is used by one shopper after another, so
-     nothing personal may survive a session. Turns off remember-my-photo, the
-     saved-looks gallery and contact prefill, wipes everything on reset, and
-     auto-resets when the tablet is left idle. Off on a shopper's own phone,
-     where remembering is the whole point. */
-  shared?: boolean;
-}
 
 export default function Kiosk({ shop, catalog, exit, initialGarmentId, shared = false }: KioskProps) {
   const [step, setStep] = useState<"attract" | "capture" | "tryon">("attract");
@@ -128,49 +89,16 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId, shared = 
     setContact({ name: "", phone: "" });
     setSavedPhoto(null);
     setLooksCount(0);
-    forgetProfile();
     clearCart();
-    /* Sign out first, then wipe device storage — and only device storage.
-       A shopper who signed in on the shop tablet must be logged out before
-       they walk away, but their cloud looks are theirs and stay put. */
-    void (async () => {
-      if (loggedIn) await signOut().catch(() => {});
-      await clearDeviceSession().catch(() => {});
-    })();
+    void wipeDeviceSession(loggedIn);
     // depends on cart.clear, not cart: useCart returns a fresh object every
     // render, so depending on cart would change reset's identity every render
     // and re-arm the idle timers forever — they'd never actually fire.
   }, [shared, clearCart, loggedIn]);
 
-  /* Idle auto-reset (shared tablets only).
-
-     A shopper who walks away mid-session leaves their photo on screen for
-     whoever picks the tablet up next. After IDLE_MS without a touch we warn,
-     then wipe. The attract screen has nothing personal on it, so it's exempt
-     — otherwise the tablet would loop a countdown all day. */
-  const [idleWarning, setIdleWarning] = useState(false);
-  const idleActive = shared && step !== "attract";
-
-  useEffect(() => {
-    if (!idleActive) { setIdleWarning(false); return; }
-    let warn: ReturnType<typeof setTimeout>;
-    let wipe: ReturnType<typeof setTimeout>;
-    const arm = () => {
-      clearTimeout(warn);
-      clearTimeout(wipe);
-      setIdleWarning(false);
-      warn = setTimeout(() => setIdleWarning(true), IDLE_MS - IDLE_GRACE_MS);
-      wipe = setTimeout(() => { setIdleWarning(false); reset(); }, IDLE_MS);
-    };
-    const events = ["pointerdown", "keydown", "touchstart"] as const;
-    events.forEach((e) => window.addEventListener(e, arm, { passive: true }));
-    arm();
-    return () => {
-      clearTimeout(warn);
-      clearTimeout(wipe);
-      events.forEach((e) => window.removeEventListener(e, arm));
-    };
-  }, [idleActive, reset]);
+  /* The attract screen has nothing personal on it, so it's exempt from the
+     idle countdown — otherwise the tablet would loop one all day. */
+  const [idleWarning, dismissIdle] = useIdleReset(shared && step !== "attract", reset);
 
   const contactWa = waLink(
     shop.whatsapp,
@@ -195,7 +123,9 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId, shared = 
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
           {/* language toggle: visible on every screen, never buried */}
-          <button className="ph-btn" onClick={toggleLang} style={{ ...barBtn, color: "var(--violet)", borderColor: "var(--violet)" }}>{t.switchLang}</button>
+          <button className="ph-btn" onClick={toggleLang} style={{ ...barBtn, color: "var(--violet)", borderColor: "var(--violet)" }}>
+            <Icon name="globe" /><span className="hide-sm"> {t.switchLang}</span>
+          </button>
           {contactWa && (
             <a className="ph-btn" href={contactWa} target="_blank" rel="noopener noreferrer"
               aria-label={t.contact}
@@ -205,13 +135,13 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId, shared = 
           )}
           {canShop && cart.count > 0 && (
             <button className="ph-btn" onClick={() => setCartOpen(true)} aria-label={t.viewBag(cart.count)}
-              style={{ ...barBtn, background: "var(--violet)", color: "#fff", border: "none" }}>
+              style={{ ...barBtn, background: "var(--violet)", color: "var(--on-accent)", border: "none" }}>
               <Icon name="bag" /> ({cart.count})
             </button>
           )}
           {looksCount > 0 && !shared && (
             <button className="ph-btn" onClick={() => setShowLooks(true)} aria-label={t.myLooksLabel}
-              style={{ ...barBtn, background: "var(--butter)", border: "none" }}>
+              style={{ ...barBtn, background: "var(--butter)", color: "var(--on-light)", border: "none" }}>
               <Icon name="heart-filled" /> <span className="hide-sm">{t.myLooksLabel} </span>({looksCount})
             </button>
           )}
@@ -234,8 +164,8 @@ export default function Kiosk({ shop, catalog, exit, initialGarmentId, shared = 
         <div role="status" aria-live="polite"
           style={{ position: "fixed", left: "50%", top: 18, transform: "translateX(-50%)", zIndex: 90, background: "var(--ink)", color: "var(--paper)", borderRadius: 999, padding: "11px 20px", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 12, boxShadow: "var(--shadow-soft)" }}>
           {t.stillThere}
-          <button className="ph-btn" onClick={() => setIdleWarning(false)}
-            style={{ background: "var(--butter)", color: "var(--ink)", fontWeight: 700, borderRadius: 999, padding: "7px 16px", fontSize: 13.5 }}>
+          <button className="ph-btn" onClick={dismissIdle}
+            style={{ background: "var(--butter)", color: "var(--on-light)", fontWeight: 700, borderRadius: 999, padding: "7px 16px", fontSize: 13.5 }}>
             {t.stillThereYes}
           </button>
         </div>
@@ -407,7 +337,7 @@ function CaptureScreen({ onPhoto, loggedIn, shared = false }: { onPhoto: (dataUr
           className="k-cam"
           style={{
             ...(camAr ? ({ "--ar": String(camAr) } as React.CSSProperties) : {}),
-            borderRadius: 20, overflow: "hidden", background: "var(--ink)", position: "relative",
+            borderRadius: 20, overflow: "hidden", background: "var(--slab)", position: "relative",
             display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
             margin: "14px 0 16px", cursor: camState === "denied" ? "pointer" : "default",
           }}>
@@ -546,360 +476,6 @@ function GeneratingOverlay({ garment }: { garment: Wearable | null }) {
   );
 }
 
-/* ---------- "My looks": on-device gallery of saved try-ons ---------- */
-function LooksGallery({ onClose, onCountChange }: { onClose: () => void; onCountChange: (n: number) => void }) {
-  const t = useT();
-  const [looks, setLooks] = useState<SavedLook[] | null>(null);
-  const [viewing, setViewing] = useState<SavedLook | null>(null);
-  const urls = useRef<Map<string, string>>(new Map());
-
-  const refresh = async () => {
-    const l = await listLooks();
-    setLooks(l);
-    onCountChange(l.length);
-  };
-  useEffect(() => {
-    refresh();
-    const map = urls.current;
-    return () => { map.forEach((u) => { if (u.startsWith("blob:")) URL.revokeObjectURL(u); }); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const imgSrc = (l: SavedLook) => {
-    if (!urls.current.has(l.id)) urls.current.set(l.id, lookImageURL(l));
-    return urls.current.get(l.id)!;
-  };
-
-  const sorted = looks ? [...looks].sort((a, b) => Number(b.favorite) - Number(a.favorite)) : [];
-
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "var(--paper)", zIndex: 55, display: "flex", flexDirection: "column", color: "var(--ink)" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", flexWrap: "wrap", gap: 10, background: "var(--card)", borderBottom: "1px solid var(--line)" }}>
-        <div>
-          <span className="ph-display" style={{ fontSize: 20, fontWeight: 600, color: "var(--ink)" }}>{t.myLooksTitle}</span>
-          <span style={{ fontSize: 12, color: "var(--stone)", marginLeft: 10 }}>{t.myLooksSub}</span>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {looks && looks.length > 0 && (
-            <button className="ph-btn"
-              onClick={async () => {
-                if (confirm(t.confirmDeleteAll)) {
-                  await clearAllLooks();
-                  forgetProfile();
-                  refresh();
-                }
-              }}
-              style={{ color: "var(--stone)", fontSize: 12, padding: "9px 12px" }}>
-              {t.deleteAll}
-            </button>
-          )}
-          <button className="ph-btn" onClick={onClose} style={barBtn}>
-            <Icon name="close" /> {t.close}
-          </button>
-        </div>
-      </div>
-
-      {looks && looks.length === 0 ? (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 12, alignItems: "center", justifyContent: "center", color: "var(--stone)", padding: 24, textAlign: "center" }}>
-          <EeMark size={40} color="var(--stone)" />
-          {t.nothingSaved}
-        </div>
-      ) : (
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 26px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 14, alignContent: "start" }}>
-          {sorted.map((l) => (
-            <div key={l.id} className="peek" style={{ background: "var(--card)", borderRadius: 18, overflow: "hidden", border: "1px solid " + (l.favorite ? "var(--violet)" : "var(--line)") }}>
-              <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--paper-deep)" }}>
-                <button onClick={() => setViewing(l)} title={l.garmentName}
-                  style={{ display: "block", width: "100%", height: "100%", padding: 0, border: "none", background: "none", cursor: "zoom-in" }}>
-                  <img src={imgSrc(l)} alt={"You wearing " + l.garmentName} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                </button>
-                <button className="ph-btn"
-                  onClick={async () => { await setLookFavorite(l.id, !l.favorite); refresh(); }}
-                  style={{ position: "absolute", top: 8, right: 8, background: "var(--card)", color: l.favorite ? "var(--violet)" : "var(--stone)", fontSize: 15, padding: "5px 9px", borderRadius: 999 }}>
-                  <Icon name={l.favorite ? "heart-filled" : "heart"} />
-                </button>
-              </div>
-              <div style={{ padding: "10px 12px 12px", fontSize: 12.5 }}>
-                <b>{l.garmentName}</b>
-                <div style={{ color: "var(--stone)", fontWeight: 500 }}>{npr(l.price)}</div>
-                {l.shopName && <div style={{ fontSize: 10.5, color: "var(--stone)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.shopName}</div>}
-                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  <button className="ph-btn" onClick={() => shareLook(l).catch(() => {})}
-                    style={{ flex: 1, border: "1.5px solid var(--ink)", color: "var(--ink)", fontSize: 12, padding: "6px 0", fontWeight: 600, borderRadius: 999 }}>
-                    {t.share}
-                  </button>
-                  <button className="ph-btn"
-                    onClick={async () => {
-                      if (!confirm(t.confirmDeleteLook)) return;
-                      await deleteLook(l.id); refresh();
-                    }}
-                    style={{ color: "var(--stone)", fontSize: 11.5, padding: "6px 8px" }}>
-                    {t.del}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {viewing && (
-        <LookViewer look={viewing} src={imgSrc(viewing)} onClose={() => setViewing(null)}
-          onDelete={async () => { await deleteLook(viewing.id); refresh(); }}
-          labels={{ save: t.saveImage, share: t.share, del: t.deleteThisLook, confirmDelete: t.confirmDeleteLook }} />
-      )}
-    </div>
-  );
-}
-
-/* ---------- "I want this" → vendor leads inbox ---------- */
-function InterestedModal({ shop, garment, recommended, shared, onClose }: { shop: Shop; garment: Wearable; recommended?: string; shared?: boolean; onClose: () => void }) {
-  const t = useT();
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [size, setSize] = useState(recommended || garment.sizes[0] || "");
-  const [state, setState] = useState<"form" | "sending" | "done" | "error">("form");
-
-  // prefill from the shopper's account (no-op when logged out / local mode).
-  // Never on a shared tablet — that would put the previous shopper's name and
-  // phone into this shopper's form, and submit a lead under their number.
-  useEffect(() => {
-    if (shared) return;
-    getContact().then((c) => {
-      if (!c) return;
-      if (c.name) setName((n) => n || c.name);
-      if (c.phone) setPhone((p) => p || c.phone);
-    });
-  }, [shared]);
-  const wa = waLink(
-    shop.whatsapp,
-    `Namaste! I tried on "${garment.name}"${size ? " (size " + size + ")" : ""} at ${shop.name || "your shop"} with peeq and I want it.`
-  );
-
-  const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
-
-  const validate = (): boolean => {
-    const digits = phone.replace(/\D/g, "");
-    const next = {
-      name: name.trim().length < 2 ? t.errName : undefined,
-      phone: digits.length < 7 || digits.length > 15 ? t.errPhone : undefined,
-    };
-    setErrors(next);
-    return !next.name && !next.phone;
-  };
-
-  const send = async () => {
-    if (!validate()) return;
-    setState("sending");
-    try {
-      await submitLead(shop, garment, { name: name.trim(), phone: phone.trim(), size });
-      setState("done");
-    } catch {
-      setState("error");
-    }
-  };
-
-  const input: React.CSSProperties = {
-    width: "100%", padding: "12px 15px", borderRadius: 14, border: "1px solid var(--line)",
-    background: "#fff", color: "var(--ink)", fontSize: 15,
-  };
-
-  return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 60, padding: 16 }}>
-      {/* bottom sheet — arrives with the peek, actions in the thumb zone */}
-      <div onClick={(e) => e.stopPropagation()} className="peek"
-        style={{ background: "var(--card)", borderRadius: "var(--radius-card)", width: 380, maxWidth: "100%", padding: "26px 24px", textAlign: "center", marginBottom: 8 }}>
-        {state === "done" ? (
-          <>
-            <div className="ph-display" style={{ fontSize: 24, fontWeight: 600, color: "var(--ink)", marginBottom: 4 }}>{t.shopKnows}</div>
-            <p style={{ color: "var(--stone)", fontSize: 13.5, margin: "0 0 16px", lineHeight: 1.5 }}>
-              {t.shopKnowsDesc(garment.name, size)}
-            </p>
-            {wa && (
-              <a href={wa} target="_blank" rel="noopener noreferrer" className="ph-btn btn-wa"
-                style={{ display: "block", marginBottom: 10 }}>
-                {t.chatWhatsApp}
-              </a>
-            )}
-            <button className="ph-btn btn-outline" onClick={onClose} style={{ width: "100%" }}>
-              {t.keepBrowsing}
-            </button>
-          </>
-        ) : (
-          <>
-            <div className="ph-display" style={{ fontSize: 24, fontWeight: 600, color: "var(--ink)", marginBottom: 4 }}>{t.tellShop}</div>
-            <p style={{ color: "var(--stone)", fontSize: 13.5, margin: "0 0 16px", lineHeight: 1.5 }}>
-              {t.leadNote(garment.name, npr(garment.price))}
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, textAlign: "left" }}>
-              {garment.sizes.length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
-                  {recommended && garment.sizes.includes(recommended) && (
-                    <div style={{ fontSize: 11.5, color: "var(--violet)", fontWeight: 600 }}>
-                      {t.recommendedForYou}: {recommended}
-                    </div>
-                  )}
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
-                    {garment.sizes.map((s) => {
-                      const isRec = recommended === s;
-                      return (
-                        <button key={s} className="ph-btn" onClick={() => setSize(s)}
-                          style={{
-                            padding: "8px 16px", fontSize: 13, borderRadius: 999, fontWeight: 600,
-                            background: size === s ? "var(--violet)" : "var(--paper)",
-                            color: size === s ? "#fff" : "var(--stone)",
-                            border: (size === s ? "1px solid var(--violet)"
-                              : isRec ? "1.5px dashed var(--violet)" : "1px solid var(--line)"),
-                          }}>
-                          {s}{isRec ? <> <Icon name="star" /></> : ""}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              <input style={{ ...input, borderColor: errors.name ? "var(--danger)" : "var(--line)" }}
-                placeholder={t.yourName} value={name} maxLength={80} aria-invalid={!!errors.name}
-                onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((x) => ({ ...x, name: undefined })); }} />
-              {errors.name && <div style={{ fontSize: 12.5, color: "var(--danger)", marginTop: -4 }}>{errors.name}</div>}
-              <input style={{ ...input, borderColor: errors.phone ? "var(--danger)" : "var(--line)" }}
-                placeholder={t.phoneNumber} value={phone} maxLength={30} inputMode="tel" aria-invalid={!!errors.phone}
-                onChange={(e) => { setPhone(e.target.value.replace(/[^0-9+ ]/g, "")); if (errors.phone) setErrors((x) => ({ ...x, phone: undefined })); }} />
-              {errors.phone && <div style={{ fontSize: 12.5, color: "var(--danger)", marginTop: -4 }}>{errors.phone}</div>}
-            </div>
-            {state === "error" && (
-              <div style={{ fontSize: 12.5, color: "#C0554D", marginTop: 10 }}>
-                {t.sendFailed}
-              </div>
-            )}
-            <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-              <button className="ph-btn" onClick={onClose}
-                style={{ flex: 1, border: "1px solid var(--line)", color: "var(--ink)", padding: 13, fontSize: 14, borderRadius: 999, fontWeight: 600 }}>
-                {t.cancel}
-              </button>
-              <button className="ph-btn" disabled={state === "sending"} onClick={send}
-                style={{ flex: 2, background: "var(--ink)", color: "var(--paper)", padding: 13, fontSize: 14, borderRadius: 999, fontWeight: 700, fontFamily: "'Baloo 2', cursive", opacity: state === "sending" ? 0.6 : 1 }}>
-                {state === "sending" ? t.sending : t.sendToShop}
-              </button>
-            </div>
-            {wa && (
-              <a href={wa} target="_blank" rel="noopener noreferrer" className="ph-btn btn-wa"
-                style={{ display: "block", marginTop: 10 }}>
-                {t.chatWhatsApp}
-              </a>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ---------- "find my size": height/weight → a size hint ----------
-   Never feeds the try-on image (the models take body shape from the photo);
-   it only helps the shopper pick a size and pre-fills the lead form. */
-function SizeBadge({ rec, onEdit }: { rec: SizeRec; onEdit: () => void }) {
-  const t = useT();
-  const note = rec.nearest ? t.sizeNearestNote(rec.size) : rec.confidence === "rough" ? t.sizeRoughNote : "";
-  return (
-    <button className="ph-btn" onClick={onEdit}
-      aria-label={t.findMySize}
-      style={{ display: "flex", alignItems: "center", gap: 6, border: "1px solid var(--violet)", color: "var(--violet)", padding: "7px 14px", fontSize: 13, fontWeight: 600, borderRadius: 999, background: "var(--card)" }}>
-      <span><Icon name="ruler" /> {rec.free ? t.sizeFree : `${t.yourSize}: ${rec.size}`}</span>
-      {note && <span style={{ color: "var(--stone)", fontWeight: 500, fontSize: 11 }}>· {note}</span>}
-      <span style={{ color: "var(--stone)", fontSize: 11 }}><Icon name="edit" /></span>
-    </button>
-  );
-}
-
-function FindMySizeSheet({ initial, onClose, onSaved, onForget }: {
-  initial: Profile | null;
-  onClose: () => void;
-  onSaved: (p: Profile) => void;
-  onForget: () => void;
-}) {
-  const t = useT();
-  const [height, setHeight] = useState(initial?.heightCm ? String(initial.heightCm) : "");
-  const [weight, setWeight] = useState(initial?.weightKg ? String(initial.weightKg) : "");
-  const [gender, setGender] = useState<Gender | undefined>(initial?.gender);
-
-  const h = Number(height);
-  const w = Number(weight);
-  const heightOk = Number.isFinite(h) && h >= HEIGHT_MIN && h <= HEIGHT_MAX;
-  const weightOk = weight.trim() === "" || (Number.isFinite(w) && w >= WEIGHT_MIN && w <= WEIGHT_MAX);
-  const canSave = heightOk && weightOk;
-
-  const save = () => {
-    if (!canSave) return;
-    onSaved(saveProfile({
-      heightCm: Math.round(h),
-      weightKg: weight.trim() !== "" ? Math.round(w) : undefined,
-      gender,
-    }));
-  };
-
-  const input: React.CSSProperties = {
-    width: "100%", padding: "12px 15px", borderRadius: 14, border: "1px solid var(--line)",
-    background: "#fff", color: "var(--ink)", fontSize: 15,
-  };
-  const genderChip = (g: Gender, label: string) => (
-    <button key={g} className="ph-btn" onClick={() => setGender((cur) => (cur === g ? undefined : g))}
-      style={{
-        flex: 1, padding: "9px 0", fontSize: 13, borderRadius: 999, fontWeight: 600,
-        background: gender === g ? "var(--violet)" : "var(--paper)",
-        color: gender === g ? "#fff" : "var(--stone)",
-        border: "1px solid " + (gender === g ? "var(--violet)" : "var(--line)"),
-      }}>
-      {label}
-    </button>
-  );
-
-  return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 60, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="peek"
-        style={{ background: "var(--card)", borderRadius: "var(--radius-card)", width: 380, maxWidth: "100%", padding: "26px 24px", textAlign: "center", marginBottom: 8 }}>
-        <div className="ph-display" style={{ fontSize: 24, fontWeight: 600, color: "var(--ink)", marginBottom: 4 }}><Icon name="ruler" /> {t.mySizeTitle}</div>
-        <p style={{ color: "var(--stone)", fontSize: 12.5, margin: "0 0 16px", lineHeight: 1.5 }}>{t.mySizePrivacy}</p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, textAlign: "left" }}>
-          <label style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600 }}>
-            {t.heightCmLabel}
-            <input style={{ ...input, marginTop: 5 }} value={height} inputMode="numeric" maxLength={3}
-              onChange={(e) => setHeight(e.target.value.replace(/\D/g, ""))} placeholder="165" />
-          </label>
-          <label style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600 }}>
-            {t.weightKgLabel}
-            <input style={{ ...input, marginTop: 5 }} value={weight} inputMode="numeric" maxLength={3}
-              onChange={(e) => setWeight(e.target.value.replace(/\D/g, ""))} placeholder="60" />
-          </label>
-          <div style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 600 }}>
-            {t.forWhomLabel}
-            <div style={{ display: "flex", gap: 8, marginTop: 5 }}>
-              {genderChip("f", t.genderWomen)}
-              {genderChip("m", t.genderMen)}
-            </div>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-          <button className="ph-btn" onClick={onClose}
-            style={{ flex: 1, border: "1px solid var(--line)", color: "var(--ink)", padding: 13, fontSize: 14, borderRadius: 999, fontWeight: 600 }}>
-            {t.skipSize}
-          </button>
-          <button className="ph-btn" disabled={!canSave} onClick={save}
-            style={{ flex: 2, background: "var(--violet)", color: "#fff", padding: 13, fontSize: 14, borderRadius: 999, fontWeight: 700, fontFamily: "'Baloo 2', cursive", opacity: canSave ? 1 : 0.6 }}>
-            {t.showMySize}
-          </button>
-        </div>
-        {initial && (
-          <button className="ph-btn" onClick={onForget}
-            style={{ color: "var(--stone)", fontSize: 12, marginTop: 12, textDecoration: "underline", textUnderlineOffset: 3 }}>
-            {t.forgetMySize}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /* ---------- try-on screen: photo stage + garment rail ---------- */
 interface TryOnScreenProps {
   photo: string;
@@ -919,7 +495,7 @@ interface TryOnScreenProps {
 }
 
 function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selected, setSelected, retakePhoto, initialGarment, cart, onLookSaved, onOpenBag, shared }: TryOnScreenProps) {
-  const [phase, setPhase] = useState<"idle" | "generating" | "result" | "preview">("idle");
+  const [phase, setPhase] = useState<"idle" | "generating" | "result" | "failed">("idle");
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [interested, setInterested] = useState(false);
@@ -930,9 +506,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
   const [showOriginal, setShowOriginal] = useState(false); // hold-to-compare
   const [history, setHistory] = useState<{ garment: Wearable; url: string }[]>([]); // this session's generated looks
   const savedIds = useRef<Set<string>>(new Set()); // garments already saved to My Looks this session
-  const [overlay, setOverlay] = useState({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
   const stageRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ rect: DOMRect } | null>(null);
   const requestSeq = useRef(0); // ignore stale responses if shopper taps another garment mid-generation
   const autoStarted = useRef(false);
   const photoAr = useImageAspect(photo); // stage adopts the photo's own ratio — no cropping
@@ -970,7 +544,6 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     setBagState("idle");
     setShowOriginal(false);
     setPhase("generating");
-    setOverlay({ x: 0.5, y: 0.52, scale: 0.75, opacity: 0.92 });
     try {
       const url = await runTryOn(photo, garment.image, garment.category, {
         shopId: shop.id,
@@ -986,14 +559,21 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
       setPhase("result");
     } catch (e) {
       if (seq !== requestSeq.current) return;
-      console.error("Try-on failed, falling back to manual preview:", e);
-      reportError("kiosk", "try-on fell back to manual preview: " + ((e as Error)?.message || e), {
+      /* Say it failed. This used to fall back to pasting the flat garment
+         photo over the shopper's picture — which read as a bad try-on rather
+         than none, and shoppers judged the piece on it. The server refunds the
+         credit on failure, so retrying costs nothing. */
+      console.error("Try-on failed:", e);
+      reportError("kiosk", "try-on failed: " + ((e as Error)?.message || e), {
         shopId: shop.id, garmentId: garment.id,
       });
-      setNotice(t.previewNotice);
-      setPhase("preview");
+      /* The server's own message when it explains something the shopper can
+         act on (an unusable photo, a shop out of try-ons); the generic line
+         when it's an outage they can only wait out. */
+      setNotice((e as Error)?.message || "");
+      setPhase("failed");
     }
-  }, [setSelected, photo, shop.id, t.previewNotice]);
+  }, [setSelected, photo, shop.id]);
 
   /* hanger QR / storefront deep link: start as soon as we have a photo */
   useEffect(() => {
@@ -1024,30 +604,15 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
     setTimeout(() => setBagState("idle"), 2200);
   };
 
-  /* drag the garment overlay (manual preview fallback) */
-  const onPointerDown = (e: React.PointerEvent) => {
-    e.preventDefault();
-    const rect = stageRef.current!.getBoundingClientRect();
-    dragRef.current = { rect };
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-  };
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!dragRef.current) return;
-    const { rect } = dragRef.current;
-    setOverlay((o) => ({ ...o, x: Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)), y: Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)) }));
-  };
-  const onPointerUp = () => { dragRef.current = null; };
-
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflowY: "auto", padding: "0 0 14px" }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "16px 16px 0" }}>
         {/* stage — sized to the photo itself, so the shopper is never cropped */}
-        {/* touchAction only locks during drag-preview — otherwise swiping on the photo must scroll the page */}
-        <div ref={stageRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="k-stage"
+        <div ref={stageRef} className="k-stage"
           style={{
             ...(photoAr ? ({ "--ar": String(photoAr) } as React.CSSProperties) : {}),
-            borderRadius: 20, overflow: "hidden", position: "relative", background: "var(--ink)",
-            boxShadow: "var(--shadow-soft)", touchAction: phase === "preview" ? "none" : "auto", flexShrink: 0,
+            borderRadius: 20, overflow: "hidden", position: "relative", background: "var(--slab)",
+            boxShadow: "var(--shadow-soft)", flexShrink: 0,
           }}>
           <img
             src={photo} alt="You"
@@ -1070,17 +635,26 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
             </button>
           )}
 
-          {phase === "preview" && selected && (
-            <img src={selected.image} alt={selected.name} onPointerDown={onPointerDown}
-              style={{
-                position: "absolute",
-                left: overlay.x * 100 + "%", top: overlay.y * 100 + "%",
-                transform: "translate(-50%, -50%)",
-                width: overlay.scale * 100 + "%",
-                opacity: overlay.opacity,
-                cursor: "grab", userSelect: "none",
-                filter: "drop-shadow(0 6px 18px rgba(0,0,0,.45))",
-              }} draggable={false} />
+          {/* Over the shopper's own photo, so it's clear what didn't happen to
+              it — and the piece they picked is never shown pasted on top. */}
+          {phase === "failed" && (
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, textAlign: "center", padding: 24, background: "rgba(26,23,20,.72)" }}>
+              <div className="ph-display" style={{ fontSize: 20, fontWeight: 600, color: "#fff" }}>{t.tryonFailedTitle}</div>
+              <p style={{ fontSize: 13.5, color: "rgba(255,255,255,.82)", lineHeight: 1.6, maxWidth: 300, margin: 0 }}>
+                {notice || t.tryonFailedBody}
+              </p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                {selected && (
+                  <button className="ph-btn btn-violet" onClick={() => startTryOn(selected)} style={{ padding: "10px 22px", fontSize: 14 }}>
+                    <Icon name="reset" /> {t.tryAgain}
+                  </button>
+                )}
+                <button className="ph-btn" onClick={() => { setNotice(""); setSelected(null); setPhase("idle"); }}
+                  style={{ padding: "10px 18px", fontSize: 13.5, color: "#fff", border: "1px solid rgba(255,255,255,.4)", borderRadius: 999 }}>
+                  {t.browseRack}
+                </button>
+              </div>
+            </div>
           )}
 
           {phase === "generating" && <GeneratingOverlay garment={selected} />}
@@ -1118,7 +692,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
                   if (selected.sizes.length > 1) setBagState(bagState === "pick" ? "idle" : "pick");
                   else addToBag(selected.sizes[0] || "");
                 }}
-                style={{ background: bagState === "added" ? "var(--forest)" : "var(--violet)", color: "#fff", padding: "11px 24px", fontSize: 15, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999 }}>
+                style={{ background: bagState === "added" ? "var(--ok)" : "var(--violet)", color: "var(--on-accent)", padding: "11px 24px", fontSize: 15, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999 }}>
                 <Icon name={bagState === "added" ? "check" : "bag"} /> {bagState === "added" ? t.addedToBag : t.addToBag}
               </button>
             )}
@@ -1142,7 +716,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
             )}
             <button className="ph-btn" onClick={() => setInterested(true)}
               style={{ background: "var(--ink)", color: "var(--paper)", padding: "11px 24px", fontSize: 15, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999 }}>
-              {t.iWantThis}
+              <Icon name="phone" /> {t.iWantThis}
             </button>
             <button className="ph-btn" disabled={shareState === "sharing"}
               onClick={async () => {
@@ -1152,7 +726,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
                 setShareState("idle");
               }}
               style={{ border: "1px solid var(--line)", color: "var(--ink)", padding: "9px 18px", fontSize: 13.5, fontWeight: 600, borderRadius: 999, background: "transparent", opacity: shareState === "sharing" ? 0.6 : 1 }}>
-              {shareState === "sharing" ? t.sharing : t.share}
+              <Icon name="share" /><span className="hide-sm"> {shareState === "sharing" ? t.sharing : t.share}</span>
             </button>
             <button className="ph-btn" disabled={downloading}
               onClick={async () => {
@@ -1162,7 +736,7 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
                 setDownloading(false);
               }}
               style={{ border: "1px solid var(--line)", color: "var(--ink)", padding: "9px 18px", fontSize: 13.5, fontWeight: 600, borderRadius: 999, background: "transparent", opacity: downloading ? 0.6 : 1 }}>
-              <Icon name="point-down" /> {t.saveImage}
+              <Icon name="download" /><span className="hide-sm"> {t.saveImage}</span>
             </button>
             <button className="ph-btn" disabled={lookState !== "idle"}
               onClick={async () => {
@@ -1202,26 +776,6 @@ function TryOnScreen({ photo, shop, rail, cats, catFilter, setCatFilter, selecte
           />
         )}
 
-        {notice && phase === "preview" && (
-          <div style={{ fontSize: 12.5, color: "var(--ink)", background: "var(--butter)", padding: "7px 16px", borderRadius: 999 }}>
-            {notice}
-          </div>
-        )}
-
-        {/* preview controls */}
-        {phase === "preview" && selected && (
-          <div className="peek" style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", justifyContent: "center", background: "var(--card)", border: "1px solid var(--line)", borderRadius: 20, padding: "10px 16px", fontSize: 14, width: "100%", maxWidth: 400 }}>
-            <span>
-              <b>{selected.name}</b> <span style={{ color: "var(--stone)", fontWeight: 500 }}>{npr(selected.price)}</span>
-            </span>
-            <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--stone)" }}>
-              {t.sizeSlider}
-              <input type="range" min="0.3" max="1.4" step="0.01" value={overlay.scale}
-                onChange={(e) => setOverlay((o) => ({ ...o, scale: +e.target.value }))} style={{ accentColor: "var(--violet)" }} />
-            </label>
-            <span style={{ fontSize: 11.5, color: "var(--stone)" }}>{t.dragToPosition}</span>
-          </div>
-        )}
         <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
           {/* the rack is hidden while a piece is on stage, so this is the only
               way back to it — without it a shopper is stuck on one garment */}

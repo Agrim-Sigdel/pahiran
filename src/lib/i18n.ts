@@ -56,8 +56,20 @@ const en = {
   /* Shown once the wait passes the point where silence starts to read as
      failure. A full outfit genuinely takes longer than a single piece. */
   genSlow: "ali dhilo bhairacha — banirahecha, nabandanus hai",
+  /* The beat between "the render landed and is decoded" and it actually
+     appearing. Without it the bar sits at 99% while the browser paints. */
+  genReady: "la, herum ta!",
 
   pickAPiece: "pick a piece below",
+  /* v2 puts the rack beside the stage in landscape, so "below" isn't true */
+  pickAny: "pick any piece to see it on you",
+
+  /* Asked before every generation. A tap on the rack costs the shop a try-on
+     and the shopper a minute of waiting, and the tiles sit close together —
+     so nothing reaches the API until someone means it. */
+  confirmTryTitle: "try this on?",
+  confirmTryBody: (g: string) => `We'll make one photo of you wearing ${g}. Takes about a minute.`,
+  confirmTryYes: "yes, peeq it",
   sizes: "sizes:",
   /* Shown on pieces the shop stitches rather than stocks — a rendered fabric
      and cut. The shopper is looking at cloth plus a promise, not a photo of
@@ -78,9 +90,12 @@ const en = {
   savedLook: "saved",
   savingLook: "saving…",
   saveImage: "save image",
-  previewNotice: "AI try-on unavailable here — showing a positioning preview instead.",
-  sizeSlider: "size",
-  dragToPosition: "drag the garment to position · preview mode",
+  /* A failed try-on says so. Pasting the flat garment photo over the shopper's
+     picture and calling it a preview looked like a bad result rather than no
+     result — shoppers judged the piece on it. */
+  tryonFailedTitle: "something went wrong",
+  tryonFailedBody: "We couldn't create your try-on just now. Please try again in a moment.",
+  tryAgain: "try again",
   retakePhoto: "retake my photo",
   browseRack: "browse other pieces",
 
@@ -175,8 +190,14 @@ const ne: typeof en = {
   genMessages: ["एक झलक हेर्दै…", "कपडा ओढाउँदै…", "उज्यालो मिलाउँदै…", "बुट्टा सिलाउँदै…", "अन्तिम टच…"],
   genFooter: "एक मिनेट जति लाग्छ, तर लायकको छ है",
   genSlow: "अलि ढिलो भइरहेछ — बन्दैछ, बन्द नगर्नुहोस् है",
+  genReady: "ल, हेरौँ त!",
 
   pickAPiece: "तलबाट एउटा लुगा छान्नुहोस्",
+  pickAny: "कुनै पनि लुगा छान्नुहोस्, आफूमा हेर्नुहोस्",
+
+  confirmTryTitle: "यो लगाएर हेर्ने?",
+  confirmTryBody: (g: string) => `${g} तपाईंलाई कस्तो लाग्छ, एउटा फोटो बनाइन्छ। एक मिनेट जति लाग्छ।`,
+  confirmTryYes: "हो, हेरौँ",
   sizes: "साइज:",
   madeToOrder: "अर्डरमा सिलाइने",
   yourMeasurements: "तपाईंको नाप",
@@ -194,9 +215,9 @@ const ne: typeof en = {
   savedLook: "सेभ भयो",
   savingLook: "सेभ हुँदैछ…",
   saveImage: "फोटो सेभ गर्नुहोस्",
-  previewNotice: "AI ट्राई-अन अहिले उपलब्ध छैन — साधारण प्रिभ्यु देखाइँदैछ।",
-  sizeSlider: "साइज",
-  dragToPosition: "लुगा तानेर मिलाउनुहोस् · प्रिभ्यु मोड",
+  tryonFailedTitle: "केही गडबड भयो",
+  tryonFailedBody: "अहिले ट्राई-अन बनाउन सकिएन। कृपया केही बेरमा फेरि प्रयास गर्नुहोस्।",
+  tryAgain: "फेरि प्रयास गर्नुहोस्",
   retakePhoto: "फेरि फोटो खिच्नुहोस्",
   browseRack: "अरू लुगा हेर्नुहोस्",
 
