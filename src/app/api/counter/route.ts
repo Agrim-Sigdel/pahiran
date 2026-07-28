@@ -210,9 +210,10 @@ export async function POST(req: Request): Promise<Response> {
             coverage === "set",
             /* Counter fittings all come out on the same white studio backdrop —
                the shop wall behind the customer varies, the output shouldn't.
-               Medium even for single garments: a customer is standing here
-               deciding on a purchase off this image. */
-            { studioBackground: true, quality: "medium" }
+               No quality override: the kiosk's rule (low for one garment,
+               medium for a set) is the right spend here too — the pattern was
+               already made at medium in the stitch, the fit only copies it. */
+            { studioBackground: true }
           );
         } catch (e: any) {
           await refundTryon(sb, shopId, true); // the compose stands — its render is returned below
