@@ -66,7 +66,7 @@ export default function BillingPage() {
       />
 
       {err && (
-        <div className="panel" style={{ padding: "12px 16px", marginBottom: 12, color: "#9b3232", fontSize: 13 }}>
+        <div className="panel" style={{ padding: "12px 16px", marginBottom: 12, color: "var(--danger)", fontSize: 13 }}>
           {err}
         </div>
       )}
@@ -91,17 +91,17 @@ export default function BillingPage() {
                 }}
               >
                 <div>
-                  <span className="ph-display" style={{ fontSize: 17, color: "var(--forest-deep)" }}>
+                  <span className="ph-display" style={{ fontSize: 17, color: "var(--ink)" }}>
                     {r.shopName || "(unnamed shop)"}
                   </span>
                   {r.shopSlug && (
-                    <span style={{ fontSize: 12, color: "var(--mut)", marginLeft: 8 }}>/{r.shopSlug}</span>
+                    <span style={{ fontSize: 12, color: "var(--stone)", marginLeft: 8 }}>/{r.shopSlug}</span>
                   )}
                 </div>
-                <span style={{ fontSize: 11.5, color: "var(--mut)" }}>{when(r.createdAt)}</span>
+                <span style={{ fontSize: 11.5, color: "var(--stone)" }}>{when(r.createdAt)}</span>
               </div>
               <div style={{ fontSize: 13.5, color: "var(--stone)", margin: "6px 0 12px" }}>
-                <b style={{ color: r.kind === "plan" ? "var(--violet)" : "var(--camel)" }}>
+                <b style={{ color: r.kind === "plan" ? "var(--violet)" : "var(--stone)" }}>
                   {r.kind === "plan" ? "Plan upgrade" : "Credit top-up"}
                 </b>
                 {r.note ? " — " + r.note : ""}
@@ -145,7 +145,7 @@ export default function BillingPage() {
                   style={{
                     padding: "9px 14px",
                     fontSize: 12,
-                    color: "var(--mut)",
+                    color: "var(--stone)",
                     border: "1px solid var(--line)",
                     borderRadius: "var(--radius-btn)",
                   }}

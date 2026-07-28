@@ -7,8 +7,9 @@
    stiff translation. */
 
 import { createContext, useContext, useEffect, useState } from "react";
+import { persistLang, readLang, type Lang } from "@/lib/lang";
 
-export type Lang = "en" | "ne";
+export type { Lang };
 
 const en = {
   switchLang: "नेपाली",
@@ -30,8 +31,11 @@ const en = {
   forgetSavedPhoto: "forget my saved photo",
 
   consentTitle: "Your photo, your call.",
+  /* "Saved looks stay on this device" was the same claim the privacy page
+     made, and it stopped being true for signed-in shoppers the day looks
+     started syncing. Both now say what actually happens. */
   consentBody:
-    "Used only to show these clothes on you, never kept by the shop. Saved looks stay on this device.",
+    "Used only to show these clothes on you, never kept by the shop. Saved looks stay on this device — or, if you're signed in, privately in your own account.",
   agreeTakePhoto: "agree & take photo",
   agreeUpload: "upload instead",
 
@@ -47,17 +51,41 @@ const en = {
   uploadInstead: "to upload a full-body photo instead.",
   startingCamera: "opening our eyes…",
   rememberPhoto: "Remember my photo on this device for 7 days",
-  rememberedNote: "Saved only on this device — delete it anytime from the consent screen.",
+  rememberedNote: "Kept for you — delete it anytime from the consent screen.",
   notSavedNote: "Your photo stays on this screen — it is never saved.",
   couldNotReadPhoto: "Could not read that photo.",
+  /* The dashed box is the universal drop target, so it now actually accepts a
+     drop — before, dropping a photo on it navigated the browser to the file. */
+  dropHere: "or drag a photo in",
+  dropNow: "drop it",
+  notAnImage: "That file isn't an image — pick a photo.",
 
   genMessages: ["Peeq gardai... 👀", "Lighting milaudai...", "Kapada ramrari fit gardai...", "Pose milaudai...", "Sana sana details milaudai...", "Almost tayar!", "La, sakinai lagyo, ahha la daami cha"],
   genFooter: "ek minute jati laagchha, tara worth it chha hai",
   /* Shown once the wait passes the point where silence starts to read as
      failure. A full outfit genuinely takes longer than a single piece. */
   genSlow: "ali dhilo bhairacha — banirahecha, nabandanus hai",
+  /* The beat between "the render landed and is decoded" and it actually
+     appearing. Without it the bar sits at 99% while the browser paints. */
+  genReady: "la, herum ta!",
+  /* Announced to a screen reader, which otherwise got total silence for the
+     whole minute-long wait — and read by the cancel button, which did not
+     exist at all: a mis-tap used to cost the shopper two minutes and the shop
+     a credit with no way out. */
+  genAria: (g: string) => `Making your try-on of ${g}. This usually takes about a minute.`,
+  genCancel: "stop waiting",
+  genCancelled: "stopped — pick anything to try again.",
 
   pickAPiece: "pick a piece below",
+  /* v2 puts the rack beside the stage in landscape, so "below" isn't true */
+  pickAny: "pick any piece to see it on you",
+
+  /* Asked before every generation. A tap on the rack costs the shop a try-on
+     and the shopper a minute of waiting, and the tiles sit close together —
+     so nothing reaches the API until someone means it. */
+  confirmTryTitle: "try this on?",
+  confirmTryBody: (g: string) => `We'll make one photo of you wearing ${g}. Takes about a minute.`,
+  confirmTryYes: "yes, peeq it",
   sizes: "sizes:",
   /* Shown on pieces the shop stitches rather than stocks — a rendered fabric
      and cut. The shopper is looking at cloth plus a promise, not a photo of
@@ -66,6 +94,11 @@ const en = {
   yourMeasurements: "your measurements",
   aiResultNote: "AI try-on · ask staff to see it in person",
   holdToCompare: "hold to compare",
+  /* Hold-to-compare was pointer-only, so a keyboard user had no way to see
+     their original photo at all. Space/Enter toggles it instead of holding. */
+  compareHint: "press and hold — or use Enter to toggle",
+  showOriginalLabel: "show my original photo",
+  showLookLabel: "show the try-on again",
   originalPhoto: "your photo",
   thisSession: "peeqed this session",
   sharing: "sharing…",
@@ -78,9 +111,12 @@ const en = {
   savedLook: "saved",
   savingLook: "saving…",
   saveImage: "save image",
-  previewNotice: "AI try-on unavailable here — showing a positioning preview instead.",
-  sizeSlider: "size",
-  dragToPosition: "drag the garment to position · preview mode",
+  /* A failed try-on says so. Pasting the flat garment photo over the shopper's
+     picture and calling it a preview looked like a bad result rather than no
+     result — shoppers judged the piece on it. */
+  tryonFailedTitle: "something went wrong",
+  tryonFailedBody: "We couldn't create your try-on just now. Please try again in a moment.",
+  tryAgain: "try again",
   retakePhoto: "retake my photo",
   browseRack: "browse other pieces",
 
@@ -95,6 +131,11 @@ const en = {
   showMySize: "show my size",
   skipSize: "skip",
   forgetMySize: "forget my size",
+  /* "show my size" used to just sit there at 60% opacity when the numbers
+     were out of range, with nothing saying why. Type 300 and nothing at all
+     happened. */
+  errHeightRange: (lo: number, hi: number) => `Enter your height in cm, between ${lo} and ${hi}.`,
+  errWeightRange: (lo: number, hi: number) => `Enter your weight in kg between ${lo} and ${hi}, or leave it blank.`,
   yourSize: "your size",
   sizeRoughNote: "rough — add weight to sharpen it",
   sizeNearestNote: (s: string) => `closest in stock: ${s}`,
@@ -118,7 +159,7 @@ const en = {
   chatWhatsApp: "chat on WhatsApp",
 
   myLooksTitle: "my looks",
-  myLooksSub: "saved only on this device",
+  myLooksSub: "private to you",
   deleteAll: "delete all",
   close: "close",
   nothingSaved: "nothing here yet — tap “save look” after a try-on to keep it here.",
@@ -129,6 +170,18 @@ const en = {
   confirmDeleteLook: "Delete this look? This can't be undone.",
   deleteThisLook: "delete this look",
   privacyLink: "how we handle your photo",
+
+  /* Shared-device mode. This decides whether one shopper's face and phone
+     number are still on the screen when the next one picks the tablet up, and
+     until now the only way to set it was appending ?shared=1 to the URL — a
+     privacy-critical switch with no interface at all. */
+  sharedBadge: "shop tablet",
+  sharedOnNote: "Shared tablet: nothing is remembered between shoppers.",
+  sharedTurnOn: "using a shop tablet?",
+  sharedTurnOnCta: "turn on shared mode",
+  sharedTurnOff: "turn off shared mode",
+  sharedExplain:
+    "On a shared tablet peeq never remembers a photo, never keeps saved looks and never prefills a name or number — and it clears everything when a shopper walks away.",
 };
 
 const ne: typeof en = {
@@ -152,7 +205,7 @@ const ne: typeof en = {
 
   consentTitle: "तपाईंको फोटो, तपाईंको निर्णय।",
   consentBody:
-    "लुगा तपाईंमा देखाउन मात्र प्रयोग हुन्छ, पसलले कहिल्यै राख्दैन। सेभ गरेका लुक यही डिभाइसमा मात्र रहन्छन्।",
+    "लुगा तपाईंमा देखाउन मात्र प्रयोग हुन्छ, पसलले कहिल्यै राख्दैन। सेभ गरेका लुक यही डिभाइसमा — वा साइन इन गर्नुभएको छ भने तपाईंकै निजी खातामा — रहन्छन्।",
   agreeTakePhoto: "मन्जुर, फोटो खिच्नुहोस्",
   agreeUpload: "अपलोड गर्नुहोस्",
 
@@ -168,20 +221,35 @@ const ne: typeof en = {
   uploadInstead: "र पूरा शरीर देखिने फोटो अपलोड गर्नुहोस्।",
   startingCamera: "आँखा खुल्दैछ…",
   rememberPhoto: "मेरो फोटो यो डिभाइसमा ७ दिनसम्म सम्झनुहोस्",
-  rememberedNote: "यही डिभाइसमा मात्र सेभ हुन्छ — जहिले पनि मेटाउन सकिन्छ।",
+  rememberedNote: "तपाईंका लागि राखिन्छ — जहिले पनि मेटाउन सकिन्छ।",
   notSavedNote: "तपाईंको फोटो यही स्क्रिनमा मात्र रहन्छ — कहिल्यै सेभ हुँदैन।",
   couldNotReadPhoto: "फोटो पढ्न सकिएन।",
+  dropHere: "वा फोटो यहाँ तान्नुहोस्",
+  dropNow: "यहाँ छाड्नुहोस्",
+  notAnImage: "यो फाइल फोटो होइन — कृपया फोटो छान्नुहोस्।",
 
   genMessages: ["एक झलक हेर्दै…", "कपडा ओढाउँदै…", "उज्यालो मिलाउँदै…", "बुट्टा सिलाउँदै…", "अन्तिम टच…"],
   genFooter: "एक मिनेट जति लाग्छ, तर लायकको छ है",
   genSlow: "अलि ढिलो भइरहेछ — बन्दैछ, बन्द नगर्नुहोस् है",
+  genReady: "ल, हेरौँ त!",
+  genAria: (g: string) => `${g} तपाईंमा कस्तो देखिन्छ, बन्दैछ। एक मिनेट जति लाग्छ।`,
+  genCancel: "पर्खनु पर्दैन",
+  genCancelled: "रोकियो — फेरि कुनै पनि लुगा छान्नुहोस्।",
 
   pickAPiece: "तलबाट एउटा लुगा छान्नुहोस्",
+  pickAny: "कुनै पनि लुगा छान्नुहोस्, आफूमा हेर्नुहोस्",
+
+  confirmTryTitle: "यो लगाएर हेर्ने?",
+  confirmTryBody: (g: string) => `${g} तपाईंलाई कस्तो लाग्छ, एउटा फोटो बनाइन्छ। एक मिनेट जति लाग्छ।`,
+  confirmTryYes: "हो, हेरौँ",
   sizes: "साइज:",
   madeToOrder: "अर्डरमा सिलाइने",
   yourMeasurements: "तपाईंको नाप",
   aiResultNote: "AI ट्राई-अन · सक्कली हेर्न स्टाफलाई भन्नुहोस्",
   holdToCompare: "तुलना गर्न थिचिराख्नुहोस्",
+  compareHint: "थिचिराख्नुहोस् — वा Enter थिच्नुहोस्",
+  showOriginalLabel: "मेरो सक्कली फोटो देखाउनुहोस्",
+  showLookLabel: "ट्राई-अन फेरि देखाउनुहोस्",
   originalPhoto: "तपाईंको फोटो",
   thisSession: "अहिलेसम्म लगाएर हेरेका",
   sharing: "सेयर हुँदैछ…",
@@ -194,9 +262,9 @@ const ne: typeof en = {
   savedLook: "सेभ भयो",
   savingLook: "सेभ हुँदैछ…",
   saveImage: "फोटो सेभ गर्नुहोस्",
-  previewNotice: "AI ट्राई-अन अहिले उपलब्ध छैन — साधारण प्रिभ्यु देखाइँदैछ।",
-  sizeSlider: "साइज",
-  dragToPosition: "लुगा तानेर मिलाउनुहोस् · प्रिभ्यु मोड",
+  tryonFailedTitle: "केही गडबड भयो",
+  tryonFailedBody: "अहिले ट्राई-अन बनाउन सकिएन। कृपया केही बेरमा फेरि प्रयास गर्नुहोस्।",
+  tryAgain: "फेरि प्रयास गर्नुहोस्",
   retakePhoto: "फेरि फोटो खिच्नुहोस्",
   browseRack: "अरू लुगा हेर्नुहोस्",
 
@@ -211,6 +279,8 @@ const ne: typeof en = {
   showMySize: "मेरो साइज देखाउनुहोस्",
   skipSize: "छाड्नुहोस्",
   forgetMySize: "मेरो साइज मेटाउनुहोस्",
+  errHeightRange: (lo: number, hi: number) => `उचाइ से.मि.मा ${lo} देखि ${hi} बीच लेख्नुहोस्।`,
+  errWeightRange: (lo: number, hi: number) => `तौल के.जी.मा ${lo} देखि ${hi} बीच लेख्नुहोस्, वा खाली छोड्नुहोस्।`,
   yourSize: "तपाईंको साइज",
   sizeRoughNote: "अन्दाजी — राम्रो नतिजाका लागि तौल थप्नुहोस्",
   sizeNearestNote: (s: string) => `स्टकमा नजिकको: ${s}`,
@@ -234,7 +304,7 @@ const ne: typeof en = {
   chatWhatsApp: "WhatsApp मा कुरा गर्नुहोस्",
 
   myLooksTitle: "मेरा लुकहरू",
-  myLooksSub: "यही डिभाइसमा मात्र सेभ",
+  myLooksSub: "तपाईंले मात्र देख्न सक्ने",
   deleteAll: "सबै मेटाउनुहोस्",
   close: "बन्द गर्नुहोस्",
   nothingSaved: "अहिलेसम्म केही सेभ छैन — ट्राई-अनपछि “लुक सेभ गर्नुहोस्” ट्याप गर्नुहोस्।",
@@ -244,6 +314,14 @@ const ne: typeof en = {
   confirmDeleteLook: "यो लुक मेटाउने? फेरि फर्काउन मिल्दैन।",
   deleteThisLook: "यो लुक मेटाउनुहोस्",
   privacyLink: "तपाईंको फोटो कसरी प्रयोग हुन्छ",
+
+  sharedBadge: "पसलको ट्याब्लेट",
+  sharedOnNote: "साझा ट्याब्लेट: एक ग्राहकको कुनै कुरा अर्कोका लागि रहँदैन।",
+  sharedTurnOn: "पसलको ट्याब्लेट प्रयोग गर्दै?",
+  sharedTurnOnCta: "साझा मोड सुरु गर्नुहोस्",
+  sharedTurnOff: "साझा मोड बन्द गर्नुहोस्",
+  sharedExplain:
+    "साझा ट्याब्लेटमा peeq ले फोटो सम्झँदैन, सेभ गरेका लुक राख्दैन, नाम वा नम्बर पहिल्यै भर्दैन — र ग्राहक गएपछि सबै मेटाउँछ।",
 };
 
 export type Strings = typeof en;
@@ -257,16 +335,13 @@ export function useT(): Strings {
 
 export function useLangState(): [Lang, () => void] {
   const [lang, setLang] = useState<Lang>("en");
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("pahiran:lang");
-      if (saved === "ne" || saved === "en") setLang(saved);
-    } catch {}
-  }, []);
+  useEffect(() => { setLang(readLang()); }, []);
   const toggle = () =>
     setLang((l) => {
       const next: Lang = l === "en" ? "ne" : "en";
-      try { localStorage.setItem("pahiran:lang", next); } catch {}
+      /* both stores, so a server-rendered page (see /privacy) agrees with the
+         kiosk about which language this device reads */
+      persistLang(next);
       return next;
     });
   return [lang, toggle];

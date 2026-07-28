@@ -34,9 +34,27 @@ export default function AccountMenu() {
   }
 
   const isVendor = role === "vendor";
-  const homeHref = isVendor ? "/dashboard" : "/account";
-  const homeLabel = isVendor ? "Dashboard" : "My looks";
   const initial = (user.email || "?").trim().charAt(0).toUpperCase() || "?";
+
+  /* /account is everyone's, vendors included. It used to be an either/or with
+     the dashboard — role picked one destination and the other was unreachable
+     from the nav — so a vendor who had tried a piece on had no way back to
+     their own saved looks, contact details or orders from anywhere in the
+     product. Both now sit in the same menu, dashboard first because that is
+     the vendor's working surface. */
+  const items = [
+    ...(isVendor ? [{ href: "/dashboard", label: "Dashboard" }] : []),
+    { href: "/account", label: "My account" },
+    /* A vendor lands on /dashboard and stays there: the dashboard nav has no
+       link out to the public side, so "back to home" is the way back to the
+       storefronts they are building for. Shoppers already start there. */
+    ...(isVendor ? [{ href: "/", label: "Back to home" }] : []),
+  ];
+
+  const itemStyle: React.CSSProperties = {
+    display: "block", padding: "11px 14px", fontSize: 14,
+    color: "var(--ink)", textDecoration: "none",
+  };
 
   return (
     <div ref={ref} style={{ position: "relative", display: "inline-flex" }}>
@@ -47,7 +65,7 @@ export default function AccountMenu() {
         aria-expanded={open}
         aria-label="Your account"
         style={{
-          width: 34, height: 34, borderRadius: 999, background: "var(--violet)", color: "#fff",
+          width: 34, height: 34, borderRadius: "var(--radius-pill)", background: "var(--violet)", color: "var(--on-accent)",
           fontWeight: 700, fontSize: 15, display: "inline-flex", alignItems: "center", justifyContent: "center",
         }}
       >
@@ -58,7 +76,7 @@ export default function AccountMenu() {
           role="menu"
           style={{
             position: "absolute", top: "calc(100% + 8px)", right: 0, minWidth: 190, zIndex: 80,
-            background: "var(--cream, #fff)", border: "1px solid var(--line)", borderRadius: 14,
+            background: "var(--card, #fff)", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)",
             boxShadow: "var(--shadow-soft, 0 6px 24px rgba(0,0,0,.12))", overflow: "hidden",
           }}
         >
@@ -68,10 +86,14 @@ export default function AccountMenu() {
               {user.email}
             </div>
           </div>
-          <Link href={homeHref} role="menuitem" onClick={() => setOpen(false)}
-            style={{ display: "block", padding: "11px 14px", fontSize: 14, color: "var(--ink)", textDecoration: "none" }}>
-            {homeLabel}
-          </Link>
+          {items.map((it) => (
+            <Link key={it.href} href={it.href} role="menuitem" onClick={() => setOpen(false)} style={itemStyle}>
+              {it.label}
+            </Link>
+          ))}
+          {/* only sign out takes a rule: it's the one item that ends the
+              session rather than going somewhere, and the destinations above
+              read as one group */}
           <button
             className="ph-btn"
             role="menuitem"

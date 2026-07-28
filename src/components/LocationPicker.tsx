@@ -36,7 +36,22 @@ export default function LocationPicker({ lat, lng, onChange }: {
       const L = (await import("leaflet")).default;
       if (cancelled || !boxRef.current || mapRef.current) return;
       const start: [number, number] = lat != null && lng != null ? [lat, lng] : KATHMANDU;
-      const map = L.map(boxRef.current).setView(start, lat != null ? 16 : 12);
+      /* This map sits in the middle of the onboarding form, and it used to
+         swallow both gestures a vendor needs to get past it: scrolling the
+         page over the map zoomed the map (ShopsMap sets scrollWheelZoom:
+         false; this one never did), and on a phone a one-finger drag panned
+         the map instead of scrolling the page — so filling in the form got
+         stuck at the map with the fields below unreachable.
+
+         Panning is off on touch specifically, not everywhere: on a phone the
+         one-finger swipe belongs to the page, and the pin is placed by tapping
+         the map or dragging the marker — neither of which needs map panning —
+         with the zoom buttons and "use my location" still doing their jobs. */
+      const coarse = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+      const map = L.map(boxRef.current, {
+        scrollWheelZoom: false,
+        dragging: !coarse,
+      }).setView(start, lat != null ? 16 : 12);
       L.tileLayer(OSM_TILES, { maxZoom: 19, attribution: OSM_ATTRIBUTION }).addTo(map);
 
       placeRef.current = (la, ln) => {
@@ -116,12 +131,12 @@ export default function LocationPicker({ lat, lng, onChange }: {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", gap: 8 }}>
-        <input value={query} placeholder="Search a place, e.g. New Road" maxLength={100}
+        <input value={query} placeholder="Search a place, e.g. New Road" maxLength={100} aria-label="Search for a place"
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); search(); } }}
           style={{ flex: 1 }} />
         <button type="button" className="ph-btn" onClick={search} disabled={searching}
-          style={{ background: "var(--forest-deep)", color: "var(--cream)", padding: "0 16px", fontSize: 11, letterSpacing: ".1em" }}>
+          style={{ background: "var(--ink)", color: "var(--card)", padding: "0 16px", fontSize: 11, letterSpacing: ".1em" }}>
           {searching ? "…" : "search"}
         </button>
       </div>
@@ -129,21 +144,21 @@ export default function LocationPicker({ lat, lng, onChange }: {
         style={{ height: 240, borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", overflow: "hidden", zIndex: 0, position: "relative" }} />
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <button type="button" className="ph-btn" onClick={useMyLocation}
-          style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--forest-deep)", padding: "8px 14px", fontSize: 11, letterSpacing: ".08em" }}>
+          style={{ border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)", padding: "8px 14px", fontSize: 11, letterSpacing: ".08em" }}>
           <Icon name="locate" /> use my location
         </button>
-        <span style={{ fontSize: 12, color: "var(--mut)", fontWeight: 400, letterSpacing: 0, textTransform: "none" }}>
+        <span style={{ fontSize: 12, color: "var(--stone)", fontWeight: 400, letterSpacing: 0, textTransform: "none" }}>
           {hasPin ? `pinned ${lat!.toFixed(4)}, ${lng!.toFixed(4)}` : "no pin yet — tap the map"}
         </span>
         {hasPin && (
           <button type="button" className="ph-btn" onClick={clearPin}
-            style={{ color: "var(--mut)", fontSize: 11, textDecoration: "underline", textUnderlineOffset: 3 }}>
+            style={{ color: "var(--stone)", fontSize: 11, textDecoration: "underline", textUnderlineOffset: 3 }}>
             remove
           </button>
         )}
       </div>
       {status && (
-        <span style={{ fontSize: 12, color: "var(--forest-deep)", fontWeight: 400, letterSpacing: 0, textTransform: "none" }}>{status}</span>
+        <span style={{ fontSize: 12, color: "var(--ink)", fontWeight: 400, letterSpacing: 0, textTransform: "none" }}>{status}</span>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import { FAMILIES, npr, fabricPrice, familyLabel } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
 import EeMark from "@/components/EeMark";
 import Icon from "@/components/Icon";
+import Dialog, { confirmAsync } from "@/components/Dialog";
 import { COVERAGES, staleReason } from "@/lib/types";
 import type { Composition, Fabric, Style, StyleCoverage, StyleFamily } from "@/lib/types";
 
@@ -117,33 +118,39 @@ export default function FabricStudio({
   };
 
   return (
-    <div onClick={busy ? undefined : onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 55, padding: 16, overflowY: "auto" }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 760, maxWidth: "100%", margin: "24px 0", padding: "26px 26px 30px" }}>
+    /* dirty while a render is in flight: closing mid-stitch would abandon
+       something the shop is being charged for */
+    <Dialog onClose={onClose} hideHeader width={760}
+      ariaLabel={"Cuts for " + fabric.name}
+      closeOnBackdrop={!busy}
+      dirty={busy}
+      dirtyMessage="A stitch is still running. Close anyway?"
+      scrimStyle={{ alignItems: "flex-start", overflowY: "auto" }}
+      panelStyle={{ margin: "24px 0", padding: "26px 26px 30px" }}>
+      <>
 
         {/* ── the cloth ── */}
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start", marginBottom: 20 }}>
           <img src={fabric.image} alt={fabric.name}
-            style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 6, flexShrink: 0, background: "var(--sage-mist)" }} />
+            style={{ width: 96, height: 96, objectFit: "cover", borderRadius: "var(--radius-sm)", flexShrink: 0, background: "var(--paper-deep)" }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             {fabric.itemCode && (
-              <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 10.5, letterSpacing: ".08em", color: "var(--camel)" }}>{fabric.itemCode}</div>
+              <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 10.5, letterSpacing: ".08em", color: "var(--stone)" }}>{fabric.itemCode}</div>
             )}
-            <div className="ph-display" style={{ fontSize: 23, color: "var(--forest-deep)", lineHeight: 1.25 }}>{fabric.name}</div>
-            <div style={{ fontSize: 12, color: "var(--mut)", marginTop: 3 }}>
+            <div className="ph-display" style={{ fontSize: 23, color: "var(--ink)", lineHeight: 1.25 }}>{fabric.name}</div>
+            <div style={{ fontSize: 12, color: "var(--stone)", marginTop: 3 }}>
               {[familyLabel(fabric.family), fabric.composition, fabric.color].filter(Boolean).join(" · ")}
             </div>
-            <div style={{ fontSize: 12.5, color: "var(--camel)", fontWeight: 500, marginTop: 3 }}>
+            <div style={{ fontSize: 12.5, color: "var(--stone)", fontWeight: 500, marginTop: 3 }}>
               {fabricPrice(fabric.price, fabric.unit)}
             </div>
           </div>
           <button className="ph-btn" onClick={onClose} disabled={busy}
-            style={{ color: "var(--mut)", fontSize: 12, padding: "4px 8px" }}>close</button>
+            style={{ color: "var(--stone)", fontSize: 12, padding: "4px 8px" }}>close</button>
         </div>
 
         {!fabric.note && (
-          <div style={{ background: "var(--sage)", border: "1px solid var(--line)", borderRadius: 6, padding: "10px 13px", marginBottom: 18, fontSize: 12, color: "var(--mut)", lineHeight: 1.6 }}>
+          <div style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", padding: "10px 13px", marginBottom: 18, fontSize: 12, color: "var(--stone)", lineHeight: 1.6 }}>
             No note on this cloth yet. Editing the fabric to say where a border sits, or how
             heavily it drapes, makes every render below noticeably more accurate.
           </div>
@@ -151,19 +158,19 @@ export default function FabricStudio({
 
         {/* ── pick the cuts ── */}
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
-          <div className="ph-display" style={{ fontSize: 17, color: "var(--forest-deep)" }}>stitch this into</div>
+          <div className="ph-display" style={{ fontSize: 17, color: "var(--ink)" }}>stitch this into</div>
           <button className="ph-btn" onClick={() => setCutForm({ mode: "new" })} disabled={busy}
-            style={{ fontSize: 12, color: "var(--forest-deep)", fontWeight: 500, textDecoration: "underline", textUnderlineOffset: 3 }}>
+            style={{ fontSize: 12, color: "var(--ink)", fontWeight: 500, textDecoration: "underline", textUnderlineOffset: 3 }}>
             + add your own cut
           </button>
         </div>
-        <div style={{ fontSize: 12, color: "var(--mut)", marginBottom: 12, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 12, color: "var(--stone)", marginBottom: 12, lineHeight: 1.6 }}>
           Pick only the cuts you'd actually stitch in this cloth — each one is a render, and
           each render is a promise your tailor has to keep.
         </div>
 
         {cuts.length === 0 ? (
-          <div style={{ color: "var(--mut)", fontSize: 13, padding: "18px 0" }}>
+          <div style={{ color: "var(--stone)", fontSize: 13, padding: "18px 0" }}>
             No cuts for {familyLabel(fabric.family)} yet — add one to get started.
           </div>
         ) : (
@@ -182,7 +189,7 @@ export default function FabricStudio({
               return (
                 <span key={c.id} style={{
                   display: "inline-flex", alignItems: "stretch", borderRadius: "var(--radius-btn)",
-                  border: "1px solid " + (on ? "var(--forest)" : "var(--line)"), overflow: "hidden",
+                  border: "1px solid " + (on ? "var(--ink)" : "var(--line)"), overflow: "hidden",
                   opacity: isDone ? 0.65 : 1,
                 }}>
                   <button type="button" className="ph-btn" disabled={busy || isDone}
@@ -190,8 +197,8 @@ export default function FabricStudio({
                     title={isDone ? "Already stitched below" : c.hint || c.name}
                     style={{
                       padding: "8px 13px", fontSize: 12, fontWeight: 500, border: "none",
-                      background: isDone ? "var(--sage-mist)" : on ? "var(--forest)" : "var(--sage)",
-                      color: isDone ? "var(--mut)" : on ? "var(--cream)" : "var(--forest-deep)",
+                      background: isDone ? "var(--paper-deep)" : on ? "var(--ink)" : "var(--paper)",
+                      color: isDone ? "var(--stone)" : on ? "var(--card)" : "var(--ink)",
                       cursor: isDone ? "default" : "pointer",
                       display: "inline-flex", alignItems: "center", gap: 6,
                     }}>
@@ -211,8 +218,8 @@ export default function FabricStudio({
                     style={{
                       padding: "0 9px", fontSize: 11, border: "none",
                       borderLeft: "1px solid " + (on ? "rgba(255,255,255,.3)" : "var(--line)"),
-                      background: isDone ? "var(--sage-mist)" : on ? "var(--forest)" : "var(--sage)",
-                      color: on ? "var(--cream)" : "var(--mut)", cursor: "pointer",
+                      background: isDone ? "var(--paper-deep)" : on ? "var(--ink)" : "var(--paper)",
+                      color: on ? "var(--card)" : "var(--stone)", cursor: "pointer",
                     }}>
                     <Icon name={mine ? "edit" : "copy"} />
                   </button>
@@ -229,12 +236,12 @@ export default function FabricStudio({
           </button>
           {unrendered.length > 0 && !busy && (
             <button className="ph-btn" onClick={pickSuggested}
-              style={{ fontSize: 12, color: "var(--forest-deep)", textDecoration: "underline", textUnderlineOffset: 3 }}>
+              style={{ fontSize: 12, color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3 }}>
               pick {Math.min(SUGGESTED, unrendered.length)} for me
             </button>
           )}
           {picked.length >= MAX_BATCH && (
-            <span style={{ fontSize: 11.5, color: "var(--mut)" }}>{MAX_BATCH} at a time is the limit.</span>
+            <span style={{ fontSize: 11.5, color: "var(--stone)" }}>{MAX_BATCH} at a time is the limit.</span>
           )}
         </div>
         {error && (
@@ -244,10 +251,10 @@ export default function FabricStudio({
         {/* ── what's been made ── */}
         {compositions.length > 0 && (
           <>
-            <div className="ph-display" style={{ fontSize: 17, color: "var(--forest-deep)", margin: "26px 0 4px" }}>
+            <div className="ph-display" style={{ fontSize: 17, color: "var(--ink)", margin: "26px 0 4px" }}>
               stitched previews
             </div>
-            <div style={{ fontSize: 12, color: "var(--mut)", marginBottom: 13, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 12, color: "var(--stone)", marginBottom: 13, lineHeight: 1.6 }}>
               Check each one before publishing. Shoppers only see what you publish — and these
               are previews, not photographs, so pattern placement is close, not exact.
             </div>
@@ -264,18 +271,17 @@ export default function FabricStudio({
         )}
 
         {compositions.length === 0 && !busy && (
-          <div style={{ marginTop: 22, padding: "22px 18px", background: "var(--sage)", border: "1px dashed var(--line)", borderRadius: 6, textAlign: "center", color: "var(--mut)", fontSize: 12.5, lineHeight: 1.7 }}>
+          <div style={{ marginTop: 22, padding: "22px 18px", background: "var(--paper)", border: "1px dashed var(--line)", borderRadius: "var(--radius-sm)", textAlign: "center", color: "var(--stone)", fontSize: 12.5, lineHeight: 1.7 }}>
             Nothing stitched from this cloth yet.<br />
             Pick a cut or two above — three is usually plenty to start.
           </div>
         )}
 
         {rendered.length > 0 && (
-          <div style={{ marginTop: 16, fontSize: 11.5, color: "var(--mut)" }}>
+          <div style={{ marginTop: 16, fontSize: 11.5, color: "var(--stone)" }}>
             {rendered.filter((c) => c.published).length} of {rendered.length} published
           </div>
         )}
-      </div>
 
       {busy && (
         <StitchingOverlay image={fabric.image} steps={picked.length}
@@ -300,7 +306,8 @@ export default function FabricStudio({
           }}
         />
       )}
-    </div>
+      </>
+    </Dialog>
   );
 }
 
@@ -361,7 +368,7 @@ export function StitchingOverlay({
 
   return (
     <div onClick={(e) => e.stopPropagation()}
-      style={{ position: "fixed", inset: 0, zIndex: 58, background: "var(--forest-deep)", overflow: "hidden" }}>
+      style={{ position: "fixed", inset: 0, zIndex: "var(--z-dialog)", background: "var(--stage)", overflow: "hidden" }}>
 
       {/* the cloth itself, dimmed — the thing being worked on, not decoration */}
       <img src={image} alt="" aria-hidden
@@ -372,14 +379,18 @@ export function StitchingOverlay({
           bottom edge with a screen of empty dark between them. */}
       <div style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, padding: "26px 14px", textAlign: "center" }}>
         {preview ? (
-          <img src={preview} alt="The stitched piece" className="fade-up"
-            style={{ maxWidth: "min(78%, 320px)", maxHeight: "52vh", minHeight: 0, objectFit: "contain", borderRadius: 12, boxShadow: "0 14px 44px rgba(0,0,0,.45)" }} />
+          /* The blurred copy of the fabric behind this is what the piece is
+             meant to sit in, so it feathers into it rather than casting a
+             shadow onto it — and the drop shadow went with the frame, since
+             the mask covers the border box and would have eaten it anyway. */
+          <img src={preview} alt="The stitched piece" className="fade-up img-blend"
+            style={{ maxWidth: "min(78%, 320px)", maxHeight: "52vh", minHeight: 0, objectFit: "contain", borderRadius: "var(--radius-md)" }} />
         ) : (
           <EeMark size="clamp(38px, 12vw, 64px)" looking color="#fff" />
         )}
 
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 9 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.16)", borderRadius: 999, padding: "5px 14px 5px 5px", maxWidth: "88vw" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,.16)", borderRadius: "var(--radius-pill)", padding: "5px 14px 5px 5px", maxWidth: "88vw" }}>
             <img src={image} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", display: "block", flexShrink: 0 }} />
             <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,.9)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {caption}
@@ -388,8 +399,8 @@ export function StitchingOverlay({
           <div key={msg} className="peek ph-display" style={{ fontSize: "clamp(15px, 4.4vw, 18px)", lineHeight: 1.35, fontWeight: 600, color: "#fff", maxWidth: 340, padding: "0 6px" }}>
             {messages[msg % messages.length]}
           </div>
-          <div style={{ width: "min(72vw, 300px)", height: 5, borderRadius: 5, background: "rgba(255,255,255,.2)", overflow: "hidden" }}>
-            <div style={{ height: "100%", width: progress + "%", borderRadius: 5, background: "var(--cream)", transition: "width .3s linear" }} />
+          <div style={{ width: "min(72vw, 300px)", height: 5, borderRadius: "var(--radius-sm)", background: "rgba(255,255,255,.2)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: progress + "%", borderRadius: "var(--radius-sm)", background: "#fff", transition: "width .3s linear" }} />
           </div>
           <div style={{ color: "rgba(255,255,255,.55)", fontSize: 11.5, lineHeight: 1.5, maxWidth: 320, padding: "0 8px" }}>
             {progress}% · {slow ? STITCH_SLOW : footer}
@@ -420,30 +431,30 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
   const stale = why !== null;
 
   return (
-    <div style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid " + (c.published ? "var(--forest)" : "var(--line)") }}>
-      <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--sage-mist)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ background: "var(--card)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid " + (c.published ? "var(--ink)" : "var(--line)") }}>
+      <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--paper-deep)", display: "flex", alignItems: "center", justifyContent: "center" }}>
         {c.status === "ready" && c.image ? (
           <button type="button" onClick={() => setZoom(true)} title="View larger"
             style={{ display: "block", width: "100%", height: "100%", padding: 0, border: "none", background: "none", cursor: "zoom-in" }}>
-            <img src={c.image} alt={styleName} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            <img src={c.image} alt={styleName} className="img-blend" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           </button>
         ) : c.status === "failed" ? (
           <div style={{ padding: 16, textAlign: "center", color: "var(--warn)", fontSize: 12, lineHeight: 1.6 }}>
             Didn&apos;t come out.<br />
-            <span style={{ color: "var(--mut)", fontSize: 11 }}>Delete and try again.</span>
+            <span style={{ color: "var(--stone)", fontSize: 11 }}>Delete and try again.</span>
           </div>
         ) : (
-          <div style={{ color: "var(--mut)", fontSize: 12 }}>stitching…</div>
+          <div style={{ color: "var(--stone)", fontSize: 12 }}>stitching…</div>
         )}
         {c.status === "ready" && (
-          <span style={{ position: "absolute", top: 10, left: 10, background: "rgba(26,23,20,.78)", color: "var(--cream)", fontSize: 9.5, fontWeight: 500, letterSpacing: ".09em", padding: "4px 9px", borderRadius: 2 }}>
+          <span style={{ position: "absolute", top: 10, left: 10, background: "var(--stage-veil)", color: "var(--on-slab)", fontSize: 9.5, fontWeight: 500, letterSpacing: ".09em", padding: "4px 9px", borderRadius: "var(--radius-xs)" }}>
             STYLE PREVIEW
           </span>
         )}
         {/* The note moved on from what made this picture. Said on the image
             itself, because that image is now the thing that's wrong. */}
         {stale && (
-          <span style={{ position: "absolute", top: 10, right: 10, background: "var(--warn)", color: "#fff", fontSize: 9.5, fontWeight: 600, letterSpacing: ".08em", padding: "4px 9px", borderRadius: 2 }}>
+          <span style={{ position: "absolute", top: 10, right: 10, background: "var(--warn)", color: "var(--on-accent)", fontSize: 9.5, fontWeight: 600, letterSpacing: ".08em", padding: "4px 9px", borderRadius: "var(--radius-xs)" }}>
             {why === "cut" ? "CUT CHANGED" : "NOTE CHANGED"}
           </span>
         )}
@@ -453,44 +464,53 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
         {c.status === "ready" && (
           <>
             <input
-              value={price} inputMode="numeric" placeholder="Price (NPR)"
+              value={price} inputMode="numeric" placeholder="Price (NPR)" aria-label="Price in NPR for this cut"
               onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))}
               onBlur={() => onPrice(c.id, Number(price || 0))}
-              style={{ width: "100%", padding: "8px 10px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 13, background: "#fff", marginBottom: 8 }}
+              style={{ width: "100%", padding: "8px 10px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 13, background: "var(--card)", marginBottom: 8 }}
             />
             {/* Refines the cut for this cloth only. It cannot add or remove a
                 piece — that's the cut's own top/bottom/set, and try-on reads
                 that to know where the garment goes. */}
             <textarea
-              value={note} maxLength={300} placeholder="Note for this cloth in this cut (optional)"
+              value={note} maxLength={300} placeholder="Note for this cloth in this cut (optional)" aria-label="Note for this cloth in this cut (optional)"
               onChange={(e) => setNote(e.target.value)}
               onBlur={() => { if (note.trim() !== c.note.trim()) onNote(c.id, note.trim()); }}
-              style={{ width: "100%", padding: "7px 9px", borderRadius: "var(--radius-btn)", border: "1px solid " + (stale ? "var(--warn)" : "var(--line)"), fontSize: 12, background: "#fff", marginBottom: 8, minHeight: 46, resize: "vertical", fontFamily: "inherit" }}
+              style={{ width: "100%", padding: "7px 9px", borderRadius: "var(--radius-btn)", border: "1px solid " + (stale ? "var(--warn)" : "var(--line)"), fontSize: 12, background: "var(--card)", marginBottom: 8, minHeight: 46, resize: "vertical", fontFamily: "inherit" }}
             />
             {stale && (
               <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: "var(--mut)", lineHeight: 1.5, marginBottom: 6 }}>
+                <div style={{ fontSize: 11, color: "var(--stone)", lineHeight: 1.5, marginBottom: 6 }}>
                   {why === "cut"
                     ? "The cut has been changed since this was made, so this picture shows the old one. Stitch it again to catch up — that costs one render."
                     : "This picture was made before that note. Stitch it again to apply it — that costs one render."}
                 </div>
                 <button className="ph-btn" disabled={busy || !onRestitch} onClick={onRestitch}
-                  style={{ fontSize: 11, padding: "6px 12px", fontWeight: 500, borderRadius: "var(--radius-btn)", border: "1px solid var(--forest)", color: "var(--forest-deep)", opacity: busy ? 0.5 : 1 }}>
+                  style={{ fontSize: 11, padding: "6px 12px", fontWeight: 500, borderRadius: "var(--radius-btn)", border: "1px solid var(--ink)", color: "var(--ink)", opacity: busy ? 0.5 : 1 }}>
                   {busy ? "stitching…" : "stitch again"}
                 </button>
               </div>
             )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11.5, color: "var(--mut)" }}>{c.price > 0 ? npr(c.price) : "no price yet"}</span>
+              <span style={{ fontSize: 11.5, color: "var(--stone)" }}>{c.price > 0 ? npr(c.price) : "no price yet"}</span>
               <span style={{ display: "flex", gap: 2 }}>
                 <button className="ph-btn" onClick={() => onPublish(c.id, !c.published)}
                   title={c.price > 0 ? "" : "Set a price first"}
+                  aria-pressed={c.published}
                   disabled={!c.published && c.price <= 0}
-                  style={{ fontSize: 11, padding: "4px 6px", fontWeight: 500, color: c.published ? "var(--forest)" : "var(--mut)", opacity: !c.published && c.price <= 0 ? 0.45 : 1 }}>
+                  style={{ fontSize: 12.5, padding: "8px 10px", fontWeight: 600, color: c.published ? "var(--ok)" : "var(--stone)", opacity: !c.published && c.price <= 0 ? 0.45 : 1 }}>
                   {c.published ? "Published" : "Publish"}
                 </button>
-                <button className="ph-btn" onClick={() => { if (confirm("Delete this preview?")) onRemove(c.id); }}
-                  style={{ fontSize: 11, padding: "4px 6px", fontWeight: 500, color: "var(--mut)" }}>
+                <button className="ph-btn"
+                  onClick={async () => {
+                    const ok = await confirmAsync({
+                      title: "Delete this preview?",
+                      body: "The rendered preview goes; the fabric and the cut stay. Stitching it again costs a render.",
+                      confirmLabel: "Delete", destructive: true,
+                    });
+                    if (ok) onRemove(c.id);
+                  }}
+                  style={{ fontSize: 12.5, padding: "8px 10px", fontWeight: 600, color: "var(--danger)" }}>
                   Delete
                 </button>
               </span>
@@ -499,7 +519,7 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
         )}
         {c.status === "failed" && (
           <button className="ph-btn" onClick={() => onRemove(c.id)}
-            style={{ fontSize: 11, padding: "4px 6px", fontWeight: 500, color: "var(--mut)" }}>Delete</button>
+            style={{ fontSize: 11, padding: "4px 6px", fontWeight: 500, color: "var(--stone)" }}>Delete</button>
         )}
       </div>
       {zoom && c.image && <ImageZoom src={c.image} alt={styleName} onClose={() => setZoom(false)} />}
@@ -520,13 +540,13 @@ export function ImageZoom({ src, alt, onClose }: { src: string; alt: string; onC
 
   return createPortal(
     <div onClick={onClose}
-      style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(26,23,20,.7)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, cursor: "zoom-out" }}>
+      style={{ position: "fixed", inset: 0, zIndex: "var(--z-popover)", background: "rgba(26,23,20,.7)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, cursor: "zoom-out" }}>
       <button className="ph-btn" onClick={onClose} aria-label="Close"
-        style={{ position: "absolute", top: 14, right: 14, background: "rgba(255,255,255,.14)", color: "#fff", fontSize: 15, padding: "9px 11px", borderRadius: 999 }}>
+        style={{ position: "absolute", top: 14, right: 14, background: "rgba(255,255,255,.14)", color: "#fff", fontSize: 15, padding: "9px 11px", borderRadius: "var(--radius-pill)" }}>
         <Icon name="close" />
       </button>
       <img src={src} alt={alt} className="fade-up"
-        style={{ maxWidth: "94%", maxHeight: "94%", objectFit: "contain", borderRadius: 12, boxShadow: "0 22px 64px rgba(0,0,0,.5)" }} />
+        style={{ maxWidth: "94%", maxHeight: "94%", objectFit: "contain", borderRadius: "var(--radius-md)", boxShadow: "0 22px 64px rgba(0,0,0,.5)" }} />
     </div>,
     document.body
   );
@@ -589,13 +609,14 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
   };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 420, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: "28px 26px" }}>
-        <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 4 }}>
+    <Dialog onClose={onClose} hideHeader width={420}
+      ariaLabel={mode === "edit" ? "Change this cut" : mode === "copy" ? "Make it your own" : "Add your own cut"}
+      panelStyle={{ padding: "28px 26px" }}>
+      <>
+        <div className="ph-display" style={{ fontSize: 24, color: "var(--ink)", marginBottom: 4 }}>
           {mode === "edit" ? "change this cut" : mode === "copy" ? "make it your own" : "add your own cut"}
         </div>
-        <div style={{ fontSize: 12.5, color: "var(--mut)", marginBottom: mode === "new" ? 18 : 12, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 12.5, color: "var(--stone)", marginBottom: mode === "new" ? 18 : 12, lineHeight: 1.6 }}>
           {mode === "copy"
             ? `“${initial?.name}” is a peeq library cut, shared by every shop, so it can't be changed directly. This saves your own version of it — the original stays where it is.`
             : pickFamily
@@ -605,7 +626,7 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
         {/* Editing the wording or the pieces changes what this cut means, and
             anything already stitched from it was made under the old meaning. */}
         {mode === "edit" && (
-          <div style={{ background: "var(--sage)", border: "1px solid var(--line)", borderRadius: 6, padding: "10px 13px", marginBottom: 16, fontSize: 12, color: "var(--mut)", lineHeight: 1.6 }}>
+          <div style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", padding: "10px 13px", marginBottom: 16, fontSize: 12, color: "var(--stone)", lineHeight: 1.6 }}>
             Anything already stitched from this cut will be marked as needing a re-stitch —
             those pictures were made from the old wording. Renaming it alone is free.
           </div>
@@ -616,7 +637,7 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
         {pickFamily && mode === "new" && (
           <label className="field" style={{ marginBottom: 14 }}>Which family is this cut for?
             <select value={fam} onChange={(e) => setFam(e.target.value as StyleFamily)}
-              style={{ width: "100%", padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "#fff", fontSize: 13.5 }}>
+              style={{ width: "100%", padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13.5 }}>
               {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
             </select>
           </label>
@@ -648,15 +669,15 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
               aria-pressed={coverage === c.id}
               style={{
                 flex: 1, padding: "10px 8px", fontSize: 12, fontWeight: 500, borderRadius: "var(--radius-btn)",
-                background: coverage === c.id ? "var(--forest)" : "var(--sage)",
-                color: coverage === c.id ? "var(--cream)" : "var(--forest-deep)",
-                border: "1px solid " + (coverage === c.id ? "var(--forest)" : "var(--line)"),
+                background: coverage === c.id ? "var(--ink)" : "var(--paper)",
+                color: coverage === c.id ? "var(--card)" : "var(--ink)",
+                border: "1px solid " + (coverage === c.id ? "var(--ink)" : "var(--line)"),
               }}>
               {c.label}
             </button>
           ))}
         </div>
-        <div style={{ fontSize: 11, color: "var(--mut)", marginBottom: 16, lineHeight: 1.55 }}>
+        <div style={{ fontSize: 11, color: "var(--stone)", marginBottom: 16, lineHeight: 1.55 }}>
           {COVERAGES.find((c) => c.id === coverage)?.note}
         </div>
 
@@ -664,11 +685,11 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
             to be reachable and operable from the keyboard. */}
         <button type="button" onClick={() => fileRef.current?.click()}
           aria-label={image ? "Replace the photo of this cut" : "Add a photo of this cut"}
-          style={{ width: "100%", border: "1.5px dashed " + (image ? "var(--forest)" : "var(--line)"), borderRadius: 6, height: 150, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 6, overflow: "hidden", background: "var(--sage)", color: "var(--mut)", fontSize: 13.5, textAlign: "center", lineHeight: 1.6, padding: 0 }}>
+          style={{ width: "100%", border: "1.5px dashed " + (image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-sm)", height: 150, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 6, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 13.5, textAlign: "center", lineHeight: 1.6, padding: 0 }}>
           {image ? <img src={image} alt="Cut reference" style={{ height: "100%", objectFit: "contain" }} />
             : <span style={{ padding: 12 }}>Photo of this cut<br /><span style={{ fontSize: 11.5 }}>A stitched sample or a mannequin — any cloth, any colour</span></span>}
         </button>
-        <div style={{ fontSize: 11, color: "var(--mut)", marginBottom: 14, lineHeight: 1.55 }}>
+        <div style={{ fontSize: 11, color: "var(--stone)", marginBottom: 14, lineHeight: 1.55 }}>
           We copy the shape from this photo, never its colour or fabric — those always come
           from the cloth you&apos;re stitching.
         </div>
@@ -680,7 +701,7 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
         </label>
 
         {!describable && (
-          <div style={{ fontSize: 11.5, color: "var(--mut)", marginTop: 8, lineHeight: 1.55 }}>
+          <div style={{ fontSize: 11.5, color: "var(--stone)", marginTop: 8, lineHeight: 1.55 }}>
             Add a photo or a description — we need at least one to know what to stitch.
           </div>
         )}
@@ -688,13 +709,13 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
 
         <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
           <button className="ph-btn" onClick={onClose} disabled={busy}
-            style={{ flex: 1, color: "var(--forest-deep)", padding: 13, fontSize: 12, letterSpacing: ".12em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>cancel</button>
+            style={{ flex: 1, color: "var(--ink)", padding: 13, fontSize: 12, letterSpacing: ".12em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>cancel</button>
           <button className="ph-btn" disabled={!canSave} onClick={save}
-            style={{ flex: 2, background: canSave ? "var(--forest)" : "var(--line)", color: canSave ? "var(--cream)" : "var(--mut)", padding: 13, fontSize: 12, letterSpacing: ".12em", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
+            style={{ flex: 2, background: canSave ? "var(--ink)" : "var(--line)", color: canSave ? "var(--card)" : "var(--stone)", padding: 13, fontSize: 12, letterSpacing: ".12em", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
             {busy ? "saving…" : mode === "edit" ? "save changes" : mode === "copy" ? "save my version" : "save cut"}
           </button>
         </div>
-      </div>
-    </div>
+      </>
+    </Dialog>
   );
 }

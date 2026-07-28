@@ -45,8 +45,7 @@ export interface ComposeRequest {
       cut; it does not redefine which pieces exist — that's `coverage`. */
   note?: string;
   /** Render quality. Defaults to medium — catalog imagery is generated once
-      and seen often. The counter overrides to low: its render serves one
-      customer standing there, not the catalog. */
+      and seen often. */
   quality?: "low" | "medium" | "high";
 }
 
@@ -121,8 +120,14 @@ function buildPrompt(req: ComposeRequest): string {
     parts.push(
       `The ${ord} image is the cloth this garment must be stitched from. Reproduce its exact ` +
         `colour, weave, sheen, texture, print and motif scale. Do not recolour it, do not ` +
-        `substitute a similar fabric, do not invent pattern that isn't in the sample. Scale the ` +
-        `pattern realistically for a garment of this size.`
+        `substitute a similar fabric, do not invent pattern that isn't in the sample. If the ` +
+        `cloth carries a print, motif, embroidery, border or woven pattern, that pattern MUST ` +
+        `appear across the finished garment exactly as it appears in the sample — returning the ` +
+        `garment in a plain or solid version of the cloth's colour is a failed result. Scale the ` +
+        `pattern realistically for a garment of this size. You are welcome to enhance the ` +
+        `rendering — sharper detail, richer texture, cleaner lighting than the sample photo — ` +
+        `but enhancement must make the cloth's own pattern crisper, never simplify or smooth ` +
+        `it away.`
     );
   }
 

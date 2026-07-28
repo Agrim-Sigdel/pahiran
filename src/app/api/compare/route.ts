@@ -1,10 +1,19 @@
 import { mapCategory } from "@/lib/constants";
+import { requireAdmin, isDenied } from "@/lib/admin";
 
-/* DEV-ONLY provider comparison: one provider per request (the page fires
-   them in parallel and paints each result as it lands). Providers:
-   fal/FASHN v1.6 (dedicated try-on), OpenAI gpt-image-1 and gpt-image-2
-   (generic image edit). No cache, no rate limits — benchmarking tool only.
-   Returns 404 outside `next dev`. */
+/* Provider comparison: one provider per request (the page fires them in
+   parallel and paints each result as it lands). Providers: fal/FASHN v1.6
+   (dedicated try-on), OpenAI gpt-image-1 and gpt-image-2 (generic image
+   edit). No cache, no rate limits — benchmarking tool only.
+
+   TWO gates, and it needs both. Every call here spends real fal and OpenAI
+   credits, and the only thing standing between that and the open internet was
+   `NODE_ENV !== "development"` plus a comment on the page saying "dev tool ·
+   not linked anywhere" — which is not access control, and stops being any
+   kind of control at all the moment someone runs a preview deployment in dev
+   mode. It is now also admin-only, on the same ADMIN_EMAILS allowlist the
+   console uses, so an unauthenticated request cannot spend a rupee even if
+   the environment gate is wrong. */
 
 const FAL_ENDPOINT = "https://fal.run/fal-ai/fashn/tryon/v1.6";
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/images/edits";
@@ -92,6 +101,8 @@ export async function POST(req: Request): Promise<Response> {
   if (process.env.NODE_ENV !== "development") {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
+  const admin = await requireAdmin(req, { write: true });
+  if (isDenied(admin)) return admin;
 
   let body: any;
   try {

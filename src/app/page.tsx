@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import ShopsMap, { type MapShop } from "@/components/ShopsMap";
 import HeroTryOn from "@/components/HeroTryOn";
 import AccountMenu from "@/components/AccountMenu";
+import GarmentImage from "@/components/GarmentImage";
 import { npr } from "@/lib/constants";
 
 /* Landing — vendor-facing marketing page. Shoppers normally arrive at a
@@ -10,6 +11,8 @@ import { npr } from "@/lib/constants";
    Shops that opted in (shops.listed) appear in the directory below. */
 
 export const revalidate = 300;
+
+const CONTACT_EMAIL = "contact@agrimsigdel.com.np";
 
 /* shopper-facing steps — the vendor version lives on /owner */
 const STEPS: [string, string, string][] = [
@@ -97,15 +100,18 @@ export default async function Home() {
   const [shops, feed] = await Promise.all([getListedShops(), getFeed()]);
   const pinned = shops.filter((s): s is ListedShop & MapShop => s.lat != null && s.lng != null);
   return (
-    <main style={{ minHeight: "100vh", background: "var(--paper)" }}>
+    <main style={{ minHeight: "100dvh", background: "var(--paper)" }}>
       {/* nav — three columns: destinations left, wordmark centred, account right.
           "for store owners" sits with the other destinations rather than in
           nav-tools, so the right-hand side is only ever the shopper's own
           account. It's a navigation link, not a tool. */}
       <nav className="efc-nav">
+        {/* "shops" first and unconditional. It used to be conditional on the
+            directory being non-empty, so the nav gained a link — and every
+            other link slid sideways — the moment a shop published. */}
         <div className="nav-links">
-          <a href="#how">how it works</a>
           {shops.length > 0 && <a href="#shops">shops</a>}
+          <a href="#how">how it works</a>
           <Link href="/owner" style={{ color: "var(--violet)" }}>for store owners</Link>
         </div>
         <div className="nav-logo">
@@ -117,14 +123,20 @@ export default async function Home() {
       </nav>
 
       {/* hero — the whole promise in one crossfade: same you, new fit */}
-      <section className="hero2">
+      <section id="main" className="hero2">
         <div className="hero2-copy">
           <div className="kicker">a little look before you buy · किन्नु अघि एक झलक</div>
           <h1 className="ph-display" style={{ fontSize: "clamp(42px, 6.5vw, 68px)", lineHeight: 1.05, color: "var(--ink)", margin: 0 }}>
             try it on,<br />without<br />trying it on
           </h1>
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
-            <a href={shops.length > 0 ? "#shops" : "#how"} className="btn-violet" style={{ padding: "15px 36px" }}>browse shops</a>
+            {/* The label follows the destination. "browse shops" scrolling to
+                "how it works" because no shop had published yet was a CTA
+                lying about where it goes — which is the one thing a CTA
+                cannot do. */}
+            <a href={shops.length > 0 ? "#shops" : "#how"} className="btn-violet" style={{ padding: "15px 36px" }}>
+              {shops.length > 0 ? "browse shops" : "see how it works"}
+            </a>
             <Link href="/owner" className="btn-outline" style={{ padding: "13px 30px" }}>I own a store →</Link>
           </div>
           <div style={{ fontSize: 13, color: "var(--stone)", fontWeight: 500 }}>
@@ -137,14 +149,18 @@ export default async function Home() {
       {/* shop directory (opt-in) */}
       {shops.length > 0 && (
         <section id="shops" className="section-pad">
+          {/* One noun. The section was id="shops", headed "browse shops",
+              full of garments, subtitled "12 pieces from 3 shops" — and the
+              nav link to it said "shops". It is a feed of pieces; the shops
+              are how you get to more of them. */}
           <div style={{ textAlign: "center", margin: "0 0 34px" }}>
             <div className="kicker" style={{ marginBottom: 8 }}>fresh picks</div>
             <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(24px, 3.6vw, 32px)", color: "var(--ink)", margin: 0 }}>
-              browse shops
+              {feed.length > 0 ? "pieces you can try on" : "shops on peeq"}
             </h2>
             {feed.length > 0 && (
               <div style={{ fontSize: 13.5, color: "var(--stone)", marginTop: 8 }}>
-                {feed.length} pieces from {shops.length} shop{shops.length !== 1 ? "s" : ""} — every one of them tries on
+                {feed.length} piece{feed.length !== 1 ? "s" : ""} from {shops.length} shop{shops.length !== 1 ? "s" : ""} — every one of them tries on
               </div>
             )}
           </div>
@@ -190,14 +206,16 @@ export default async function Home() {
             <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(22px, 3vw, 28px)", color: "var(--ink)", margin: "0 0 18px" }}>
               see it on you first
             </h2>
-            <a href={shops.length > 0 ? "#shops" : "#how"} className="btn-violet" style={{ padding: "13px 34px" }}>browse shops</a>
+            <a href={shops.length > 0 ? "#shops" : "#how"} className="btn-violet" style={{ padding: "13px 34px" }}>
+              {shops.length > 0 ? "browse shops" : "see how it works"}
+            </a>
           </div>
-          <div style={{ background: "var(--ink)", borderRadius: "var(--radius-card)", padding: "34px 30px", textAlign: "center" }}>
+          <div style={{ background: "var(--slab)", color: "var(--on-slab)", borderRadius: "var(--radius-card)", padding: "34px 30px", textAlign: "center" }}>
             <div className="kicker" style={{ marginBottom: 10, color: "var(--butter)" }}>own a store?</div>
-            <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(22px, 3vw, 28px)", color: "var(--paper)", margin: "0 0 18px" }}>
-              put <span className="wordmark" style={{ color: "var(--paper)", fontSize: "inherit" }}>p<span className="ee">ee</span>q</span> in your shop
+            <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(22px, 3vw, 28px)", color: "var(--on-slab)", margin: "0 0 18px" }}>
+              put <span className="wordmark" style={{ color: "var(--on-slab)", fontSize: "inherit" }}>p<span className="ee">ee</span>q</span> in your shop
             </h2>
-            <Link href="/owner" className="ph-btn" style={{ background: "var(--butter)", color: "var(--ink)", padding: "13px 34px", fontSize: 16, fontWeight: 700, fontFamily: "'Baloo 2', cursive", borderRadius: 999, textDecoration: "none", display: "inline-block" }}>
+            <Link href="/owner" className="ph-btn" style={{ background: "var(--butter)", color: "var(--on-light)", padding: "13px 34px", fontSize: 16, fontWeight: 700, fontFamily: "var(--font-display), sans-serif", borderRadius: "var(--radius-pill)", textDecoration: "none", display: "inline-block" }}>
               peeq for store owners →
             </Link>
           </div>
@@ -212,7 +230,7 @@ export default async function Home() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, maxWidth: 1040, margin: "0 auto" }}>
           {STEPS.map(([n, t, d]) => (
             <div key={n} style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "22px 20px" }}>
-              <div className="ee-mark" style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--butter)", fontSize: 17, color: "var(--ink)" }}>{n}</div>
+              <div className="ee-mark" style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--butter)", fontSize: 17, color: "var(--on-light)" }}>{n}</div>
               <div className="ph-display" style={{ fontSize: 18, fontWeight: 600, color: "var(--ink)", margin: "12px 0 4px" }}>{t}</div>
               <div style={{ fontSize: 14.5, color: "var(--stone)", lineHeight: 1.6 }}>{d}</div>
             </div>
@@ -221,11 +239,15 @@ export default async function Home() {
       </section>
 
       {/* footer */}
-      <footer style={{ background: "var(--ink)", color: "rgba(250,246,240,.6)", padding: "30px 20px", textAlign: "center" }}>
-        <div className="wordmark" style={{ fontSize: 26, color: "var(--paper)" }}>p<span className="ee">ee</span>q</div>
-        <div style={{ marginTop: 12 }}>
-          <Link href="/privacy" style={{ fontSize: 13, color: "rgba(250,246,240,.6)", textUnderlineOffset: 3 }}>privacy</Link>
-        </div>
+      {/* One link (privacy) was the whole footer. A shopper who wants to
+          reach the shop side, or a human, had nowhere to go. */}
+      <footer style={{ background: "var(--slab)", color: "var(--on-slab-quiet)", padding: "30px 20px", textAlign: "center" }}>
+        <div className="wordmark" style={{ fontSize: 26, color: "var(--on-slab)" }}>p<span className="ee">ee</span>q</div>
+        <nav aria-label="Footer" style={{ display: "flex", gap: 20, justifyContent: "center", flexWrap: "wrap", marginTop: 14, fontSize: 13 }}>
+          <Link href="/owner" style={{ color: "rgba(250,246,240,.6)", textUnderlineOffset: 3 }}>for store owners</Link>
+          <Link href="/privacy" style={{ color: "rgba(250,246,240,.6)", textUnderlineOffset: 3 }}>privacy</Link>
+          <a href={"mailto:" + CONTACT_EMAIL} style={{ color: "rgba(250,246,240,.6)", textUnderlineOffset: 3 }}>contact</a>
+        </nav>
       </footer>
     </main>
   );
@@ -236,9 +258,16 @@ function FeedCard({ g }: { g: FeedItem }) {
     <div className="feed-card">
       {/* the piece's own page, not straight into the kiosk — the shopper gets
           sizes, price and shop context first, and peeqs it from there */}
+      {/* GarmentImage, like the rest of the app — these were the only raw
+          <img>s left in the feed, so the busiest grid on the site was the one
+          Next never sized or optimised.
+
+          The pill says "view", because it links to the product page, not to
+          the try-on. It said "peeq it", which is the product's word for
+          trying something on. */}
       <Link className="feed-img" href={"/s/" + g.shop.slug + "/" + encodeURIComponent(g.id)}>
-        <img src={g.image_url} alt={g.name} loading="lazy" />
-        <span className="feed-cta">peeq it</span>
+        <GarmentImage src={g.image_url} alt={g.name} sizes="(max-width: 640px) 50vw, (max-width: 920px) 33vw, 260px" />
+        <span className="feed-cta">view</span>
       </Link>
       <div className="feed-meta">
         <Link className="feed-shop" href={"/s/" + g.shop.slug}>

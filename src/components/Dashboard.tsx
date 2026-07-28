@@ -4,16 +4,27 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import QRCode from "qrcode";
 import { CATEGORIES, SIZES, FAMILIES, FABRIC_UNITS, npr, fabricPrice, familyLabel } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
-import { OverviewTab, LeadsTab, garmentTryCounts } from "@/components/Analytics";
+import { OverviewTab, LeadsTab, garmentTryCounts, groupLeads } from "@/components/Analytics";
 import LocationPicker from "@/components/LocationPicker";
 import PlanTab from "@/components/PlanTab";
 import FabricStudio, { CutModal } from "@/components/FabricStudio";
 import CounterTryOn from "@/components/CounterTryOn";
 import Icon from "@/components/Icon";
+import AccountMenu from "@/components/AccountMenu";
+import Dialog, { confirmAsync } from "@/components/Dialog";
+import { toastErr, toastWarn } from "@/lib/toast";
 import { COVERAGES } from "@/lib/types";
 import type { Composition, CounterInput, CounterRun, Fabric, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
 
 type Tab = "overview" | "leads" | "catalog" | "fabrics" | "designs" | "counter" | "settings" | "plan";
+
+/* One row of actions on every catalog card. 11px text in 4×5px padding gave
+   a ~20×24px target on a surface the marketing tells vendors to run from a
+   phone; WCAG 2.5.8 asks for 24, and a thumb wants more. */
+const cardAction: React.CSSProperties = {
+  color: "var(--ink)", fontSize: 12.5, fontWeight: 600,
+  padding: "9px 10px", minHeight: 38, borderRadius: "var(--radius-md)",
+};
 
 interface DashboardProps {
   shop: Shop;
@@ -79,7 +90,9 @@ export default function Dashboard({
   const [qrGarment, setQrGarment] = useState<Garment | null>(null);
   const [showTagSheet, setShowTagSheet] = useState(false);
 
-  const openLeads = leads.filter((l) => !l.handled).length;
+  /* Orders, not rows: a three-piece bag is one thing to call back about, so
+     counting its lines would read as three waiting shoppers. */
+  const openLeads = useMemo(() => groupLeads(leads).filter((o) => !o.handled).length, [leads]);
   const tryCounts = useMemo(() => garmentTryCounts(events), [events]);
   /* Vendors reading a code off a hanger tag type just the digits ("14") as
      often as the whole thing ("A7K2-0014"), so match on either. */
@@ -128,7 +141,7 @@ export default function Dashboard({
      the kiosk: a catalog-only shop never sees it. */
   const TABS: { key: Tab; label: string; badge?: number }[] = [
     { key: "overview", label: "Overview" },
-    { key: "leads", label: "Leads", badge: openLeads || undefined },
+    { key: "leads", label: "Orders", badge: openLeads || undefined },
     { key: "catalog", label: "Catalog" },
     ...(shop.type === "apparel"
       ? [{ key: "fabrics" as Tab, label: "Fabrics" }, { key: "designs" as Tab, label: "Designs" }, { key: "counter" as Tab, label: "Counter" }]
@@ -138,40 +151,46 @@ export default function Dashboard({
   ];
 
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto", padding: "0 min(26px, 4vw) 50px" }}>
+    <div id="main" style={{ maxWidth: 1080, margin: "0 auto", padding: "0 min(26px, 4vw) 50px" }}>
       {/* header */}
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22px 0 16px", flexWrap: "wrap", gap: 12 }}>
         <div>
           <div className="wordmark" style={{ fontSize: 22 }}>p<span className="ee" style={{ color: "var(--butter-deep)" }}>ee</span>q</div>
-          <div style={{ fontSize: 12, color: "var(--mut)", letterSpacing: ".12em", marginTop: 3 }}>
+          <div style={{ fontSize: 12, color: "var(--stone)", letterSpacing: ".12em", marginTop: 3 }}>
             {[shop.name, shop.area].filter(Boolean).join(" · ") || "Vendor dashboard"}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          {signOut && (
-            <button className="ph-btn" onClick={signOut}
-              style={{ color: "var(--mut)", fontSize: 12, letterSpacing: ".1em" }}>sign out</button>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          {/* Every apparel shop has a storefront, so every apparel shop gets a
+              link to it. This used to render only in the non-apparel branch,
+              which meant the shops that actually run try-ons had to dig their
+              own public URL out of Settings to look at it. */}
+          {shop.slug && (
+            <a className="ph-btn" href={"/s/" + shop.slug} target="_blank" rel="noopener noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "9px 16px", textDecoration: "none" }}>
+              <Icon name="open" /> view storefront
+            </a>
           )}
           {/* The kiosk is the try-on flow, so a catalog-only shop has no use
               for it — their storefront link is the thing to share. */}
-          {shop.type === "apparel" ? (
+          {shop.type === "apparel" && (
             <button
               className="ph-btn btn-solid"
               onClick={() => {
                 if (catalog.length === 0) {
-                  alert("Add at least one garment to your catalog first — the kiosk needs something to show shoppers.");
+                  toastWarn("Add at least one garment first — the kiosk needs something to show shoppers.");
                   setTab("catalog");
                   return;
                 }
                 launchKiosk();
               }}>launch kiosk</button>
-          ) : (
-            shop.slug && (
-              <a className="ph-btn btn-solid" href={"/s/" + shop.slug} target="_blank" rel="noopener noreferrer">
-                view storefront
-              </a>
-            )
           )}
+          {/* Sign out lived here as 12px grey text immediately left of the
+              primary CTA. It is an account action, so it belongs in the
+              account menu every other page in the product already has — and
+              the dashboard was the only page without one. */}
+          <AccountMenu />
+          {!signOut && null}
         </div>
       </header>
 
@@ -186,15 +205,19 @@ export default function Dashboard({
       </div>
 
       {loading ? (
-        <div style={{ color: "var(--mut)", padding: 40, textAlign: "center" }}>Loading your shop…</div>
+        <div style={{ color: "var(--stone)", padding: 40, textAlign: "center" }}>Loading your shop…</div>
       ) : (
         <>
           {tab === "overview" && (
             <div className="fade-up">
+              {/* --warn. This was `var(--camel)`, a legacy alias of the
+                  body-text grey, so an "alert" drawn in it was the same colour
+                  as the paragraph under it: the one row on the page meaning
+                  "people are waiting for a phone call" read as decoration. */}
               {openLeads > 0 && (
                 <button className="ph-btn" onClick={() => setTab("leads")}
-                  style={{ width: "100%", textAlign: "left", background: "var(--cream)", border: "1px solid var(--camel)", borderRadius: "var(--radius-card)", padding: "12px 16px", marginBottom: 14, fontSize: 13, color: "var(--forest-deep)" }}>
-                  <b style={{ color: "var(--camel)" }}>{openLeads} open lead{openLeads !== 1 ? "s" : ""}</b> — tap to view
+                  style={{ width: "100%", textAlign: "left", background: "var(--warn-bg)", border: "1px solid var(--warn)", borderRadius: "var(--radius-card)", padding: "12px 16px", marginBottom: 14, fontSize: 13.5, color: "var(--ink)" }}>
+                  <b style={{ color: "var(--warn)" }}>{openLeads} order{openLeads !== 1 ? "s" : ""} to call back</b> — tap to view
                 </button>
               )}
               <OverviewTab events={events} catalog={catalog} />
@@ -211,8 +234,8 @@ export default function Dashboard({
             <div className="fade-up">
               <div className="cat-bar">
                 <div>
-                  <span className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>catalog</span>
-                  <span style={{ color: "var(--mut)", marginLeft: 10, fontSize: 13 }}>{catalog.length} item{catalog.length !== 1 ? "s" : ""}</span>
+                  <span className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>catalog</span>
+                  <span style={{ color: "var(--stone)", marginLeft: 10, fontSize: 13 }}>{catalog.length} item{catalog.length !== 1 ? "s" : ""}</span>
                 </div>
                 <div className="cat-tools">
                   <input
@@ -220,15 +243,16 @@ export default function Dashboard({
                     value={codeQuery}
                     onChange={(e) => setCodeQuery(e.target.value)}
                     placeholder={shop.vendorCode ? `find ${shop.vendorCode}-0001 or a name…` : "search by name…"}
-                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 13 }}
+                    aria-label="Search your catalog by item code or name"
+                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13 }}
                   />
                   <select value={filter} onChange={(e) => setFilter(e.target.value)}
-                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 13 }}>
+                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13 }}>
                     <option>All</option>
                     {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
                   {catalog.length > 0 && (
-                    <button className="ph-btn cat-qr" style={{ padding: "10px 18px", fontSize: 12, fontWeight: 600, border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", color: "var(--forest-deep)", background: "var(--cream)" }}
+                    <button className="ph-btn cat-qr" style={{ padding: "10px 18px", fontSize: 12, fontWeight: 600, border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", color: "var(--ink)", background: "var(--card)" }}
                       onClick={() => setShowTagSheet(true)}>
                       <Icon name="print" /> qr tags
                     </button>
@@ -246,52 +270,71 @@ export default function Dashboard({
                   {filtered.map((g) => {
                     const tries = tryCounts.get(g.id) || 0;
                     return (
-                      <div key={g.id} className="fade-up" style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)", opacity: g.inStock ? 1 : 0.6 }}>
-                        <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--sage-mist)" }}>
-                          <button onClick={() => setQrGarment(g)} title={"QR code for " + g.name}
+                      /* Out of stock greys the PHOTO, not the card: dimming the
+                         whole tile to .6 took the name, the code and the price
+                         below the contrast floor — exactly the fields a vendor
+                         reads to decide what to restock. */
+                      <div key={g.id} className="fade-up" style={{ background: "var(--card)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)" }}>
+                        <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--paper-deep)" }}>
+                          {/* Tapping a product photo means "open this product".
+                              It used to open the QR modal — with a QR button
+                              two lines below it — while the same gesture on the
+                              Fabrics tab opened the studio. Same gesture, two
+                              answers, neither of them the obvious one. */}
+                          <button onClick={() => setEditing(g)} title={"Edit " + g.name}
                             style={{ display: "block", width: "100%", height: "100%", padding: 0, border: "none", background: "none", cursor: "pointer" }}>
-                            <img src={g.image} alt={g.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: g.inStock ? "none" : "grayscale(.7)" }} />
+                            <img src={g.image} alt={g.name} className={"img-blend" + (g.inStock ? "" : " oos-img")} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                           </button>
-                          <span style={{ position: "absolute", top: 10, left: 10, background: "var(--cream)", color: "var(--forest-deep)", fontSize: 10, fontWeight: 600, letterSpacing: ".1em", padding: "4px 10px", borderRadius: 2 }}>
+                          <span style={{ position: "absolute", top: 10, left: 10, background: "var(--card)", color: "var(--ink)", fontSize: 10, fontWeight: 600, letterSpacing: ".1em", padding: "4px 10px", borderRadius: "var(--radius-xs)" }}>
                             {g.category}
                           </span>
                           {tries > 0 && (
-                            <span style={{ position: "absolute", top: 10, right: 10, background: "rgba(26,23,20,.8)", color: "var(--cream)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
+                            <span style={{ position: "absolute", top: 10, right: 10, background: "var(--stage-veil)", color: "var(--on-slab)", fontSize: 10, padding: "4px 8px", borderRadius: "var(--radius-xs)" }}>
                               {tries} tr{tries === 1 ? "y" : "ies"}
                             </span>
                           )}
                           {!g.inStock && (
-                            <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--forest-deep)", color: "var(--cream)", fontSize: 10, fontWeight: 500, letterSpacing: ".08em", padding: "4px 9px", borderRadius: 2 }}>
+                            <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--ink)", color: "var(--card)", fontSize: 11, fontWeight: 600, letterSpacing: ".08em", padding: "4px 9px", borderRadius: "var(--radius-xs)" }}>
                               Out of stock
                             </span>
                           )}
                         </div>
                         <div style={{ padding: "13px 14px 14px" }}>
+                          {/* Everything on this card used to be under 12px —
+                              code 10.5, name 11.5, size chips 10, actions 11 —
+                              on the surface the marketing says vendors run from
+                              a phone. Nothing here is below 12 now, and the
+                              action row is a 40px-tall target rather than 20. */}
                           {g.itemCode && (
-                            <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 10.5, letterSpacing: ".08em", color: "var(--camel)", marginBottom: 3 }}>{g.itemCode}</div>
+                            <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, letterSpacing: ".06em", color: "var(--stone)", marginBottom: 3 }}>{g.itemCode}</div>
                           )}
-                          <div style={{ fontWeight: 500, fontSize: 11.5, letterSpacing: ".12em", marginBottom: 4 }}>{g.name}</div>
+                          <div style={{ fontWeight: 600, fontSize: 13.5, letterSpacing: ".02em", marginBottom: 4 }}>{g.name}</div>
                           {g.sizes.length > 0 && (
                             <div style={{ display: "flex", gap: 4, flexWrap: "wrap", margin: "4px 0 6px" }}>
                               {g.sizes.map((s) => (
-                                <span key={s} style={{ fontSize: 10, fontWeight: 500, color: "var(--mut)", border: "1px solid var(--line)", borderRadius: 3, padding: "2px 6px" }}>{s}</span>
+                                <span key={s} style={{ fontSize: 12, fontWeight: 500, color: "var(--stone)", border: "1px solid var(--line)", borderRadius: "var(--radius-xs)", padding: "2px 7px" }}>{s}</span>
                               ))}
                             </div>
                           )}
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                            <span style={{ color: "var(--camel)", fontWeight: 500, fontSize: 14 }}>{npr(g.price)}</span>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 6, flexWrap: "wrap" }}>
+                            <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: 14.5 }}>{npr(g.price)}</span>
                             <span style={{ display: "flex", gap: 2 }}>
-                              <button className="ph-btn" onClick={() => setEditing(g)}
-                                style={{ color: "var(--forest-deep)", fontSize: 11, padding: "4px 5px", fontWeight: 500 }}>
+                              <button className="ph-btn" onClick={() => setEditing(g)} style={cardAction}>
                                 Edit
                               </button>
-                              <button className="ph-btn" title="QR code for this garment" onClick={() => setQrGarment(g)}
-                                style={{ color: "var(--forest-deep)", fontSize: 11, padding: "4px 5px", fontWeight: 500 }}>
+                              <button className="ph-btn" title={"QR code for " + g.name} onClick={() => setQrGarment(g)} style={cardAction}>
                                 QR
                               </button>
+                              {/* Labelled with the ACTION, not the state. A
+                                  button reading "In stock" that makes the piece
+                                  out of stock is a button whose label is a lie
+                                  the moment you believe it. aria-pressed carries
+                                  the state for anyone who needs it announced. */}
                               <button className="ph-btn" onClick={() => toggleStock(g.id)}
-                                style={{ color: g.inStock ? "var(--mut)" : "var(--warn)", fontSize: 11, padding: "4px 5px", fontWeight: 500 }}>
-                                {g.inStock ? "In stock" : "Restock"}
+                                aria-pressed={!g.inStock}
+                                title={g.inStock ? "Mark out of stock" : "Mark back in stock"}
+                                style={{ ...cardAction, color: g.inStock ? "var(--stone)" : "var(--warn)" }}>
+                                {g.inStock ? "Mark sold out" : "Restock"}
                               </button>
                             </span>
                           </div>
@@ -308,12 +351,12 @@ export default function Dashboard({
             <div className="fade-up">
               <div className="cat-bar">
                 <div>
-                  <span className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>fabrics</span>
-                  <span style={{ color: "var(--mut)", marginLeft: 10, fontSize: 13 }}>{fabrics.length} fabric{fabrics.length !== 1 ? "s" : ""}</span>
+                  <span className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>fabrics</span>
+                  <span style={{ color: "var(--stone)", marginLeft: 10, fontSize: 13 }}>{fabrics.length} fabric{fabrics.length !== 1 ? "s" : ""}</span>
                 </div>
                 <div className="cat-tools">
                   <select value={familyFilter} onChange={(e) => setFamilyFilter(e.target.value)}
-                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 13 }}>
+                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13 }}>
                     <option>All</option>
                     {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
                   </select>
@@ -324,7 +367,7 @@ export default function Dashboard({
               </div>
 
               {visibleFabrics.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--mut)" }}>
+                <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--stone)" }}>
                   <div style={{ fontSize: 14, marginBottom: 6 }}>
                     {fabrics.length > 0 ? "No fabrics in that family." : "No fabrics yet."}
                   </div>
@@ -338,50 +381,50 @@ export default function Dashboard({
               ) : (
                 <div className="card-grid">
                   {visibleFabrics.map((f) => (
-                    <div key={f.id} className="fade-up" style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)", opacity: f.inStock ? 1 : 0.6 }}>
-                      <div style={{ aspectRatio: "4/3", position: "relative", background: "var(--sage-mist)" }}>
-                        <button onClick={() => setStudioFabric(f)} title={"Cuts for " + f.name}
+                    <div key={f.id} className="fade-up" style={{ background: "var(--card)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)" }}>
+                      <div style={{ aspectRatio: "4/3", position: "relative", background: "var(--paper-deep)" }}>
+                        <button onClick={() => setEditingFabric(f)} title={"Edit " + f.name}
                           style={{ display: "block", width: "100%", height: "100%", padding: 0, border: "none", background: "none", cursor: "pointer" }}>
-                          <img src={f.image} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: f.inStock ? "none" : "grayscale(.7)" }} />
+                          <img src={f.image} alt={f.name} className={"img-blend" + (f.inStock ? "" : " oos-img")} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                         </button>
-                        <span style={{ position: "absolute", top: 10, left: 10, background: "var(--cream)", color: "var(--forest-deep)", fontSize: 10, fontWeight: 600, letterSpacing: ".1em", padding: "4px 10px", borderRadius: 2 }}>
+                        <span style={{ position: "absolute", top: 10, left: 10, background: "var(--card)", color: "var(--ink)", fontSize: 10, fontWeight: 600, letterSpacing: ".1em", padding: "4px 10px", borderRadius: "var(--radius-xs)" }}>
                           {familyLabel(f.family)}
                         </span>
                         {(compCount.get(f.id) ?? 0) > 0 && (
-                          <span style={{ position: "absolute", top: 10, right: 10, background: "rgba(26,23,20,.8)", color: "var(--cream)", fontSize: 10, padding: "4px 8px", borderRadius: 2 }}>
+                          <span style={{ position: "absolute", top: 10, right: 10, background: "var(--stage-veil)", color: "var(--on-slab)", fontSize: 10, padding: "4px 8px", borderRadius: "var(--radius-xs)" }}>
                             {compCount.get(f.id)} cut{compCount.get(f.id) !== 1 ? "s" : ""}
                           </span>
                         )}
                         {!f.inStock && (
-                          <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--forest-deep)", color: "var(--cream)", fontSize: 10, fontWeight: 500, letterSpacing: ".08em", padding: "4px 9px", borderRadius: 2 }}>
+                          <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--ink)", color: "var(--card)", fontSize: 11, fontWeight: 600, letterSpacing: ".08em", padding: "4px 9px", borderRadius: "var(--radius-xs)" }}>
                             Out of stock
                           </span>
                         )}
                       </div>
                       <div style={{ padding: "13px 14px 14px" }}>
                         {f.itemCode && (
-                          <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 10.5, letterSpacing: ".08em", color: "var(--camel)", marginBottom: 3 }}>{f.itemCode}</div>
+                          <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, letterSpacing: ".06em", color: "var(--stone)", marginBottom: 3 }}>{f.itemCode}</div>
                         )}
-                        <div style={{ fontWeight: 500, fontSize: 11.5, letterSpacing: ".12em", marginBottom: 4 }}>{f.name}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13.5, letterSpacing: ".02em", marginBottom: 4 }}>{f.name}</div>
                         {(f.composition || f.color) && (
-                          <div style={{ fontSize: 11, color: "var(--mut)", marginBottom: 5 }}>
+                          <div style={{ fontSize: 12.5, color: "var(--stone)", marginBottom: 5 }}>
                             {[f.composition, f.color].filter(Boolean).join(" · ")}
                           </div>
                         )}
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, gap: 6 }}>
-                          <span style={{ color: "var(--camel)", fontWeight: 500, fontSize: 12.5 }}>{fabricPrice(f.price, f.unit)}</span>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 6, flexWrap: "wrap" }}>
+                          <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: 13.5 }}>{fabricPrice(f.price, f.unit)}</span>
                           <span style={{ display: "flex", gap: 2 }}>
-                            <button className="ph-btn" onClick={() => setStudioFabric(f)}
-                              style={{ color: "var(--forest-deep)", fontSize: 11, padding: "4px 5px", fontWeight: 600 }}>
+                            <button className="ph-btn" onClick={() => setStudioFabric(f)} style={{ ...cardAction, fontWeight: 700 }}>
                               Cuts
                             </button>
-                            <button className="ph-btn" onClick={() => setEditingFabric(f)}
-                              style={{ color: "var(--forest-deep)", fontSize: 11, padding: "4px 5px", fontWeight: 500 }}>
+                            <button className="ph-btn" onClick={() => setEditingFabric(f)} style={cardAction}>
                               Edit
                             </button>
                             <button className="ph-btn" onClick={() => toggleFabricStock(f.id)}
-                              style={{ color: f.inStock ? "var(--mut)" : "var(--warn)", fontSize: 11, padding: "4px 5px", fontWeight: 500 }}>
-                              {f.inStock ? "In stock" : "Restock"}
+                              aria-pressed={!f.inStock}
+                              title={f.inStock ? "Mark out of stock" : "Mark back in stock"}
+                              style={{ ...cardAction, color: f.inStock ? "var(--stone)" : "var(--warn)" }}>
+                              {f.inStock ? "Mark sold out" : "Restock"}
                             </button>
                           </span>
                         </div>
@@ -397,15 +440,15 @@ export default function Dashboard({
             <div className="fade-up">
               <div className="cat-bar">
                 <div>
-                  <span className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>designs</span>
-                  <span style={{ color: "var(--mut)", marginLeft: 10, fontSize: 13 }}>
+                  <span className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>designs</span>
+                  <span style={{ color: "var(--stone)", marginLeft: 10, fontSize: 13 }}>
                     {visibleCuts.length} cut{visibleCuts.length !== 1 ? "s" : ""}
                     {yourCutCount > 0 ? ` · ${yourCutCount} yours` : ""}
                   </span>
                 </div>
                 <div className="cat-tools">
                   <select value={cutFamilyFilter} onChange={(e) => setCutFamilyFilter(e.target.value)}
-                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 13 }}>
+                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13 }}>
                     <option>All</option>
                     {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
                   </select>
@@ -416,14 +459,14 @@ export default function Dashboard({
                 </div>
               </div>
 
-              <div style={{ fontSize: 12.5, color: "var(--mut)", margin: "-2px 0 18px", lineHeight: 1.65 }}>
+              <div style={{ fontSize: 12.5, color: "var(--stone)", margin: "-2px 0 18px", lineHeight: 1.65 }}>
                 Every cut a cloth can be stitched into. Library cuts come with peeq and are
                 shared by every shop; cuts marked yours belong to your shop alone, and only
                 you can change them.
               </div>
 
               {visibleCuts.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--mut)" }}>
+                <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--stone)" }}>
                   <div style={{ fontSize: 14, marginBottom: 18 }}>No cuts in that family yet.</div>
                   <button className="ph-btn btn-solid" style={{ padding: "11px 22px", fontSize: 12 }}
                     onClick={() => setCutForm({ mode: "new" })}>+ add your own cut</button>
@@ -441,8 +484,8 @@ export default function Dashboard({
                   return (
                     <div key={f.id} style={{ marginBottom: 30 }}>
                       <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: 10 }}>
-                        <span className="ph-display" style={{ fontSize: 16, color: "var(--forest-deep)" }}>{f.label.toLowerCase()}</span>
-                        <span style={{ fontSize: 11.5, color: "var(--mut)" }}>{familyCuts.length}</span>
+                        <span className="ph-display" style={{ fontSize: 16, color: "var(--ink)" }}>{f.label.toLowerCase()}</span>
+                        <span style={{ fontSize: 11.5, color: "var(--stone)" }}>{familyCuts.length}</span>
                       </div>
                       {withImage.length > 0 && (
                         <div className="card-grid" style={{ marginBottom: textOnly.length ? 12 : 0 }}>
@@ -565,22 +608,22 @@ export default function Dashboard({
 
 const cutOwnerChip = (mine: boolean): React.CSSProperties => ({
   fontSize: 9.5, fontWeight: 600, letterSpacing: ".09em", padding: "3px 8px",
-  borderRadius: 2, whiteSpace: "nowrap",
-  background: mine ? "var(--forest)" : "var(--sage-mist)",
-  color: mine ? "var(--cream)" : "var(--mut)",
+  borderRadius: "var(--radius-xs)", whiteSpace: "nowrap",
+  background: mine ? "var(--ink)" : "var(--paper-deep)",
+  color: mine ? "var(--card)" : "var(--stone)",
 });
 
 const cutCoverageChip: React.CSSProperties = {
   fontSize: 9.5, fontWeight: 600, letterSpacing: ".09em", padding: "3px 8px",
-  borderRadius: 2, textTransform: "uppercase", whiteSpace: "nowrap",
-  background: "var(--sage)", color: "var(--forest-deep)",
+  borderRadius: "var(--radius-xs)", textTransform: "uppercase", whiteSpace: "nowrap",
+  background: "var(--paper)", color: "var(--ink)",
 };
 
 function CutEditButton({ mine, onEdit }: { mine: boolean; onEdit: () => void }) {
   return (
     <button className="ph-btn" onClick={onEdit}
       title={mine ? "Change this cut" : "Library cut — take a copy you can change"}
-      style={{ color: "var(--forest-deep)", fontSize: 11, padding: "4px 5px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 }}>
+      style={{ color: "var(--ink)", fontSize: 11, padding: "4px 5px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 }}>
       <Icon name={mine ? "edit" : "copy"} /> {mine ? "Edit" : "Make it your own"}
     </button>
   );
@@ -590,25 +633,27 @@ function CutCard({ cut, onEdit }: { cut: Style; onEdit: () => void }) {
   const mine = !!cut.shopId;
   const cov = COVERAGES.find((x) => x.id === cut.coverage);
   return (
-    <div className="fade-up" style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)", display: "flex", flexDirection: "column" }}>
+    <div className="fade-up" style={{ background: "var(--card)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)", display: "flex", flexDirection: "column" }}>
       {/* The image is absolutely placed so a tall wireframe scales down into
           the frame instead of stretching the card (and the whole grid row). */}
-      <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--sage-mist)", overflow: "hidden" }}>
+      <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--paper-deep)", overflow: "hidden" }}>
         <img src={cut.refImage ?? undefined} alt={cut.name}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", padding: 10, boxSizing: "border-box" }} />
         {cov && (
-          <span style={{ ...cutCoverageChip, position: "absolute", top: 10, left: 10, background: "var(--cream)" }}>
+          <span style={{ ...cutCoverageChip, position: "absolute", top: 10, left: 10, background: "var(--card)" }}>
             {cov.label}
           </span>
         )}
-        <span style={{ ...cutOwnerChip(mine), position: "absolute", top: 10, right: 10, background: mine ? "var(--forest)" : "rgba(26,23,20,.65)", color: "var(--cream)" }}>
+        {/* both branches sit on a photo, so both stay dark in either theme —
+            --ink here would have flipped pale under --card text */}
+        <span style={{ ...cutOwnerChip(mine), position: "absolute", top: 10, right: 10, background: mine ? "var(--stage)" : "var(--stage-veil)", color: "var(--on-slab)" }}>
           {mine ? "YOURS" : "peeq library"}
         </span>
       </div>
       <div style={{ padding: "11px 13px 12px", flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
         <div style={{ fontWeight: 500, fontSize: 11.5, letterSpacing: ".12em" }}>{cut.name}</div>
         {cut.hint && (
-          <div style={{ fontSize: 11, color: "var(--mut)", lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+          <div style={{ fontSize: 11, color: "var(--stone)", lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
             {cut.hint}
           </div>
         )}
@@ -625,14 +670,14 @@ function TextCutCard({ cut, onEdit }: { cut: Style; onEdit: () => void }) {
   const mine = !!cut.shopId;
   const cov = COVERAGES.find((x) => x.id === cut.coverage);
   return (
-    <div className="fade-up" style={{ background: "var(--cream)", borderRadius: "var(--radius-card)", border: "1px solid var(--line)", padding: "13px 14px 11px", display: "flex", flexDirection: "column", gap: 7 }}>
+    <div className="fade-up" style={{ background: "var(--card)", borderRadius: "var(--radius-card)", border: "1px solid var(--line)", padding: "13px 14px 11px", display: "flex", flexDirection: "column", gap: 7 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
         {cov && <span style={cutCoverageChip}>{cov.label}</span>}
         <span style={cutOwnerChip(mine)}>{mine ? "YOURS" : "peeq library"}</span>
       </div>
       <div style={{ fontWeight: 500, fontSize: 12, letterSpacing: ".1em" }}>{cut.name}</div>
       {cut.hint && (
-        <div style={{ fontSize: 11.5, color: "var(--mut)", fontStyle: "italic", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+        <div style={{ fontSize: 11.5, color: "var(--stone)", fontStyle: "italic", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
           “{cut.hint}”
         </div>
       )}
@@ -672,9 +717,13 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
         <label className="field">Area / city
           <input value={area} maxLength={80} placeholder="e.g. New Road, Kathmandu" onChange={(e) => { setArea(e.target.value); setSaved(false); }} />
         </label>
-        <div className="field">Shop location on the map
-          <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--mut)", margin: "2px 0 8px", display: "block" }}>
-            Shoppers see this pin on the peeq map and your storefront. Tap the map or drag the dot.
+        {/* Same label and the same "optional" as Onboarding. The two screens
+            showed the same control under two different names, so a vendor who
+            skipped it during setup had to work out that this was the thing
+            they skipped. */}
+        <div className="field">Pin your shop on the map
+          <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--stone)", margin: "2px 0 8px", display: "block" }}>
+            Optional — shoppers see this pin on the peeq map and your storefront. Tap the map or drag the dot.
           </span>
           <LocationPicker lat={pin.lat} lng={pin.lng} onChange={(lat, lng) => { setPin({ lat, lng }); setSaved(false); }} />
         </div>
@@ -695,19 +744,19 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
         {shop.vendorCode && (
           <div className="field">Vendor code
             <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
-              <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 20, letterSpacing: ".1em", color: "var(--forest-deep)" }}>{shop.vendorCode}</span>
-              <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--mut)" }}>
+              <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 20, letterSpacing: ".1em", color: "var(--ink)" }}>{shop.vendorCode}</span>
+              <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--stone)" }}>
                 Every item you add is numbered {shop.vendorCode}-0001, {shop.vendorCode}-0002, and so on. This code is fixed — unlike your kiosk link, it can never change, so printed tags stay valid forever.
               </span>
             </div>
           </div>
         )}
         <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", fontSize: 13.5, color: "var(--ink)", lineHeight: 1.5 }}>
-          <input type="checkbox" checked={listed} style={{ marginTop: 3, accentColor: "var(--forest)" }}
+          <input type="checkbox" checked={listed} style={{ marginTop: 3, accentColor: "var(--ink)" }}
             onChange={(e) => { setListed(e.target.checked); setSaved(false); }} />
           <span>
             Show my shop on the peeq landing page
-            <span style={{ display: "block", fontSize: 12, color: "var(--mut)" }}>
+            <span style={{ display: "block", fontSize: 12, color: "var(--stone)" }}>
               Shoppers can find and browse your storefront and kiosk.
             </span>
           </span>
@@ -726,12 +775,12 @@ function LinkBox({ url, children }: { url: string; children?: React.ReactNode })
   const [copied, setCopied] = useState(false);
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-      <code style={{ padding: "11px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 13, background: "#fff", color: "var(--ink)", flex: 1, minWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: 0, textTransform: "none", fontWeight: 400 }}>
+      <code style={{ padding: "11px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 13, background: "var(--card)", color: "var(--ink)", flex: 1, minWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: 0, textTransform: "none", fontWeight: 400 }}>
         {url}
       </code>
       <button className="ph-btn"
         onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-        style={{ background: "var(--forest-deep)", color: "var(--cream)", padding: "11px 16px", fontSize: 11, letterSpacing: ".1em" }}>
+        style={{ background: "var(--ink)", color: "var(--card)", padding: "11px 16px", fontSize: 11, letterSpacing: ".1em" }}>
         {copied ? <>copied <Icon name="check" /></> : "copy"}
       </button>
       {children}
@@ -761,7 +810,7 @@ function SlugEditor({ slug, changeSlug }: { slug: string; changeSlug: (slug: str
   if (!editing) {
     return (
       <button className="ph-btn" onClick={() => { setDraft(slug); setEditing(true); setError(""); }}
-        style={{ color: "var(--mut)", padding: "10px 8px", fontSize: 11, letterSpacing: ".1em" }}>
+        style={{ color: "var(--stone)", padding: "10px 8px", fontSize: 11, letterSpacing: ".1em" }}>
         Edit
       </button>
     );
@@ -773,15 +822,15 @@ function SlugEditor({ slug, changeSlug }: { slug: string; changeSlug: (slug: str
         <input value={draft} autoFocus maxLength={40}
           onChange={(e) => { setDraft(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40)); setError(""); }}
           onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-          style={{ padding: "10px 13px", borderRadius: "var(--radius-btn)", border: "1px solid " + (valid ? "var(--line)" : "var(--danger)"), fontSize: 14, letterSpacing: 0, textTransform: "none", fontWeight: 400, width: 180, background: "#fff" }} />
+          style={{ padding: "10px 13px", borderRadius: "var(--radius-btn)", border: "1px solid " + (valid ? "var(--line)" : "var(--danger)"), fontSize: 14, letterSpacing: 0, textTransform: "none", fontWeight: 400, width: 180, background: "var(--card)" }} />
         <button className="ph-btn" disabled={!valid || busy} onClick={save}
-          style={{ background: valid ? "var(--forest)" : "var(--line)", color: valid ? "var(--cream)" : "var(--mut)", padding: "10px 14px", fontSize: 11, letterSpacing: ".1em" }}>
+          style={{ background: valid ? "var(--ink)" : "var(--line)", color: valid ? "var(--card)" : "var(--stone)", padding: "10px 14px", fontSize: 11, letterSpacing: ".1em" }}>
           {busy ? "Saving…" : "Save"}
         </button>
         <button className="ph-btn" onClick={() => { setEditing(false); setDraft(slug); setError(""); }}
-          style={{ color: "var(--mut)", padding: "10px 8px", fontSize: 11, letterSpacing: ".1em" }}>cancel</button>
+          style={{ color: "var(--stone)", padding: "10px 8px", fontSize: 11, letterSpacing: ".1em" }}>cancel</button>
       </div>
-      <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: error ? "var(--danger)" : "var(--mut)" }}>
+      <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: error ? "var(--danger)" : "var(--stone)" }}>
         {error || "Lowercase letters, numbers and dashes. Changing this breaks QR codes you've already printed."}
       </span>
     </div>
@@ -790,11 +839,11 @@ function SlugEditor({ slug, changeSlug }: { slug: string; changeSlug: (slug: str
 
 function EmptyState({ onAdd, anyItems }: { onAdd: () => void; anyItems: boolean }) {
   return (
-    <div style={{ border: "1.5px dashed var(--line)", borderRadius: "var(--radius-modal)", padding: "60px 24px", textAlign: "center", background: "var(--cream)" }}>
-      <div className="ph-display" style={{ fontSize: 22, marginBottom: 8, color: "var(--forest-deep)" }}>
+    <div style={{ border: "1.5px dashed var(--line)", borderRadius: "var(--radius-modal)", padding: "60px 24px", textAlign: "center", background: "var(--card)" }}>
+      <div className="ph-display" style={{ fontSize: 22, marginBottom: 8, color: "var(--ink)" }}>
         {anyItems ? "Nothing in this category yet" : "No garments yet"}
       </div>
-      <p style={{ color: "var(--mut)", maxWidth: 420, margin: "0 auto 20px", fontSize: 14, lineHeight: 1.6 }}>
+      <p style={{ color: "var(--stone)", maxWidth: 420, margin: "0 auto 20px", fontSize: 14, lineHeight: 1.6 }}>
         Photograph each garment flat or on a mannequin against a plain wall, then add it here. Clean photos give the best try-on results.
       </p>
       <button className="ph-btn btn-solid" onClick={onAdd}>+ add your first garment</button>
@@ -814,89 +863,137 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
   const [image, setImage] = useState<string | null>(initial?.image ?? null);
   const [sizes, setSizes] = useState<string[]>(initial?.sizes ?? []);
   const [busy, setBusy] = useState(false);
+  const [touched, setTouched] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
     try { setImage(await fileToCompressedDataURL(file)); }
-    catch { alert("Could not read that image. Try a JPG or PNG."); }
+    catch { toastErr("Could not read that image. Try a JPG or PNG."); }
     setBusy(false);
   };
 
   const toggleSize = (s: string) =>
     setSizes((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
 
-  const canSave = Boolean(name.trim() && image && !busy);
-  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 15, background: "#fff" };
+  /* Price is required. It used to be absent from canSave, so a vendor who
+     tabbed past it saved a garment priced at 0 — which the storefront then
+     showed as "Rs 0" to every shopper, with nothing anywhere saying so. */
+  const priceNum = Number(price || 0);
+  const missing = [
+    !name.trim() && "a name",
+    !image && "a photo",
+    !(priceNum > 0) && "a price",
+  ].filter(Boolean) as string[];
+  const canSave = missing.length === 0 && !busy;
+  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-field)", border: "1px solid var(--line)", fontSize: 15, background: "var(--card)", color: "var(--ink)" };
+  const dirty = initial
+    ? name !== initial.name || category !== initial.category || String(initial.price || "") !== price
+      || image !== initial.image || sizes.join() !== initial.sizes.join()
+    : Boolean(name.trim() || image || price || sizes.length);
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 400, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: "28px 26px" }}>
-        <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 18 }}>
-          {initial ? "edit garment" : "add a garment"}
-        </div>
+    <Dialog onClose={onClose} title={initial ? "edit garment" : "add a garment"} hideHeader
+      width={400} dirty={dirty}
+      dirtyMessage="This garment isn't saved yet. Discard what you've filled in?"
+      panelStyle={{ padding: "28px 26px" }}>
+      <div className="ph-display" style={{ fontSize: 24, color: "var(--ink)", marginBottom: 18 }}>
+        {initial ? "edit garment" : "add a garment"}
+      </div>
 
-        <div onClick={() => fileRef.current?.click()}
-          style={{ border: "1.5px dashed " + (image ? "var(--forest)" : "var(--line)"), borderRadius: 6, height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--sage)", color: "var(--mut)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
-          {busy ? <span>Processing photo…</span>
-            : image ? <img src={image} alt="Garment preview" style={{ height: "100%", objectFit: "contain" }} />
-            : <div style={{ padding: 12 }}>Tap to upload a garment photo<br /><span style={{ fontSize: 12 }}>Flat-lay or mannequin, plain background</span></div>}
-        </div>
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
+      {/* a button, not a div: this is the field the whole form depends on */}
+      <button type="button" onClick={() => fileRef.current?.click()}
+        aria-label={image ? "Change the garment photo" : "Upload a garment photo"}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
+        style={{ width: "100%", border: "1.5px dashed " + (image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-lg)", height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
+        {busy ? <span>Processing photo…</span>
+          : image ? <img src={image} alt="Garment preview" style={{ height: "100%", objectFit: "contain" }} />
+          : <div style={{ padding: 12 }}>Tap to upload a garment photo<br /><span style={{ fontSize: 12 }}>Flat-lay or mannequin, plain background</span></div>}
+      </button>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <input style={input} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="Garment name (e.g. Red Banarasi Silk Sari)" />
-          <div style={{ display: "flex", gap: 10 }}>
-            <select value={category} onChange={(e) => setCategory(e.target.value)}
-              style={{ ...input, flex: 1 }}>
+      {/* Real labels. Every field here was placeholder-only, so the moment a
+          vendor typed anything the form became six unlabelled boxes. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <label className="field">Garment name <span className="req">*</span>
+          <input style={input} value={name} maxLength={80} data-autofocus
+            onChange={(e) => setName(e.target.value)} placeholder="e.g. Red Banarasi Silk Sari" />
+        </label>
+        <div style={{ display: "flex", gap: 10 }}>
+          <label className="field" style={{ flex: 1 }}>Category
+            <select value={category} onChange={(e) => setCategory(e.target.value)} style={input}>
               {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
             </select>
-            <input style={{ ...input, flex: 1 }} value={price} maxLength={8} onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))} placeholder="Price (NPR)" inputMode="numeric" />
-          </div>
-          <div>
-            <div className="field" style={{ marginBottom: 7 }}>Available sizes (optional)</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {SIZES.map((s) => (
-                <button key={s} type="button" className="ph-btn" onClick={() => toggleSize(s)}
-                  style={{
-                    padding: "7px 13px", fontSize: 12, borderRadius: "var(--radius-btn)", fontWeight: 500,
-                    background: sizes.includes(s) ? "var(--forest)" : "var(--sage)",
-                    color: sizes.includes(s) ? "var(--cream)" : "var(--mut)",
-                    border: "1px solid " + (sizes.includes(s) ? "var(--forest)" : "var(--line)"),
-                  }}>
-                  {s}
-                </button>
-              ))}
-            </div>
+          </label>
+          <label className="field" style={{ flex: 1 }}>Price (NPR) <span className="req">*</span>
+            <input style={{ ...input, borderColor: touched && !(priceNum > 0) ? "var(--danger)" : "var(--line)" }}
+              value={price} maxLength={8} inputMode="numeric"
+              aria-invalid={touched && !(priceNum > 0)}
+              onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))} placeholder="2500" />
+          </label>
+        </div>
+        <div className="field">Available sizes (optional)
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }}>
+            {SIZES.map((s) => (
+              <button key={s} type="button" className="ph-btn" onClick={() => toggleSize(s)}
+                aria-pressed={sizes.includes(s)}
+                style={{
+                  padding: "9px 15px", fontSize: 13, borderRadius: "var(--radius-btn)", fontWeight: 600,
+                  background: sizes.includes(s) ? "var(--ink)" : "var(--paper)",
+                  color: sizes.includes(s) ? "var(--card)" : "var(--stone)",
+                  border: "1px solid " + (sizes.includes(s) ? "var(--ink)" : "var(--line)"),
+                }}>
+                {s}
+              </button>
+            ))}
           </div>
         </div>
+      </div>
 
-        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-          <button className="ph-btn" onClick={onClose}
-            style={{ flex: 1, color: "var(--forest-deep)", padding: 13, fontSize: 12, letterSpacing: ".12em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>cancel</button>
-          <button className="ph-btn" disabled={!canSave}
-            onClick={() => onSave({
-              name: name.trim(), category, price: Number(price || 0), image: image!,
+      {/* Say what is missing. The save button used to just sit there greyed
+          out with no explanation anywhere on the form. */}
+      {missing.length > 0 && (
+        <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--stone)" }}>
+          Still needs {missing.join(", ").replace(/, ([^,]*)$/, " and $1")}.
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+        <button className="ph-btn" onClick={onClose}
+          style={{ flex: 1, color: "var(--ink)", padding: 13, fontSize: 13, letterSpacing: ".06em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 600 }}>cancel</button>
+        <button className="ph-btn" aria-disabled={!canSave}
+          onClick={() => {
+            setTouched(true);
+            if (!canSave) return;
+            onSave({
+              name: name.trim(), category, price: priceNum, image: image!,
               sizes,
               inStock: initial?.inStock ?? true,
               tryonEnabled: initial?.tryonEnabled ?? true,
               stitchedToOrder: initial?.stitchedToOrder ?? false,
-            })}
-            style={{ flex: 2, background: canSave ? "var(--forest)" : "var(--line)", color: canSave ? "var(--cream)" : "var(--mut)", padding: 13, fontSize: 12, letterSpacing: ".12em", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
-            {initial ? "save changes" : "save to catalog"}
-          </button>
-        </div>
-        {initial && onRemove && (
-          <button className="ph-btn"
-            onClick={() => { if (confirm("Remove \"" + initial.name + "\" from the catalog?")) onRemove(); }}
-            style={{ width: "100%", marginTop: 12, color: "var(--mut)", fontSize: 12, textDecoration: "underline", textUnderlineOffset: 3 }}>
-            Remove from catalog
-          </button>
-        )}
+            });
+          }}
+          style={{ flex: 2, background: canSave ? "var(--ink)" : "var(--line)", color: canSave ? "var(--card)" : "var(--stone)", padding: 13, fontSize: 13, letterSpacing: ".06em", borderRadius: "var(--radius-btn)", fontWeight: 600, cursor: canSave ? "pointer" : "not-allowed" }}>
+          {initial ? "save changes" : "save to catalog"}
+        </button>
       </div>
-    </div>
+      {initial && onRemove && (
+        <button className="ph-btn"
+          onClick={async () => {
+            const ok = await confirmAsync({
+              title: "Remove this garment?",
+              body: "“" + initial.name + "” will be removed from your catalog and storefront. Printed QR tags for it stop working.",
+              confirmLabel: "Remove", destructive: true,
+            });
+            if (ok) onRemove();
+          }}
+          style={{ width: "100%", marginTop: 12, color: "var(--danger)", fontSize: 13, fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3 }}>
+          Remove from catalog
+        </button>
+      )}
+    </Dialog>
   );
 }
 
@@ -922,89 +1019,132 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [touched, setTouched] = useState(false);
+
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
     try { setImage(await fileToCompressedDataURL(file)); }
-    catch { alert("Could not read that image. Try a JPG or PNG."); }
+    catch { toastErr("Could not read that image. Try a JPG or PNG."); }
     setBusy(false);
   };
 
-  const canSave = Boolean(name.trim() && image && !busy);
-  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 15, background: "#fff" };
+  const priceNum = Number(price || 0);
+  const missing = [
+    !name.trim() && "a name",
+    !image && "a photo",
+    !(priceNum > 0) && "a price",
+  ].filter(Boolean) as string[];
+  const canSave = missing.length === 0 && !busy;
+  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-field)", border: "1px solid var(--line)", fontSize: 15, background: "var(--card)", color: "var(--ink)" };
+  const dirty = initial
+    ? name !== initial.name || family !== initial.family || String(initial.price || "") !== price
+      || unit !== initial.unit || composition !== (initial.composition ?? "")
+      || color !== (initial.color ?? "") || note !== (initial.note ?? "") || image !== initial.image
+    : Boolean(name.trim() || image || price || composition || color || note);
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 400, maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", padding: "28px 26px" }}>
-        <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 18 }}>
-          {initial ? "edit fabric" : "add a fabric"}
-        </div>
+    <Dialog onClose={onClose} title={initial ? "edit fabric" : "add a fabric"} hideHeader
+      width={400} dirty={dirty}
+      dirtyMessage="This fabric isn't saved yet. Discard what you've filled in?"
+      panelStyle={{ padding: "28px 26px" }}>
+      <div className="ph-display" style={{ fontSize: 24, color: "var(--ink)", marginBottom: 18 }}>
+        {initial ? "edit fabric" : "add a fabric"}
+      </div>
 
-        <div onClick={() => fileRef.current?.click()}
-          style={{ border: "1.5px dashed " + (image ? "var(--forest)" : "var(--line)"), borderRadius: 6, height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--sage)", color: "var(--mut)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
-          {busy ? <span>Processing photo…</span>
-            : image ? <img src={image} alt="Fabric preview" style={{ height: "100%", objectFit: "contain" }} />
-            : <div style={{ padding: 12 }}>Tap to upload a fabric photo<br /><span style={{ fontSize: 12 }}>Lay it flat in daylight — fill the frame with the weave</span></div>}
-        </div>
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
+      <button type="button" onClick={() => fileRef.current?.click()}
+        aria-label={image ? "Change the fabric photo" : "Upload a fabric photo"}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
+        style={{ width: "100%", border: "1.5px dashed " + (image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-lg)", height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
+        {busy ? <span>Processing photo…</span>
+          : image ? <img src={image} alt="Fabric preview" style={{ height: "100%", objectFit: "contain" }} />
+          : <div style={{ padding: 12 }}>Tap to upload a fabric photo<br /><span style={{ fontSize: 12 }}>Lay it flat in daylight — fill the frame with the weave</span></div>}
+      </button>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <input style={input} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="Fabric name (e.g. Navy Italian Wool)" />
-          <div>
-            <div className="field" style={{ marginBottom: 7 }}>Stitched into</div>
-            <select value={family} onChange={(e) => setFamily(e.target.value as StyleFamily)} style={input}>
-              {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-            </select>
-          </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <input style={{ ...input, flex: 1 }} value={price} maxLength={8} inputMode="numeric"
-              onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))} placeholder="Price (NPR)" />
-            <select value={unit} onChange={(e) => setUnit(e.target.value as Fabric["unit"])} style={{ ...input, flex: 1 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <label className="field">Fabric name <span className="req">*</span>
+          <input style={input} value={name} maxLength={80} data-autofocus
+            onChange={(e) => setName(e.target.value)} placeholder="e.g. Navy Italian Wool" />
+        </label>
+        <label className="field">Stitched into
+          <select value={family} onChange={(e) => setFamily(e.target.value as StyleFamily)} style={input}>
+            {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+          </select>
+        </label>
+        <div style={{ display: "flex", gap: 10 }}>
+          <label className="field" style={{ flex: 1 }}>Price (NPR) <span className="req">*</span>
+            <input style={{ ...input, borderColor: touched && !(priceNum > 0) ? "var(--danger)" : "var(--line)" }}
+              value={price} maxLength={8} inputMode="numeric" aria-invalid={touched && !(priceNum > 0)}
+              onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))} placeholder="1800" />
+          </label>
+          <label className="field" style={{ flex: 1 }}>Sold by
+            <select value={unit} onChange={(e) => setUnit(e.target.value as Fabric["unit"])} style={input}>
               {FABRIC_UNITS.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
             </select>
-          </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <input style={{ ...input, flex: 1 }} value={composition} maxLength={40}
-              onChange={(e) => setComposition(e.target.value)} placeholder="Weave (e.g. wool 120s)" />
-            <input style={{ ...input, flex: 1 }} value={color} maxLength={30}
-              onChange={(e) => setColor(e.target.value)} placeholder="Colour" />
-          </div>
-          <div>
-            <div className="field" style={{ marginBottom: 7 }}>Anything we should know about this cloth?</div>
-            <textarea style={{ ...input, minHeight: 68, resize: "vertical", fontFamily: "inherit" }}
-              value={note} maxLength={300} onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. gold border runs along one edge only — it goes on the pallu" />
-            <div style={{ fontSize: 11, color: "var(--mut)", marginTop: 5, lineHeight: 1.55 }}>
-              Optional, but this is the part a photo can't show. Where a border sits or how
-              heavily a cloth drapes is what makes the stitched preview right.
-            </div>
-          </div>
+          </label>
         </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <label className="field" style={{ flex: 1 }}>Weave
+            <input style={input} value={composition} maxLength={40}
+              onChange={(e) => setComposition(e.target.value)} placeholder="e.g. wool 120s" />
+          </label>
+          <label className="field" style={{ flex: 1 }}>Colour
+            <input style={input} value={color} maxLength={30}
+              onChange={(e) => setColor(e.target.value)} placeholder="e.g. navy" />
+          </label>
+        </div>
+        <label className="field">Anything we should know about this cloth?
+          <textarea style={{ ...input, minHeight: 68, resize: "vertical", fontFamily: "inherit" }}
+            value={note} maxLength={300} onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. gold border runs along one edge only — it goes on the pallu" />
+          <span className="hint">
+            Optional, but this is the part a photo can't show. Where a border sits or how
+            heavily a cloth drapes is what makes the stitched preview right.
+          </span>
+        </label>
+      </div>
 
-        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-          <button className="ph-btn" onClick={onClose}
-            style={{ flex: 1, color: "var(--forest-deep)", padding: 13, fontSize: 12, letterSpacing: ".12em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>cancel</button>
-          <button className="ph-btn" disabled={!canSave}
-            onClick={() => onSave({
+      {missing.length > 0 && (
+        <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--stone)" }}>
+          Still needs {missing.join(", ").replace(/, ([^,]*)$/, " and $1")}.
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+        <button className="ph-btn" onClick={onClose}
+          style={{ flex: 1, color: "var(--ink)", padding: 13, fontSize: 13, letterSpacing: ".06em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 600 }}>cancel</button>
+        <button className="ph-btn" aria-disabled={!canSave}
+          onClick={() => {
+            setTouched(true);
+            if (!canSave) return;
+            onSave({
               name: name.trim(), family, image: image!,
-              price: Number(price || 0), unit,
+              price: priceNum, unit,
               composition: composition.trim(), color: color.trim(), note: note.trim(),
               inStock: initial?.inStock ?? true,
-            })}
-            style={{ flex: 2, background: canSave ? "var(--forest)" : "var(--line)", color: canSave ? "var(--cream)" : "var(--mut)", padding: 13, fontSize: 12, letterSpacing: ".12em", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
-            {initial ? "save changes" : "save fabric"}
-          </button>
-        </div>
-        {initial && onRemove && (
-          <button className="ph-btn"
-            onClick={() => { if (confirm("Remove \"" + initial.name + "\" from your fabrics?")) onRemove(); }}
-            style={{ width: "100%", marginTop: 12, color: "var(--mut)", fontSize: 12, textDecoration: "underline", textUnderlineOffset: 3 }}>
-            Remove fabric
-          </button>
-        )}
+            });
+          }}
+          style={{ flex: 2, background: canSave ? "var(--ink)" : "var(--line)", color: canSave ? "var(--card)" : "var(--stone)", padding: 13, fontSize: 13, letterSpacing: ".06em", borderRadius: "var(--radius-btn)", fontWeight: 600, cursor: canSave ? "pointer" : "not-allowed" }}>
+          {initial ? "save changes" : "save fabric"}
+        </button>
       </div>
-    </div>
+      {initial && onRemove && (
+        <button className="ph-btn"
+          onClick={async () => {
+            const ok = await confirmAsync({
+              title: "Remove this fabric?",
+              body: "“" + initial.name + "” and its stitched previews will be removed.",
+              confirmLabel: "Remove", destructive: true,
+            });
+            if (ok) onRemove();
+          }}
+          style={{ width: "100%", marginTop: 12, color: "var(--danger)", fontSize: 13, fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3 }}>
+          Remove fabric
+        </button>
+      )}
+    </Dialog>
   );
 }
 
@@ -1028,46 +1168,44 @@ function QRModal({ garment, url, crossDevice, onClose }: { garment: Garment; url
   };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 380, maxWidth: "100%", padding: "28px 26px", textAlign: "center" }}>
-        <div className="ph-display" style={{ fontSize: 24, color: "var(--forest-deep)", marginBottom: 4 }}>try-on QR</div>
+    <Dialog onClose={onClose} title="try-on QR" hideHeader width={380}
+      panelStyle={{ padding: "28px 26px", textAlign: "center" }}>
+      <div className="ph-display" style={{ fontSize: 24, color: "var(--ink)", marginBottom: 4 }}>try-on QR</div>
         <div style={{ fontSize: 14, fontWeight: 500 }}>{garment.name}</div>
-        <div style={{ fontSize: 12, color: "var(--mut)", marginBottom: 4 }}>
+        <div style={{ fontSize: 12, color: "var(--stone)", marginBottom: 4 }}>
           Shoppers scan this on the hanger tag and try it on their own phone.
         </div>
         {qr ? (
           <img src={qr} alt={"QR code linking to try-on for " + garment.name} style={{ width: 200, height: 200, display: "block", margin: "14px auto" }} />
         ) : (
-          <div style={{ width: 200, height: 200, margin: "14px auto", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--mut)", fontSize: 13 }}>
+          <div style={{ width: 200, height: 200, margin: "14px auto", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--stone)", fontSize: 13 }}>
             Generating…
           </div>
         )}
         <div style={{ display: "flex", gap: 8, justifyContent: "center", margin: "12px 0" }}>
           <a className="ph-btn" href={url} target="_blank" rel="noopener noreferrer"
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, color: "var(--forest-deep)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px", textDecoration: "none" }}>
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, color: "var(--ink)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px", textDecoration: "none" }}>
             <Icon name="open" /> open link
           </a>
           <button className="ph-btn" onClick={copyLink}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, color: copied ? "var(--forest)" : "var(--forest-deep)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, color: copied ? "var(--ink)" : "var(--ink)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
             <Icon name={copied ? "check" : "copy"} /> {copied ? "copied" : "copy link"}
           </button>
         </div>
         {!crossDevice && (
-          <div style={{ fontSize: 12, color: "var(--camel)", background: "var(--sage)", borderRadius: 6, padding: "8px 12px", marginBottom: 12 }}>
+          <div style={{ fontSize: 12.5, color: "var(--warn)", background: "var(--warn-bg)", borderRadius: "var(--radius-sm)", padding: "8px 12px", marginBottom: 12 }}>
             Local mode: this link only works on this device until you connect Supabase and deploy.
           </div>
         )}
         <div style={{ display: "flex", gap: 10 }}>
           <button className="ph-btn" onClick={onClose}
-            style={{ flex: 1, color: "var(--forest-deep)", padding: 13, fontSize: 12, letterSpacing: ".12em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>close</button>
+            style={{ flex: 1, color: "var(--ink)", padding: 13, fontSize: 13, letterSpacing: ".06em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 600 }}>close</button>
           {qr && (
             <a className="ph-btn" href={qr} download={"peeq-qr-" + garment.id + ".png"}
-              style={{ flex: 2, background: "var(--forest)", color: "var(--cream)", padding: 13, fontSize: 12, letterSpacing: ".12em", textDecoration: "none", borderRadius: "var(--radius-btn)", fontWeight: 500, textAlign: "center" }}>download PNG</a>
+              style={{ flex: 2, background: "var(--ink)", color: "var(--card)", padding: 13, fontSize: 13, letterSpacing: ".06em", textDecoration: "none", borderRadius: "var(--radius-btn)", fontWeight: 600, textAlign: "center" }}>download PNG</a>
           )}
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -1133,7 +1271,7 @@ function TagSheetModal({ catalog, urlFor, onClose }: {
         .tag { height: 100%; background: #FAF6F0; border: 1px solid #e6dfd1; border-radius: 14px; padding: 6mm 6mm 4mm; display: flex; flex-direction: column; }
         .row { display: flex; align-items: center; gap: 5mm; flex: 1; min-height: 0; }
         .left { flex: 1; text-align: left; }
-        .wm { font-family: 'Baloo 2', cursive; font-weight: 800; font-size: 21px; letter-spacing: -0.03em; color: #1A1714; }
+        .wm { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 21px; letter-spacing: -0.03em; color: #1A1714; }
         .wm span { color: #C9A94E; }
         .head { font-family: 'Anton', sans-serif; font-size: 25px; line-height: 1.05; color: #1A1714; margin-top: 2.5mm; letter-spacing: .01em; }
         .head em { font-style: normal; color: #C9A94E; }
@@ -1158,37 +1296,35 @@ function TagSheetModal({ catalog, urlFor, onClose }: {
       <script>window.onload = () => setTimeout(() => window.print(), 500);</script>
       </body></html>`;
     const w = window.open("", "_blank");
-    if (!w) { alert("Allow pop-ups for this site to print the tag sheet."); setBusy(false); return; }
+    if (!w) { toastWarn("Allow pop-ups for this site to print the tag sheet."); setBusy(false); return; }
     w.document.write(html);
     w.document.close();
     setBusy(false);
   };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 440, maxWidth: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column", padding: "22px 22px 18px" }}>
-        <div className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>print qr hanger tags</div>
-        <div style={{ fontSize: 13, color: "var(--mut)", margin: "4px 0 14px" }}>
-          {count} tag{count !== 1 ? "s" : ""} selected · {pages} page{pages !== 1 ? "s" : ""} of 4 — cut along the dashed lines.
-        </div>
-        <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 6, flex: 1, minHeight: 0 }}>
-          {catalog.map((g) => (
-            <label key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, cursor: "pointer", padding: "4px 2px" }}>
-              <input type="checkbox" checked={checked.has(g.id)} onChange={() => toggle(g.id)} style={{ accentColor: "var(--violet)" }} />
-              <img src={g.image} alt="" style={{ width: 30, height: 38, objectFit: "cover", borderRadius: 6 }} />
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</span>
-            </label>
-          ))}
-        </div>
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
-          <button className="ph-btn" onClick={onClose} style={{ color: "var(--mut)", fontSize: 13, padding: "10px 14px" }}>cancel</button>
-          <button className="ph-btn btn-solid" disabled={count === 0 || busy} onClick={printSheet}
-            style={{ padding: "11px 24px", fontSize: 13, opacity: count === 0 || busy ? 0.5 : 1 }}>
-            {busy ? "building…" : "print tag sheet"}
-          </button>
-        </div>
+    <Dialog onClose={onClose} title="print qr hanger tags" hideHeader width={440}
+      panelStyle={{ maxHeight: "88dvh", display: "flex", flexDirection: "column", padding: "22px 22px 18px" }}>
+      <div className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>print qr hanger tags</div>
+      <div style={{ fontSize: 13, color: "var(--stone)", margin: "4px 0 14px" }}>
+        {count} tag{count !== 1 ? "s" : ""} selected · {pages} page{pages !== 1 ? "s" : ""} of 4 — cut along the dashed lines.
       </div>
-    </div>
+      <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 6, flex: 1, minHeight: 0 }}>
+        {catalog.map((g) => (
+          <label key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, cursor: "pointer", padding: "4px 2px" }}>
+            <input type="checkbox" checked={checked.has(g.id)} onChange={() => toggle(g.id)} style={{ accentColor: "var(--violet)" }} />
+            <img src={g.image} alt="" style={{ width: 30, height: 38, objectFit: "cover", borderRadius: "var(--radius-sm)" }} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</span>
+          </label>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
+        <button className="ph-btn" onClick={onClose} style={{ color: "var(--ink)", fontSize: 13, fontWeight: 600, padding: "10px 16px", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)" }}>cancel</button>
+        <button className="ph-btn btn-solid" disabled={count === 0 || busy} onClick={printSheet}
+          style={{ padding: "11px 24px", fontSize: 13, opacity: count === 0 || busy ? 0.5 : 1 }}>
+          {busy ? "building…" : "print tag sheet"}
+        </button>
+      </div>
+    </Dialog>
   );
 }

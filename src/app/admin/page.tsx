@@ -85,11 +85,11 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "ba
     <div className="panel" style={{ padding: "14px 16px" }}>
       <div
         className="ph-display"
-        style={{ fontSize: 26, color: tone === "bad" ? "#9b3232" : "var(--forest-deep)", lineHeight: 1.1 }}
+        style={{ fontSize: 26, color: tone === "bad" ? "var(--danger)" : "var(--ink)", lineHeight: 1.1 }}
       >
         {value.toLocaleString("en-GB")}
       </div>
-      <div style={{ fontSize: 12, color: "var(--mut)", marginTop: 4 }}>{label}</div>
+      <div style={{ fontSize: 12, color: "var(--stone)", marginTop: 4 }}>{label}</div>
     </div>
   );
 }
@@ -119,12 +119,12 @@ function Queue({
       >
         <div
           className="ph-display"
-          style={{ fontSize: 26, color: urgent ? "var(--butter-deep)" : "var(--mut)", lineHeight: 1.1 }}
+          style={{ fontSize: 26, color: urgent ? "var(--butter-deep)" : "var(--stone)", lineHeight: 1.1 }}
         >
           {value.toLocaleString("en-GB")}
         </div>
         <div style={{ fontSize: 12.5, color: "var(--ink)", marginTop: 4 }}>{label}</div>
-        <div style={{ fontSize: 11.5, color: "var(--mut)", marginTop: 2 }}>{hint}</div>
+        <div style={{ fontSize: 11.5, color: "var(--stone)", marginTop: 2 }}>{hint}</div>
       </div>
     </Link>
   );

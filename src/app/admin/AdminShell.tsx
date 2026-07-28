@@ -41,8 +41,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   }, []);
 
   return (
-    <main style={{ minHeight: "100vh", background: "var(--paper)", color: "var(--ink)" }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "22px min(26px, 4vw) 64px" }}>
+    <main style={{ minHeight: "100dvh", background: "var(--paper)", color: "var(--ink)" }}>
+      <div id="main" style={{ maxWidth: 1100, margin: "0 auto", padding: "22px min(26px, 4vw) 64px" }}>
         <header
           style={{
             display: "flex",
@@ -57,44 +57,34 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             <div className="wordmark" style={{ fontSize: 22 }}>
               p<span className="ee" style={{ color: "var(--butter-deep)" }}>ee</span>q
             </div>
-            <div style={{ fontSize: 12, color: "var(--mut)", letterSpacing: ".12em", marginTop: 3 }}>
+            <div style={{ fontSize: 12, color: "var(--stone)", letterSpacing: ".12em", marginTop: 3 }}>
               admin console
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 12 }}>
-            {email && <span style={{ color: "var(--mut)" }}>{email}</span>}
-            <Link href="/dashboard" className="ph-btn" style={{ color: "var(--mut)" }}>
-              ← dashboard
+            {email && <span style={{ color: "var(--stone)" }}>{email}</span>}
+            {/* was "← dashboard" → /dashboard, which for an admin with no
+                shop of their own drops them straight into vendor onboarding —
+                a form asking the person who approves shops to create one */}
+            <Link href="/" className="ph-btn" style={{ color: "var(--stone)" }}>
+              ← peeq
             </Link>
           </div>
         </header>
 
+        {/* .tabs, the same component the vendor dashboard uses. This nav
+            re-implemented it from scratch and marked the active tab with a
+            --butter-deep underline where the dashboard uses --violet, so the
+            product had two visual languages for "you are here" depending on
+            which half of it you were in. */}
         {status === "ready" && (
-          <nav
-            style={{
-              display: "flex",
-              gap: 4,
-              flexWrap: "wrap",
-              borderBottom: "1px solid var(--line)",
-              marginBottom: 22,
-            }}
-          >
+          <nav className="tabs" aria-label="Admin sections">
             {NAV.map((n) => {
               const active = n.href === "/admin" ? pathname === "/admin" : pathname.startsWith(n.href);
               return (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  style={{
-                    padding: "9px 14px",
-                    fontSize: 13,
-                    textDecoration: "none",
-                    color: active ? "var(--forest-deep)" : "var(--mut)",
-                    borderBottom: "2px solid " + (active ? "var(--butter-deep)" : "transparent"),
-                    marginBottom: -1,
-                    fontWeight: active ? 600 : 400,
-                  }}
-                >
+                <Link key={n.href} href={n.href} className={active ? "on" : ""}
+                  aria-current={active ? "page" : undefined}
+                  style={{ textDecoration: "none", display: "inline-block", position: "relative" }}>
                   {n.label}
                 </Link>
               );
@@ -104,17 +94,20 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
         {status === "loading" && <Note>Loading…</Note>}
         {status === "nosupabase" && <Note>Admin tools need cloud mode (Supabase configured).</Note>}
+        {/* Denials were rendered by <Note> — grey --stone text in a plain panel,
+            i.e. exactly the styling used for "Loading…". Being refused access
+            and being told a neutral fact are not the same message. */}
         {status === "unauth" && (
-          <Note>
-            Please{" "}
-            <Link href="/login" style={{ color: "var(--violet)" }}>
-              sign in
+          <Denied>
+            You need to be signed in.{" "}
+            <Link href="/login" style={{ color: "var(--violet)", fontWeight: 600 }}>
+              Sign in
             </Link>{" "}
             with an admin account.
-          </Note>
+          </Denied>
         )}
         {status === "forbidden" && (
-          <Note>This account isn&apos;t an admin. Sign in as an allow-listed admin (ADMIN_EMAILS).</Note>
+          <Denied>This account isn&apos;t an admin. Sign in as an allow-listed admin (ADMIN_EMAILS).</Denied>
         )}
         {status === "ready" && children}
       </div>
@@ -125,27 +118,42 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 export function Note({ children }: { children: React.ReactNode }) {
   return (
     <div className="panel">
-      <div style={{ color: "var(--mut)", padding: 20, fontSize: 14 }}>{children}</div>
+      <div style={{ color: "var(--stone)", padding: 20, fontSize: 14 }}>{children}</div>
+    </div>
+  );
+}
+
+/** An access refusal. Same shape as Note, but it looks like a wall. */
+function Denied({ children }: { children: React.ReactNode }) {
+  return (
+    <div role="alert" className="panel" style={{ background: "var(--danger-bg)", borderColor: "var(--danger)" }}>
+      <div style={{ color: "var(--ink)", padding: 20, fontSize: 14, lineHeight: 1.6 }}>{children}</div>
     </div>
   );
 }
 
 /** Status pill shared by the shops table and the user list. */
 export function Pill({ tone, children }: { tone: "good" | "warn" | "bad" | "mute"; children: React.ReactNode }) {
+  // Straight off the semantic tokens. These were hand-mixed alphas before,
+  // which cost the pills their meaning in dark mode: the tints were built from
+  // light-mode ink and washed out to nothing, and "good" took --ink as
+  // its text, which inverts to the page's off-white — so a live shop and a
+  // suspended one were told apart by a tint nobody could see.
   const colors = {
-    good: { bg: "rgba(47,109,79,.10)", fg: "var(--forest-deep)" },
-    warn: { bg: "rgba(214,158,46,.14)", fg: "var(--butter-deep)" },
-    bad: { bg: "rgba(180,60,60,.10)", fg: "#9b3232" },
-    mute: { bg: "rgba(0,0,0,.05)", fg: "var(--mut)" },
+    good: { bg: "var(--ok-bg)", fg: "var(--ok)" },
+    warn: { bg: "var(--warn-bg)", fg: "var(--warn)" },
+    bad: { bg: "var(--danger-bg)", fg: "var(--danger)" },
+    mute: { bg: "var(--line)", fg: "var(--stone)" },
   }[tone];
   return (
     <span
       style={{
         background: colors.bg,
         color: colors.fg,
-        borderRadius: 999,
+        borderRadius: "var(--radius-pill)",
         padding: "3px 9px",
-        fontSize: 11,
+        fontSize: 12,
+        fontWeight: 600,
         letterSpacing: ".04em",
         whiteSpace: "nowrap",
       }}
@@ -169,10 +177,10 @@ export function SectionHead({ title, sub, right }: { title: string; sub?: string
       }}
     >
       <div>
-        <div className="ph-display" style={{ fontSize: 19, color: "var(--forest-deep)" }}>
+        <div className="ph-display" style={{ fontSize: 19, color: "var(--ink)" }}>
           {title}
         </div>
-        {sub && <div style={{ fontSize: 12.5, color: "var(--mut)", marginTop: 3 }}>{sub}</div>}
+        {sub && <div style={{ fontSize: 12.5, color: "var(--stone)", marginTop: 3 }}>{sub}</div>}
       </div>
       {right}
     </div>
@@ -189,7 +197,7 @@ export function Field(props: React.InputHTMLAttributes<HTMLInputElement>) {
         borderRadius: "var(--radius-btn)",
         border: "1px solid var(--line)",
         fontSize: 13,
-        background: "#fff",
+        background: "var(--card)",
         ...props.style,
       }}
     />

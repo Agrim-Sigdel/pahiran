@@ -12,7 +12,7 @@ export default function StorefrontError({ error, reset }: { error: Error & { dig
   }, [error]);
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, textAlign: "center", padding: 24, background: "var(--sage)" }}>
+    <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, textAlign: "center", padding: 24, background: "var(--paper)" }}>
       <div className="ph-display" style={{ fontSize: 26, color: "var(--ink)" }}>something went wrong</div>
       <p style={{ color: "var(--stone)", maxWidth: 380, margin: 0 }}>
         We couldn&apos;t load the collection just now. Your bag is safe.

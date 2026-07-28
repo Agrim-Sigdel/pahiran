@@ -59,7 +59,9 @@ create table tryon_events (
   created_at timestamptz not null default now()
 );
 
--- "I'm interested" leads from the kiosk result screen
+-- "I'm interested" leads from the kiosk result screen, and storefront bag
+-- checkouts. One row per line; the lines of one bag share an order_ref so the
+-- vendor's inbox can group them back into a single order.
 create table leads (
   id uuid primary key default gen_random_uuid(),
   shop_id uuid not null references shops (id) on delete cascade,
@@ -67,6 +69,12 @@ create table leads (
   name text,
   phone text,
   size text,
+  order_ref text,                     -- null for a lone kiosk "i want this"
+  qty integer not null default 1 check (qty between 1 and 99),
+  unit_price integer,                 -- price when ordered; never re-priced later
+  kind text not null default 'order' check (kind in ('order', 'enquiry')),
+  -- who placed it, stamped server-side from a verified token. Null = guest.
+  user_id uuid references auth.users (id) on delete set null,
   handled boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -127,6 +135,10 @@ create policy "own leads read" on leads
 create policy "own leads update" on leads
   for update using (shop_id in (select id from shops where owner = auth.uid()))
   with check (shop_id in (select id from shops where owner = auth.uid()));
+-- Shoppers read their own order history. Select-only: the handled flag belongs
+-- to the vendor, and a shopper cannot close their own order.
+create policy "own orders read" on leads
+  for select using (auth.uid() = user_id);
 
 -- Vendors can read their own error logs in the dashboard
 create policy "own errors read" on error_logs

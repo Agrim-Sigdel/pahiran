@@ -60,11 +60,11 @@ export default function Onboarding({ shop, onComplete }: {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--sage)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div className="fade-up" style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-modal)", width: 440, maxWidth: "100%", padding: "34px 30px" }}>
+    <div style={{ minHeight: "100dvh", background: "var(--paper)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div className="fade-up sheet" style={{ width: 440, maxWidth: "100%", padding: "34px 30px" }}>
         <div className="wordmark" style={{ fontSize: 18, marginBottom: 18 }}>p<span className="ee" style={{ color: "var(--butter-deep)" }}>ee</span>q</div>
-        <div className="ph-display" style={{ fontSize: 26, color: "var(--forest-deep)", marginBottom: 6 }}>set up your shop</div>
-        <p style={{ fontSize: 13.5, color: "var(--mut)", lineHeight: 1.6, margin: "0 0 20px" }}>
+        <div className="ph-display" style={{ fontSize: 26, color: "var(--ink)", marginBottom: 6 }}>set up your shop</div>
+        <p style={{ fontSize: 13.5, color: "var(--stone)", lineHeight: 1.6, margin: "0 0 20px" }}>
           Your shop name becomes your kiosk and storefront link. We review every new
           vendor and will give you a call to confirm before your shop goes live.
         </p>
@@ -89,12 +89,12 @@ export default function Onboarding({ shop, onComplete }: {
               vendor is buying. */}
           <label className="field">What do you sell?
             <select value={category} onChange={(e) => setCategory(e.target.value as ShopCategory)}
-              style={{ width: "100%", marginTop: 6, padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--cream)", fontSize: 14, color: "var(--ink)" }}>
+              style={{ width: "100%", marginTop: 6, padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 14, color: "var(--ink)" }}>
               {SHOP_CATEGORIES.map((c) => (
                 <option key={c.id} value={c.id}>{c.label}</option>
               ))}
             </select>
-            <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--mut)", marginTop: 6, display: "block", lineHeight: 1.5 }}>
+            <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--stone)", marginTop: 6, display: "block", lineHeight: 1.5 }}>
               {typeForCategory(category) === "apparel"
                 ? "You'll get the catalog, kiosk and AI try-on."
                 : "You'll get the catalog, kiosk and QR tags. AI try-on only works on worn clothing, so it isn't part of this plan."}
@@ -107,31 +107,31 @@ export default function Onboarding({ shop, onComplete }: {
               onChange={(e) => { setWhatsapp(e.target.value.replace(/[^0-9+ ]/g, "")); if (errors.whatsapp) setErrors((x) => ({ ...x, whatsapp: undefined })); }}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
             {errors.whatsapp && <span style={{ ...fieldErrorStyle, fontWeight: 400, letterSpacing: 0, textTransform: "none", marginTop: 4, display: "block" }}>{errors.whatsapp}</span>}
-            <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--mut)", marginTop: 4, display: "block" }}>
+            <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--stone)", marginTop: 4, display: "block" }}>
               Orders arrive here, and it's the number we'll call to verify your shop.
             </span>
           </label>
           <div className="field">Pin your shop on the map
-            <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--mut)", margin: "2px 0 8px", display: "block" }}>
+            <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--stone)", margin: "2px 0 8px", display: "block" }}>
               Optional — helps shoppers find you. Tap the map or use your location.
             </span>
             <LocationPicker lat={pin.lat} lng={pin.lng} onChange={(lat, lng) => setPin({ lat, lng })} />
           </div>
 
           {shop.id && slug.length >= 3 && (
-            <div style={{ background: "var(--sage)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "11px 13px", fontSize: 12.5, color: "var(--forest-deep)", lineHeight: 1.7 }}>
-              <div style={{ fontSize: 10.5, letterSpacing: ".14em", color: "var(--mut)", marginBottom: 3 }}>Your links</div>
+            <div style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "11px 13px", fontSize: 12.5, color: "var(--ink)", lineHeight: 1.7 }}>
+              <div style={{ fontSize: 10.5, letterSpacing: ".14em", color: "var(--stone)", marginBottom: 3 }}>Your links</div>
               <div>Kiosk: <code>{host}/k/{slug}</code></div>
               <div>Storefront: <code>{host}/s/{slug}</code></div>
             </div>
           )}
 
           <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", fontSize: 13.5, color: "var(--ink)", lineHeight: 1.5 }}>
-            <input type="checkbox" checked={listed} style={{ marginTop: 3, accentColor: "var(--forest)" }}
+            <input type="checkbox" checked={listed} style={{ marginTop: 3, accentColor: "var(--ink)" }}
               onChange={(e) => setListed(e.target.checked)} />
             <span>
               Show my shop on the peeq landing page
-              <span style={{ display: "block", fontSize: 12, color: "var(--mut)" }}>
+              <span style={{ display: "block", fontSize: 12, color: "var(--stone)" }}>
                 Shoppers can find and browse your storefront and kiosk.
               </span>
             </span>

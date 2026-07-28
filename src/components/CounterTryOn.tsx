@@ -7,6 +7,7 @@ import { fileToCompressedDataURL } from "@/lib/images";
 import { downloadImage } from "@/lib/looks";
 import { StitchingOverlay, ImageZoom } from "@/components/FabricStudio";
 import Icon from "@/components/Icon";
+import Dialog from "@/components/Dialog";
 import { COVERAGES } from "@/lib/types";
 import type { CounterInput, CounterRun, Fabric, Garment, Style, StyleCoverage, StyleFamily } from "@/lib/types";
 
@@ -52,7 +53,7 @@ interface Props {
    it gets the most pixels. The customer's photo matches what the kiosk sends;
    the cut reference only has to carry a silhouette. All three ride in one JSON
    body, which is why none of them is sent at full size. */
-const CLOTH_QUALITY = [1200, 0.85] as const;
+const CLOTH_QUALITY = [1536, 0.9] as const;
 const CUT_QUALITY = [900, 0.8] as const;
 const PERSON_QUALITY = [1000, 0.85] as const;
 
@@ -254,7 +255,7 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
     return (
       <div className="panel">
         <div className="panel-head"><span className="title">at the counter</span></div>
-        <p style={{ color: "var(--mut)", fontSize: 13.5, lineHeight: 1.7, margin: 0, maxWidth: 520 }}>
+        <p style={{ color: "var(--stone)", fontSize: 13.5, lineHeight: 1.7, margin: 0, maxWidth: 520 }}>
           The counter stitches and fits on our servers, so it needs your shop connected to the
           cloud. In local mode the dashboard still works — the counter is the one thing that
           can&apos;t.
@@ -267,8 +268,8 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
     <>
       <div className="cat-bar">
         <div>
-          <span className="ph-display" style={{ fontSize: 22, color: "var(--forest-deep)" }}>at the counter</span>
-          <span style={{ color: "var(--mut)", marginLeft: 10, fontSize: 13 }}>one cloth, one customer, right now</span>
+          <span className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>at the counter</span>
+          <span style={{ color: "var(--stone)", marginLeft: 10, fontSize: 13 }}>one cloth, one customer, right now</span>
         </div>
       </div>
 
@@ -283,38 +284,38 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
       {/* The previous fitting, from this browser — shown only while there's no
           live result on screen. Tap either picture to see it big. */}
       {!run && recent && (
-        <div className="fade-up" style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "12px 14px", marginBottom: 18, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <div className="fade-up" style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "12px 14px", marginBottom: 18, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" onClick={() => setZoomSrc(recent.tryon)} title="View larger"
-              style={{ padding: 0, border: "1px solid var(--line)", borderRadius: 6, overflow: "hidden", cursor: "zoom-in", background: "var(--sage-mist)", width: 62, height: 82 }}>
+              style={{ padding: 0, border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", overflow: "hidden", cursor: "zoom-in", background: "var(--paper-deep)", width: 62, height: 82 }}>
               <img src={recent.tryon} alt="Last fitting" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
             </button>
             <button type="button" onClick={() => setZoomSrc(recent.garment)} title="View larger"
-              style={{ padding: 0, border: "1px solid var(--line)", borderRadius: 6, overflow: "hidden", cursor: "zoom-in", background: "var(--sage-mist)", width: 62, height: 82 }}>
+              style={{ padding: 0, border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", overflow: "hidden", cursor: "zoom-in", background: "var(--paper-deep)", width: 62, height: 82 }}>
               <img src={recent.garment} alt="Last stitched piece" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
             </button>
           </div>
           <div style={{ flex: 1, minWidth: 140 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--forest-deep)" }}>last fitting</div>
-            <div style={{ fontSize: 11.5, color: "var(--mut)", marginTop: 2 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>last fitting</div>
+            <div style={{ fontSize: 11.5, color: "var(--stone)", marginTop: 2 }}>
               {familyLabel(recent.family)} · {new Date(recent.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
             </div>
           </div>
           <button type="button" className="ph-btn"
             onClick={() => { try { localStorage.removeItem(RECENT_KEY); } catch {} setRecent(null); }}
-            style={{ fontSize: 11.5, color: "var(--mut)", padding: "4px 8px" }}>
+            style={{ fontSize: 11.5, color: "var(--stone)", padding: "4px 8px" }}>
             clear
           </button>
         </div>
       )}
 
       {error && (
-        <div style={{ border: "1px solid var(--warn)", background: "var(--cream)", borderRadius: "var(--radius-card)", padding: "13px 16px", marginBottom: 18, fontSize: 13, color: "var(--warn)", lineHeight: 1.6 }}>
+        <div style={{ border: "1px solid var(--warn)", background: "var(--card)", borderRadius: "var(--radius-card)", padding: "13px 16px", marginBottom: 18, fontSize: 13, color: "var(--warn)", lineHeight: 1.6 }}>
           {error}
           {orphanRender && (
             <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 10 }}>
-              <img src={orphanRender} alt="The stitched piece" style={{ width: 68, height: 90, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }} />
-              <span style={{ color: "var(--mut)", fontSize: 12, lineHeight: 1.55 }}>
+              <img src={orphanRender} alt="The stitched piece" style={{ width: 68, height: 90, objectFit: "cover", borderRadius: "var(--radius-sm)", border: "1px solid var(--line)" }} />
+              <span style={{ color: "var(--stone)", fontSize: 12, lineHeight: 1.55 }}>
                 The stitching came out — only the fitting failed. Try again with a clearer,
                 waist-up photo of the customer.
               </span>
@@ -337,7 +338,7 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
           />
           {fabrics.length > 0 && (
             <button type="button" className="ph-btn" onClick={() => setFabricPickerOpen(true)}
-              style={{ marginTop: 6, fontSize: 11.5, color: "var(--forest-deep)", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 5, padding: 0, alignSelf: "flex-start" }}>
+              style={{ marginTop: 6, fontSize: 11.5, color: "var(--ink)", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 5, padding: 0, alignSelf: "flex-start" }}>
               <Icon name="search" /> pick a listed fabric
             </button>
           )}
@@ -350,7 +351,7 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
           </label>
           <label className="field" style={{ marginTop: 12 }}>Anything the photo can&apos;t show
             <textarea value={fabricNote} maxLength={300} onChange={(e) => setFabricNote(e.target.value)}
-              placeholder="e.g. gold border runs along one edge only" style={{ minHeight: 62 }} />
+              placeholder="e.g. gold border runs along one edge only" aria-label="Note about this cloth" style={{ minHeight: 62 }} />
           </label>
         </Step>
 
@@ -360,7 +361,7 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
             <>
               <div className="field">Pick a cut</div>
               <button type="button" onClick={() => setPickerOpen(true)}
-                style={{ ...selectStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer", textAlign: "left", color: pickedCut ? "var(--ink)" : "var(--mut)" }}>
+                style={{ ...selectStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer", textAlign: "left", color: pickedCut ? "var(--ink)" : "var(--stone)" }}>
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {pickedCut ? pickedCut.name : "Choose a cut…"}
                 </span>
@@ -370,27 +371,27 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
                   neighbours give the cloth and the customer, not a thumbnail
                   in a card of white space. */}
               {pickedCut && (
-                <div style={{ position: "relative", marginTop: 12, flex: "1 1 auto", minHeight: 168, background: "var(--sage-mist)", border: "1px solid var(--line)", borderRadius: 6, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ position: "relative", marginTop: 12, flex: "1 1 auto", minHeight: 168, background: "var(--paper-deep)", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {pickedCut.refImage ? (
                     <img src={pickedCut.refImage} alt={pickedCut.name}
                       style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", padding: 10, boxSizing: "border-box" }} />
                   ) : (
-                    <div style={{ fontSize: 12, color: "var(--mut)", fontStyle: "italic", lineHeight: 1.7, textAlign: "center", padding: "38px 18px 18px", display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                    <div style={{ fontSize: 12, color: "var(--stone)", fontStyle: "italic", lineHeight: 1.7, textAlign: "center", padding: "38px 18px 18px", display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                       “{pickedCut.hint}”
                     </div>
                   )}
-                  <span style={{ position: "absolute", top: 10, left: 10, background: "var(--cream)", color: "var(--forest-deep)", fontSize: 9.5, fontWeight: 600, letterSpacing: ".09em", padding: "3px 8px", borderRadius: 2, textTransform: "uppercase" }}>
+                  <span style={{ position: "absolute", top: 10, left: 10, background: "var(--card)", color: "var(--ink)", fontSize: 9.5, fontWeight: 600, letterSpacing: ".09em", padding: "3px 8px", borderRadius: "var(--radius-xs)", textTransform: "uppercase" }}>
                     {COVERAGES.find((c) => c.id === pickedCut.coverage)?.label}
                   </span>
                 </div>
               )}
               {pickedCut?.refImage && pickedCut.hint && (
-                <div style={{ marginTop: 8, fontSize: 11, color: "var(--mut)", lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                <div style={{ marginTop: 8, fontSize: 11, color: "var(--stone)", lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                   {pickedCut.hint}
                 </div>
               )}
               <button type="button" className="ph-btn" onClick={() => setCutSource("custom")}
-                style={{ marginTop: "auto", paddingTop: 12, alignSelf: "flex-start", fontSize: 12, color: "var(--forest-deep)", fontWeight: 500, textDecoration: "underline", textUnderlineOffset: 3, paddingLeft: 0, paddingRight: 0, paddingBottom: 0 }}>
+                style={{ marginTop: "auto", paddingTop: 12, alignSelf: "flex-start", fontSize: 12, color: "var(--ink)", fontWeight: 500, textDecoration: "underline", textUnderlineOffset: 3, paddingLeft: 0, paddingRight: 0, paddingBottom: 0 }}>
                 + make a new cut instead
               </button>
             </>
@@ -422,16 +423,16 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
                     aria-pressed={coverage === c.id} title={c.note}
                     style={{
                       flex: 1, padding: "9px 6px", fontSize: 11.5, fontWeight: 500, borderRadius: "var(--radius-btn)",
-                      background: coverage === c.id ? "var(--forest)" : "var(--sage)",
-                      color: coverage === c.id ? "var(--cream)" : "var(--forest-deep)",
-                      border: "1px solid " + (coverage === c.id ? "var(--forest)" : "var(--line)"),
+                      background: coverage === c.id ? "var(--ink)" : "var(--paper)",
+                      color: coverage === c.id ? "var(--card)" : "var(--ink)",
+                      border: "1px solid " + (coverage === c.id ? "var(--ink)" : "var(--line)"),
                     }}>
                     {c.label}
                   </button>
                 ))}
               </div>
               <button type="button" className="ph-btn" onClick={() => setCutSource("existing")}
-                style={{ marginTop: 12, fontSize: 12, color: "var(--forest-deep)", fontWeight: 500, textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}>
+                style={{ marginTop: 12, fontSize: 12, color: "var(--ink)", fontWeight: 500, textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}>
                 pick an existing cut instead
               </button>
             </>
@@ -452,7 +453,7 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
           {/* Their face, their call. The kiosk asks the shopper directly; here
               there is a counter between them and the upload, so the asking is
               the vendor's job and it has to be said out loud. */}
-          <div style={{ fontSize: 11.5, color: "var(--mut)", marginTop: 12, lineHeight: 1.6 }}>
+          <div style={{ fontSize: 11.5, color: "var(--stone)", marginTop: 12, lineHeight: 1.6 }}>
             Ask before you photograph anyone. The photo stays private to this shop.
           </div>
         </Step>
@@ -463,7 +464,7 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
           style={{ padding: "13px 26px", fontSize: 12.5, opacity: ready ? 1 : 0.5 }}>
           {busy ? "stitching…" : "stitch & try on"}
         </button>
-        <span style={{ fontSize: 11.5, color: "var(--mut)", lineHeight: 1.55 }}>
+        <span style={{ fontSize: 11.5, color: "var(--stone)", lineHeight: 1.55 }}>
           {fabricImage && personImage && !describable
             ? cutSource === "existing"
               ? "Pick a cut to stitch this cloth into."
@@ -537,31 +538,31 @@ function CutPickerModal({ cuts, familyName, selectedId, onPick, onClose }: {
     : cuts;
 
   return (
-    <div onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.5)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 60, padding: 16, overflowY: "auto" }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 680, maxWidth: "100%", margin: "18px 0", padding: "22px 20px 24px", display: "flex", flexDirection: "column", maxHeight: "calc(100dvh - 68px)" }}>
+    <Dialog onClose={onClose} hideHeader width={680} ariaLabel="Pick a cut"
+      scrimStyle={{ alignItems: "flex-start", overflowY: "auto" }}
+      panelStyle={{ margin: "18px 0", padding: "22px 20px 24px", display: "flex", flexDirection: "column", maxHeight: "calc(100dvh - 68px)" }}>
+      <>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
           <div>
-            <span className="ph-display" style={{ fontSize: 20, color: "var(--forest-deep)" }}>pick a cut</span>
-            <span style={{ color: "var(--mut)", marginLeft: 9, fontSize: 12.5 }}>{familyName}</span>
+            <span className="ph-display" style={{ fontSize: 20, color: "var(--ink)" }}>pick a cut</span>
+            <span style={{ color: "var(--stone)", marginLeft: 9, fontSize: 12.5 }}>{familyName}</span>
           </div>
           <button className="ph-btn" onClick={onClose}
-            style={{ color: "var(--mut)", fontSize: 12, padding: "4px 8px" }}>close</button>
+            style={{ color: "var(--stone)", fontSize: 12, padding: "4px 8px" }}>close</button>
         </div>
 
         <div style={{ position: "relative", marginBottom: 14 }}>
-          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--mut)", display: "flex" }}>
+          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--stone)", display: "flex" }}>
             <Icon name="search" />
           </span>
           <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus
             placeholder="Search cuts…" aria-label="Search cuts"
-            style={{ width: "100%", padding: "11px 12px 11px 36px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "#fff", fontSize: 13.5, boxSizing: "border-box" }} />
+            style={{ width: "100%", padding: "11px 12px 11px 36px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13.5, boxSizing: "border-box" }} />
         </div>
 
         <div style={{ overflowY: "auto", minHeight: 0 }}>
           {visible.length === 0 ? (
-            <div style={{ color: "var(--mut)", fontSize: 13, padding: "26px 0", textAlign: "center" }}>
+            <div style={{ color: "var(--stone)", fontSize: 13, padding: "26px 0", textAlign: "center" }}>
               No {familyName.toLowerCase()} cut matches that.
             </div>
           ) : (
@@ -574,16 +575,16 @@ function CutPickerModal({ cuts, familyName, selectedId, onPick, onClose }: {
                   <button key={c.id} type="button" onClick={() => onPick(c.id)}
                     style={{
                       textAlign: "left", padding: 0, cursor: "pointer", display: "flex", flexDirection: "column",
-                      background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden",
-                      border: on ? "2px solid var(--forest)" : "1px solid var(--line)",
+                      background: "var(--card)", borderRadius: "var(--radius-card)", overflow: "hidden",
+                      border: on ? "2px solid var(--ink)" : "1px solid var(--line)",
                     }}>
                     {c.refImage ? (
-                      <span style={{ display: "block", aspectRatio: "4/3", position: "relative", background: "var(--sage-mist)", width: "100%" }}>
+                      <span style={{ display: "block", aspectRatio: "4/3", position: "relative", background: "var(--paper-deep)", width: "100%" }}>
                         <img src={c.refImage} alt=""
                           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", padding: 6, boxSizing: "border-box" }} />
                       </span>
                     ) : (
-                      <span style={{ display: "block", padding: "10px 11px 0", fontSize: 10.5, color: "var(--mut)", fontStyle: "italic", lineHeight: 1.55 }}>
+                      <span style={{ display: "block", padding: "10px 11px 0", fontSize: 10.5, color: "var(--stone)", fontStyle: "italic", lineHeight: 1.55 }}>
                         <span style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                           “{c.hint}”
                         </span>
@@ -595,16 +596,16 @@ function CutPickerModal({ cuts, familyName, selectedId, onPick, onClose }: {
                       </span>
                       <span style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
                         {cov && (
-                          <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: ".08em", padding: "2px 6px", borderRadius: 2, textTransform: "uppercase", background: "var(--sage)", color: "var(--forest-deep)" }}>
+                          <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: ".08em", padding: "2px 6px", borderRadius: "var(--radius-xs)", textTransform: "uppercase", background: "var(--paper)", color: "var(--ink)" }}>
                             {cov.label}
                           </span>
                         )}
                         {mine && (
-                          <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: ".08em", padding: "2px 6px", borderRadius: 2, background: "var(--forest)", color: "var(--cream)" }}>
+                          <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: ".08em", padding: "2px 6px", borderRadius: "var(--radius-xs)", background: "var(--ink)", color: "var(--card)" }}>
                             YOURS
                           </span>
                         )}
-                        {on && <Icon name="check" style={{ color: "var(--forest)", marginLeft: "auto" }} />}
+                        {on && <Icon name="check" style={{ color: "var(--ink)", marginLeft: "auto" }} />}
                       </span>
                     </span>
                   </button>
@@ -613,8 +614,8 @@ function CutPickerModal({ cuts, familyName, selectedId, onPick, onClose }: {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </>
+    </Dialog>
   );
 }
 
@@ -637,31 +638,31 @@ function FabricPickerModal({ fabrics, selectedId, onPick, onClose }: {
     : fabrics;
 
   return (
-    <div onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(26,23,20,.5)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 60, padding: 16, overflowY: "auto" }}>
-      <div onClick={(e) => e.stopPropagation()} className="fade-up"
-        style={{ background: "var(--cream)", borderRadius: "var(--radius-modal)", width: 680, maxWidth: "100%", margin: "18px 0", padding: "22px 20px 24px", display: "flex", flexDirection: "column", maxHeight: "calc(100dvh - 68px)" }}>
+    <Dialog onClose={onClose} hideHeader width={680} ariaLabel="Pick a fabric"
+      scrimStyle={{ alignItems: "flex-start", overflowY: "auto" }}
+      panelStyle={{ margin: "18px 0", padding: "22px 20px 24px", display: "flex", flexDirection: "column", maxHeight: "calc(100dvh - 68px)" }}>
+      <>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
           <div>
-            <span className="ph-display" style={{ fontSize: 20, color: "var(--forest-deep)" }}>pick a fabric</span>
-            <span style={{ color: "var(--mut)", marginLeft: 9, fontSize: 12.5 }}>{fabrics.length} listed</span>
+            <span className="ph-display" style={{ fontSize: 20, color: "var(--ink)" }}>pick a fabric</span>
+            <span style={{ color: "var(--stone)", marginLeft: 9, fontSize: 12.5 }}>{fabrics.length} listed</span>
           </div>
           <button className="ph-btn" onClick={onClose}
-            style={{ color: "var(--mut)", fontSize: 12, padding: "4px 8px" }}>close</button>
+            style={{ color: "var(--stone)", fontSize: 12, padding: "4px 8px" }}>close</button>
         </div>
 
         <div style={{ position: "relative", marginBottom: 14 }}>
-          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--mut)", display: "flex" }}>
+          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--stone)", display: "flex" }}>
             <Icon name="search" />
           </span>
           <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus
             placeholder="Search by name, code, colour…" aria-label="Search fabrics"
-            style={{ width: "100%", padding: "11px 12px 11px 36px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "#fff", fontSize: 13.5, boxSizing: "border-box" }} />
+            style={{ width: "100%", padding: "11px 12px 11px 36px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13.5, boxSizing: "border-box" }} />
         </div>
 
         <div style={{ overflowY: "auto", minHeight: 0 }}>
           {visible.length === 0 ? (
-            <div style={{ color: "var(--mut)", fontSize: 13, padding: "26px 0", textAlign: "center" }}>
+            <div style={{ color: "var(--stone)", fontSize: 13, padding: "26px 0", textAlign: "center" }}>
               No fabric matches that.
             </div>
           ) : (
@@ -672,18 +673,18 @@ function FabricPickerModal({ fabrics, selectedId, onPick, onClose }: {
                   <button key={f.id} type="button" onClick={() => onPick(f)}
                     style={{
                       textAlign: "left", padding: 0, cursor: "pointer", display: "flex", flexDirection: "column",
-                      background: "var(--cream)", borderRadius: "var(--radius-card)", overflow: "hidden",
-                      border: on ? "2px solid var(--forest)" : "1px solid var(--line)",
+                      background: "var(--card)", borderRadius: "var(--radius-card)", overflow: "hidden",
+                      border: on ? "2px solid var(--ink)" : "1px solid var(--line)",
                       opacity: f.inStock ? 1 : 0.55,
                     }}>
-                    <span style={{ display: "block", aspectRatio: "4/3", position: "relative", background: "var(--sage-mist)", width: "100%" }}>
+                    <span style={{ display: "block", aspectRatio: "4/3", position: "relative", background: "var(--paper-deep)", width: "100%" }}>
                       <img src={f.image} alt=""
                         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-                      <span style={{ position: "absolute", top: 8, left: 8, background: "var(--cream)", color: "var(--forest-deep)", fontSize: 9, fontWeight: 600, letterSpacing: ".08em", padding: "2px 7px", borderRadius: 2 }}>
+                      <span style={{ position: "absolute", top: 8, left: 8, background: "var(--card)", color: "var(--ink)", fontSize: 9, fontWeight: 600, letterSpacing: ".08em", padding: "2px 7px", borderRadius: "var(--radius-xs)" }}>
                         {familyLabel(f.family)}
                       </span>
                       {!f.inStock && (
-                        <span style={{ position: "absolute", bottom: 8, left: 8, background: "var(--forest-deep)", color: "var(--cream)", fontSize: 9, fontWeight: 500, letterSpacing: ".07em", padding: "2px 7px", borderRadius: 2 }}>
+                        <span style={{ position: "absolute", bottom: 8, left: 8, background: "var(--ink)", color: "var(--card)", fontSize: 9, fontWeight: 500, letterSpacing: ".07em", padding: "2px 7px", borderRadius: "var(--radius-xs)" }}>
                           Out of stock
                         </span>
                       )}
@@ -691,13 +692,13 @@ function FabricPickerModal({ fabrics, selectedId, onPick, onClose }: {
                     <span style={{ display: "flex", flexDirection: "column", gap: 3, padding: "9px 11px 10px", width: "100%", boxSizing: "border-box" }}>
                       <span style={{ fontWeight: 600, fontSize: 11.5, color: "var(--ink)", lineHeight: 1.4 }}>{f.name}</span>
                       {(f.composition || f.color) && (
-                        <span style={{ fontSize: 10, color: "var(--mut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 10, color: "var(--stone)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {[f.composition, f.color].filter(Boolean).join(" · ")}
                         </span>
                       )}
                       <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                        <span style={{ fontSize: 10, color: "var(--camel)", fontWeight: 500 }}>{fabricPrice(f.price, f.unit)}</span>
-                        {on && <Icon name="check" style={{ color: "var(--forest)", marginLeft: "auto" }} />}
+                        <span style={{ fontSize: 10, color: "var(--stone)", fontWeight: 500 }}>{fabricPrice(f.price, f.unit)}</span>
+                        {on && <Icon name="check" style={{ color: "var(--ink)", marginLeft: "auto" }} />}
                       </span>
                     </span>
                   </button>
@@ -706,14 +707,14 @@ function FabricPickerModal({ fabrics, selectedId, onPick, onClose }: {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </>
+    </Dialog>
   );
 }
 
 const selectStyle: React.CSSProperties = {
-  padding: "12px 15px", borderRadius: 14, border: "1px solid var(--line)",
-  fontSize: 15, background: "#fff", color: "var(--ink)", fontWeight: 400,
+  padding: "12px 15px", borderRadius: "var(--radius-lg)", border: "1px solid var(--line)",
+  fontSize: 15, background: "var(--card)", color: "var(--ink)", fontWeight: 400,
   letterSpacing: 0, textTransform: "none", width: "100%",
 };
 
@@ -723,12 +724,12 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
      height the grid gives every card — that's what keeps the three steps'
      frames level with each other. */
   return (
-    <div style={{ background: "var(--cream)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "16px 17px 18px", display: "flex", flexDirection: "column" }}>
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "16px 17px 18px", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
-        <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--forest)", color: "var(--cream)", fontSize: 11.5, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--ink)", color: "var(--card)", fontSize: 11.5, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           {n}
         </span>
-        <span className="ph-display" style={{ fontSize: 17, color: "var(--forest-deep)" }}>{title}</span>
+        <span className="ph-display" style={{ fontSize: 17, color: "var(--ink)" }}>{title}</span>
       </div>
       {children}
     </div>
@@ -766,7 +767,7 @@ function PhotoBox({ image, onImage, max, label, hint, optional, camera, onError 
     <>
       <button type="button" onClick={() => fileRef.current?.click()}
         aria-label={image ? "Replace: " + label : label}
-        style={{ width: "100%", border: "1.5px dashed " + (image ? "var(--forest)" : "var(--line)"), borderRadius: 6, minHeight: 168, flex: "1 1 auto", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", overflow: "hidden", background: "var(--sage)", color: "var(--mut)", fontSize: 13, textAlign: "center", lineHeight: 1.6, padding: 0, position: "relative" }}>
+        style={{ width: "100%", border: "1.5px dashed " + (image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-sm)", minHeight: 168, flex: "1 1 auto", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 13, textAlign: "center", lineHeight: 1.6, padding: 0, position: "relative" }}>
         {reading ? <span>Reading photo…</span>
           : image ? <img src={image} alt={label} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
           : (
@@ -779,13 +780,13 @@ function PhotoBox({ image, onImage, max, label, hint, optional, camera, onError 
       <div style={{ display: "flex", gap: 10, marginTop: 6, alignItems: "center" }}>
         {camera && (
           <button type="button" className="ph-btn" onClick={() => camRef.current?.click()}
-            style={{ fontSize: 11.5, color: "var(--forest-deep)", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 5 }}>
+            style={{ fontSize: 11.5, color: "var(--ink)", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 5 }}>
             <Icon name="camera" /> use the camera
           </button>
         )}
         {image && (
           <button type="button" className="ph-btn" onClick={() => fileRef.current?.click()}
-            style={{ fontSize: 11.5, color: "var(--mut)" }}>replace</button>
+            style={{ fontSize: 11.5, color: "var(--stone)" }}>replace</button>
         )}
       </div>
       <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
@@ -882,24 +883,24 @@ function Result({ run, input, onKeep, onAddGarment, onStartOver }: {
   };
 
   return (
-    <div style={{ background: "var(--cream)", border: "1px solid var(--forest)", borderRadius: "var(--radius-card)", padding: "18px 18px 20px", marginBottom: 20 }}>
+    <div style={{ background: "var(--card)", border: "1px solid var(--ink)", borderRadius: "var(--radius-card)", padding: "18px 18px 20px", marginBottom: 20 }}>
       <div className="counter-result">
         <div style={{ position: "relative" }}>
-          <img src={run.tryonUrl} alt="The customer wearing the stitched piece"
-            style={{ width: "100%", borderRadius: 8, display: "block", background: "var(--sage-mist)" }} />
-          <span style={{ position: "absolute", top: 10, left: 10, background: "rgba(26,23,20,.78)", color: "var(--cream)", fontSize: 9.5, fontWeight: 500, letterSpacing: ".09em", padding: "4px 9px", borderRadius: 2 }}>
+          <img src={run.tryonUrl} alt="The customer wearing the stitched piece" className="img-blend"
+            style={{ width: "100%", borderRadius: "var(--radius-sm)", display: "block", background: "var(--paper-deep)" }} />
+          <span style={{ position: "absolute", top: 10, left: 10, background: "var(--stage-veil)", color: "var(--on-slab)", fontSize: 9.5, fontWeight: 500, letterSpacing: ".09em", padding: "4px 9px", borderRadius: "var(--radius-xs)" }}>
             STYLE PREVIEW
           </span>
         </div>
         <div>
-          <div className="ph-display" style={{ fontSize: 18, color: "var(--forest-deep)", marginBottom: 4 }}>
+          <div className="ph-display" style={{ fontSize: 18, color: "var(--ink)", marginBottom: 4 }}>
             {familyLabel(input.family)}, stitched and fitted
           </div>
-          <div style={{ fontSize: 12, color: "var(--mut)", lineHeight: 1.6, marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: "var(--stone)", lineHeight: 1.6, marginBottom: 12 }}>
             A preview of the style, not of the fit — the tailor still takes the measurements.
           </div>
           <img src={run.garmentUrl} alt="The stitched piece on its own"
-            style={{ width: 128, borderRadius: 6, display: "block", border: "1px solid var(--line)", marginBottom: 12 }} />
+            style={{ width: 128, borderRadius: "var(--radius-sm)", display: "block", border: "1px solid var(--line)", marginBottom: 12 }} />
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
             {/* Fetched and re-offered as a blob rather than linked with
@@ -912,11 +913,11 @@ function Result({ run, input, onKeep, onAddGarment, onStartOver }: {
                 try { await downloadImage(run.tryonUrl, familyLabel(input.family)); } catch {}
                 setDownloading(false);
               }}
-              style={{ fontSize: 11.5, fontWeight: 500, color: "var(--forest-deep)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px", display: "inline-flex", alignItems: "center", gap: 6, opacity: downloading ? 0.6 : 1 }}>
+              style={{ fontSize: 11.5, fontWeight: 500, color: "var(--ink)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px", display: "inline-flex", alignItems: "center", gap: 6, opacity: downloading ? 0.6 : 1 }}>
               <Icon name="download" /> {downloading ? "saving…" : "save the photo"}
             </button>
             <button className="ph-btn" onClick={onStartOver}
-              style={{ fontSize: 11.5, fontWeight: 500, color: "var(--mut)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
+              style={{ fontSize: 11.5, fontWeight: 500, color: "var(--stone)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
               start again
             </button>
           </div>
@@ -926,7 +927,7 @@ function Result({ run, input, onKeep, onAddGarment, onStartOver }: {
               render they already paid for becomes the composition joining the
               two — waiting in the Fabrics tab for a price. */}
           {kept ? (
-            <div style={{ fontSize: 12.5, color: "var(--forest)", lineHeight: 1.6 }}>
+            <div style={{ fontSize: 12.5, color: "var(--ink)", lineHeight: 1.6 }}>
               <Icon name="check" />{" "}
               {kept === "fabric"
                 ? "Kept. It's in your Fabrics tab — set a price there, then publish it for shoppers."
@@ -944,15 +945,15 @@ function Result({ run, input, onKeep, onAddGarment, onStartOver }: {
                   onChange={(e) => setNames((n) => ({ ...n, cut: e.target.value }))}
                   placeholder="e.g. Our house 3-piece" />
               </label>
-              <div style={{ fontSize: 11, color: "var(--mut)", lineHeight: 1.55 }}>
+              <div style={{ fontSize: 11, color: "var(--stone)", lineHeight: 1.55 }}>
                 Saved without a price and unpublished, so nothing reaches shoppers until you say
                 so. The customer&apos;s photo is not kept with it.
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="ph-btn" disabled={saving} onClick={() => setForm(null)}
-                  style={{ flex: 1, color: "var(--forest-deep)", padding: 11, fontSize: 11.5, border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>cancel</button>
+                  style={{ flex: 1, color: "var(--ink)", padding: 11, fontSize: 11.5, border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>cancel</button>
                 <button className="ph-btn" disabled={!canSave} onClick={save}
-                  style={{ flex: 2, background: canSave ? "var(--forest)" : "var(--line)", color: canSave ? "var(--cream)" : "var(--mut)", padding: 11, fontSize: 11.5, borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
+                  style={{ flex: 2, background: canSave ? "var(--ink)" : "var(--line)", color: canSave ? "var(--card)" : "var(--stone)", padding: 11, fontSize: 11.5, borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
                   {saving ? "keeping…" : "keep it"}
                 </button>
               </div>
@@ -969,15 +970,15 @@ function Result({ run, input, onKeep, onAddGarment, onStartOver }: {
                   onChange={(e) => setGarmentPrice(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))}
                   placeholder="e.g. 12500" />
               </label>
-              <div style={{ fontSize: 11, color: "var(--mut)", lineHeight: 1.55 }}>
+              <div style={{ fontSize: 11, color: "var(--stone)", lineHeight: 1.55 }}>
                 Goes straight into your catalog as a stitched-to-order piece, try-on enabled.
                 The customer&apos;s photo is not kept with it.
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="ph-btn" disabled={saving} onClick={() => setForm(null)}
-                  style={{ flex: 1, color: "var(--forest-deep)", padding: 11, fontSize: 11.5, border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>cancel</button>
+                  style={{ flex: 1, color: "var(--ink)", padding: 11, fontSize: 11.5, border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 500 }}>cancel</button>
                 <button className="ph-btn" disabled={!canAddGarment} onClick={addGarment}
-                  style={{ flex: 2, background: canAddGarment ? "var(--forest)" : "var(--line)", color: canAddGarment ? "var(--cream)" : "var(--mut)", padding: 11, fontSize: 11.5, borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
+                  style={{ flex: 2, background: canAddGarment ? "var(--ink)" : "var(--line)", color: canAddGarment ? "var(--card)" : "var(--stone)", padding: 11, fontSize: 11.5, borderRadius: "var(--radius-btn)", fontWeight: 500 }}>
                   {saving ? "adding…" : "add to catalog"}
                 </button>
               </div>
@@ -989,7 +990,7 @@ function Result({ run, input, onKeep, onAddGarment, onStartOver }: {
                 keep this in my fabrics
               </button>
               <button className="ph-btn" onClick={() => setForm("garment")}
-                style={{ padding: "10px 18px", fontSize: 11.5, fontWeight: 500, color: "var(--forest-deep)", border: "1px solid var(--forest)", borderRadius: "var(--radius-btn)" }}>
+                style={{ padding: "10px 18px", fontSize: 11.5, fontWeight: 500, color: "var(--ink)", border: "1px solid var(--ink)", borderRadius: "var(--radius-btn)" }}>
                 add to catalog as a garment
               </button>
             </div>

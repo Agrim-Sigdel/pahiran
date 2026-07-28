@@ -20,8 +20,10 @@ const OPENAI_ENDPOINT = "https://api.openai.com/v1/images/edits";
    that gets tried again; the quick path is unaffected.
      1 → original single-garment swap
      2 → coverage-aware: sets replace every piece (including dupatta/shawl),
-         tops and bottoms leave the other half of the outfit untouched */
-export const STUDIO_PROMPT_VERSION = 2;
+         tops and bottoms leave the other half of the outfit untouched
+     3 → body lock: the person's build survives under the garment; the garment
+         is sized to the body, never the body to the garment */
+export const STUDIO_PROMPT_VERSION = 3;
 
 /** Best-effort abuse check on a person's photo before we spend on it.
     Only clearly disallowed uploads are blocked; a normal clothed photo never
@@ -156,14 +158,19 @@ Identity lock (most important rule): the face must be carried over from the firs
       `Do not retouch, beautify, slim, relight or regenerate it. Keep the identical facial features, expression, ` +
       `skin tone and texture, hairstyle, facial hair, and any glasses or jewellery. ${scene}
 
+Body lock: the person's real build must be preserved exactly — their weight, belly, waist, chest, shoulders, ` +
+      `arms and overall proportions, as they appear in the first image, including everywhere the new garment ` +
+      `covers. Do not slim, tone, reshape, elongate or idealize any part of them.
+
 Garment fidelity: reproduce the second image's garment exactly. Match its color and shade, fabric and texture, ` +
       `pattern placement and scale, neckline, collar, sleeve length, hem length, buttons, zips, prints, logos, ` +
-      `embroidery and trims. Do not invent, remove, recolor or restyle any element. Fit it naturally to this ` +
-      `person's body in this pose, with ${lighting}.
+      `embroidery and trims. Do not invent, remove, recolor or restyle any element. Size and drape the garment ` +
+      `to fit THIS body — the cloth stretches, folds and falls over their true shape, in this pose, with ` +
+      `${lighting}. Never alter the body to make the garment sit better.
 
 Strictly forbidden: warped or extra limbs, deformed hands or fingers, floating or melted fabric, double garments, ` +
-      `an altered face or hair, added people, added text or watermarks, ${backgroundBan}, framing or aspect changes, ` +
-      `and any stylization or illustration look.
+      `an altered face or hair, a slimmer, taller or otherwise altered body or build, added people, added text ` +
+      `or watermarks, ${backgroundBan}, framing or aspect changes, and any stylization or illustration look.
 
 ${closing}`
   );

@@ -19,6 +19,19 @@ export interface ShopperContact {
   phone: string;
 }
 
+/** The signed-in user's access token, for server routes that insert on the
+    shopper's behalf and need to know who they are. The server verifies it —
+    sending a bare user id instead would be forgeable. */
+export async function currentAccessToken(): Promise<string | null> {
+  if (!isSupabaseConfigured()) return null;
+  try {
+    const { data } = await supabase().auth.getSession();
+    return data.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** The signed-in user's id, or null (not logged in / Supabase off). */
 export async function currentUserId(): Promise<string | null> {
   if (!isSupabaseConfigured()) return null;
@@ -81,6 +94,30 @@ export async function signUpWithEmail(email: string, password: string) {
 export async function signOut(): Promise<void> {
   if (!isSupabaseConfigured()) return;
   await supabase().auth.signOut();
+}
+
+/* Forgotten password.
+
+   There was no reset flow anywhere in the codebase — no "forgot password?"
+   link on either auth surface or in the checkout drawer's inline sign-in.
+   Anyone who forgot theirs was locked out permanently: a shopper from their
+   saved looks and order history, a vendor from their entire shop.
+
+   Deliberately does not distinguish "no such account" from "email sent". The
+   caller shows the same confirmation either way, so this endpoint can't be
+   used to find out who has an account here. */
+export async function sendPasswordReset(email: string): Promise<{ error: Error | null }> {
+  if (!isSupabaseConfigured()) return { error: null };
+  const redirectTo =
+    typeof window === "undefined" ? undefined : `${window.location.origin}/reset`;
+  const { error } = await supabase().auth.resetPasswordForEmail(email, { redirectTo });
+  return { error: error ? new Error(error.message) : null };
+}
+
+/** Set a new password for the session the reset link established. */
+export async function updatePassword(password: string): Promise<{ error: Error | null }> {
+  const { error } = await supabase().auth.updateUser({ password });
+  return { error: error ? new Error(error.message) : null };
 }
 
 /* ---------- profiles / roles ---------- */

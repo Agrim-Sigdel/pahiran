@@ -1,13 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { fileToCompressedDataURL } from "@/lib/images";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import Icon from "@/components/Icon";
 import { loadCatalog } from "@/lib/storage";
+import { adminGet, statusFromError, type AdminStatus } from "@/lib/admin-client";
 
 /* Dev tool: run one person photo + one garment through all try-on providers
-   in parallel; each card paints the moment its provider finishes. */
+   in parallel; each card paints the moment its provider finishes.
+
+   Admin-only. Every run here spends real fal and OpenAI credits, and the only
+   thing guarding that was a dev-mode check plus a line of copy reading "dev
+   tool · not linked anywhere" — which is a note, not a lock. The guard here
+   decides what renders; /api/compare re-checks the token on every request and
+   is the actual boundary. */
 
 const PROVIDERS = [
   { id: "fal", label: "fal · FASHN v1.6" },
@@ -33,7 +41,23 @@ export default function CompareClient() {
   const [person, setPerson] = useState<string | null>(null);
   const [quality, setQuality] = useState<"low" | "medium" | "high">("low");
   const [slots, setSlots] = useState<Partial<Record<ProviderId, Slot>>>({});
+  const [access, setAccess] = useState<AdminStatus>("loading");
+  const [token, setToken] = useState<string | null>(null);
   const runId = useRef(0);
+  const personFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let alive = true;
+    adminGet<{ email: string }>("/api/admin/me")
+      .then(async () => {
+        if (!alive) return;
+        const { data } = await supabase().auth.getSession();
+        setToken(data.session?.access_token ?? null);
+        setAccess("ready");
+      })
+      .catch((e) => { if (alive) setAccess(statusFromError(e)); });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -56,7 +80,10 @@ export default function CompareClient() {
     setSlots((s) => ({ ...s, [provider]: { state: "pending" } }));
     fetch("/api/compare", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: "Bearer " + token } : {}),
+      },
       body: JSON.stringify({
         provider, personImage: person, garmentImage: garment.image, category: garment.category, quality,
       }),
@@ -86,10 +113,39 @@ export default function CompareClient() {
   const busy = Object.values(slots).some((s) => s?.state === "pending");
   const started = Object.keys(slots).length > 0;
 
+  if (access !== "ready") {
+    return (
+      <main style={{ minHeight: "100dvh", background: "var(--paper)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div className="sheet" style={{ padding: "34px 30px", width: 420, maxWidth: "100%", textAlign: "center" }}>
+          {access === "loading" ? (
+            <>
+              <span className="ee-mark ee-looking" style={{ fontSize: 38, color: "var(--violet)" }}><span>ee</span></span>
+              <p style={{ color: "var(--stone)", marginTop: 12 }}>one moment…</p>
+            </>
+          ) : (
+            <div role="alert">
+              <h1 className="ph-display" style={{ fontSize: 22, color: "var(--ink)", margin: "0 0 8px" }}>admins only</h1>
+              <p style={{ color: "var(--stone)", fontSize: 13.5, lineHeight: 1.6, margin: "0 0 18px" }}>
+                {access === "nosupabase"
+                  ? "This tool needs cloud mode (Supabase configured)."
+                  : access === "unauth"
+                  ? "Sign in with an allow-listed admin account to use the provider comparison — every run spends real credits."
+                  : "This account isn't an admin. Every run here spends real fal and OpenAI credits."}
+              </p>
+              <Link href={access === "unauth" ? "/login" : "/"} className="ph-btn btn-violet" style={{ width: "100%" }}>
+                {access === "unauth" ? "sign in" : "back home"}
+              </Link>
+            </div>
+          )}
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main style={{ minHeight: "100vh", background: "var(--paper)", padding: "30px 20px 60px" }}>
-      <div style={{ maxWidth: 1040, margin: "0 auto" }}>
-        <div className="kicker" style={{ marginBottom: 6 }}>dev tool · not linked anywhere</div>
+    <main style={{ minHeight: "100dvh", background: "var(--paper)", padding: "30px 20px 60px" }}>
+      <div id="main" style={{ maxWidth: 1040, margin: "0 auto" }}>
+        <div className="kicker" style={{ marginBottom: 6 }}>admin tool · spends real credits</div>
         <h1 className="ph-display" style={{ fontSize: 30, color: "var(--ink)", margin: "0 0 4px" }}>
           try-on provider compare
         </h1>
@@ -104,8 +160,8 @@ export default function CompareClient() {
         ) : (
           <>
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder={"search " + items.length + " garments by name or category…"}
-            style={{ width: "100%", maxWidth: 340, padding: "10px 14px", borderRadius: 999, border: "1px solid var(--line)", background: "var(--card)", fontSize: 13.5, marginBottom: 12 }} />
+            placeholder={"search " + items.length + " garments by name or category…"} aria-label="Search garments by name or category"
+            style={{ width: "100%", maxWidth: 340, padding: "10px 14px", borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13.5, marginBottom: 12 }} />
           {(() => {
             const q = search.trim().toLowerCase();
             const shown = q ? items.filter((g) => (g.name + " " + g.category).toLowerCase().includes(q)) : items;
@@ -116,7 +172,7 @@ export default function CompareClient() {
             {shown.map((g) => (
               <button key={g.id} onClick={() => setGarment(g)} className="ph-btn"
                 style={{
-                  flexShrink: 0, width: 110, padding: 0, borderRadius: 12, overflow: "hidden",
+                  flexShrink: 0, width: 110, padding: 0, borderRadius: "var(--radius-md)", overflow: "hidden",
                   border: garment?.id === g.id ? "3px solid var(--violet)" : "1px solid var(--line)",
                   background: "var(--card)",
                 }}>
@@ -133,15 +189,19 @@ export default function CompareClient() {
         {/* 2 — person */}
         <h2 style={sectionH}>2 · person photo</h2>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <label className="ph-btn btn-outline" style={{ padding: "10px 22px", fontSize: 14, cursor: "pointer" }}>
+          {/* A <label> wrapping a hidden input is not focusable, so this was
+              keyboard-unreachable — a button that clicks the input is. */}
+          <button type="button" className="ph-btn btn-outline"
+            onClick={() => personFileRef.current?.click()}
+            style={{ padding: "10px 22px", fontSize: 14, cursor: "pointer" }}>
             {person ? "change photo" : "upload photo"}
-            <input type="file" accept="image/*" style={{ display: "none" }}
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
-                if (f) setPerson(await fileToCompressedDataURL(f, 1024, 0.85));
-              }} />
-          </label>
-          {person && <img src={person} alt="person" style={{ height: 110, borderRadius: 12, border: "1px solid var(--line)" }} />}
+          </button>
+          <input ref={personFileRef} type="file" accept="image/*" style={{ display: "none" }}
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (f) setPerson(await fileToCompressedDataURL(f, 1024, 0.85));
+            }} />
+          {person && <img src={person} alt="person" style={{ height: 110, borderRadius: "var(--radius-md)", border: "1px solid var(--line)" }} />}
         </div>
 
         {/* 3 — run */}
@@ -180,7 +240,7 @@ export default function CompareClient() {
 }
 
 const sectionH: React.CSSProperties = {
-  fontFamily: "'Baloo 2', cursive", fontSize: 17, fontWeight: 700, color: "var(--ink)", margin: "26px 0 12px",
+  fontFamily: "var(--font-display), sans-serif", fontSize: 17, fontWeight: 700, color: "var(--ink)", margin: "26px 0 12px",
 };
 
 function ResultCard({ title, slot }: { title: string; slot?: Slot }) {
@@ -198,9 +258,9 @@ function ResultCard({ title, slot }: { title: string; slot?: Slot }) {
           <span style={{ color: "var(--stone)", fontSize: 13 }}>generating…</span>
         </div>
       ) : slot.state === "done" ? (
-        <img src={slot.url} alt={title} style={{ width: "100%", display: "block", background: "var(--paper-deep)" }} />
+        <img src={slot.url} alt={title} className="img-blend" style={{ width: "100%", display: "block", background: "var(--paper-deep)" }} />
       ) : (
-        <div style={{ padding: "24px 16px", color: "#B4423A", fontSize: 13, lineHeight: 1.6 }}>{slot.error}</div>
+        <div style={{ padding: "24px 16px", color: "var(--danger)", fontSize: 13, lineHeight: 1.6 }}>{slot.error}</div>
       )}
     </div>
   );
