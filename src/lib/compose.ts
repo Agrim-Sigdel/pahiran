@@ -47,12 +47,6 @@ export interface ComposeRequest {
   /** Render quality. Defaults to medium — catalog imagery is generated once
       and seen often. */
   quality?: "low" | "medium" | "high";
-  /** Ask the provider to preserve the input images' exact detail instead of
-      loosely reinterpreting them. This is what keeps a printed motif a motif
-      rather than a flat average of its colours. Costs extra input tokens, so
-      it is opt-in; the counter sets it because its whole premise is "this
-      exact cloth". */
-  inputFidelity?: "high";
 }
 
 async function toFile(src: string, name: string): Promise<File> {
@@ -184,7 +178,6 @@ export async function composeGarment(req: ComposeRequest): Promise<string> {
   form.append("model", "gpt-image-2");
   form.append("size", "1024x1536"); // portrait: garments are taller than wide
   form.append("quality", req.quality ?? "medium");
-  if (req.inputFidelity) form.append("input_fidelity", req.inputFidelity);
   form.append("prompt", buildPrompt(req));
 
   const files = await Promise.all(

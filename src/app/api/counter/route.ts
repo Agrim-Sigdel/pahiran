@@ -170,9 +170,6 @@ export async function POST(req: Request): Promise<Response> {
             /* Medium, same as the catalog: the low trial wasn't worth the
                fabric-fidelity it cost. */
             quality: "medium",
-            /* The customer picked THIS bolt off the shelf — the render is
-               worthless if the print comes back as a flat average colour. */
-            inputFidelity: "high",
           });
         } catch (e: any) {
           await refundCompose(sb, shopId);
@@ -214,9 +211,8 @@ export async function POST(req: Request): Promise<Response> {
             /* Counter fittings all come out on the same white studio backdrop —
                the shop wall behind the customer varies, the output shouldn't.
                Medium even for single garments: a customer is standing here
-               deciding on a purchase off this image. High input fidelity so the
-               pattern the compose step just made survives the second pass. */
-            { studioBackground: true, quality: "medium", inputFidelity: "high" }
+               deciding on a purchase off this image. */
+            { studioBackground: true, quality: "medium" }
           );
         } catch (e: any) {
           await refundTryon(sb, shopId, true); // the compose stands — its render is returned below
