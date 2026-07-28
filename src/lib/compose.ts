@@ -124,7 +124,10 @@ function buildPrompt(req: ComposeRequest): string {
         `cloth carries a print, motif, embroidery, border or woven pattern, that pattern MUST ` +
         `appear across the finished garment exactly as it appears in the sample — returning the ` +
         `garment in a plain or solid version of the cloth's colour is a failed result. Scale the ` +
-        `pattern realistically for a garment of this size.`
+        `pattern realistically for a garment of this size. You are welcome to enhance the ` +
+        `rendering — sharper detail, richer texture, cleaner lighting than the sample photo — ` +
+        `but enhancement must make the cloth's own pattern crisper, never simplify or smooth ` +
+        `it away.`
     );
   }
 
