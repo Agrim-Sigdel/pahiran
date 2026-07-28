@@ -45,9 +45,14 @@ export interface ComposeRequest {
       cut; it does not redefine which pieces exist — that's `coverage`. */
   note?: string;
   /** Render quality. Defaults to medium — catalog imagery is generated once
-      and seen often. The counter overrides to low: its render serves one
-      customer standing there, not the catalog. */
+      and seen often. */
   quality?: "low" | "medium" | "high";
+  /** Ask the provider to preserve the input images' exact detail instead of
+      loosely reinterpreting them. This is what keeps a printed motif a motif
+      rather than a flat average of its colours. Costs extra input tokens, so
+      it is opt-in; the counter sets it because its whole premise is "this
+      exact cloth". */
+  inputFidelity?: "high";
 }
 
 async function toFile(src: string, name: string): Promise<File> {
@@ -121,7 +126,10 @@ function buildPrompt(req: ComposeRequest): string {
     parts.push(
       `The ${ord} image is the cloth this garment must be stitched from. Reproduce its exact ` +
         `colour, weave, sheen, texture, print and motif scale. Do not recolour it, do not ` +
-        `substitute a similar fabric, do not invent pattern that isn't in the sample. Scale the ` +
+        `substitute a similar fabric, do not invent pattern that isn't in the sample. If the ` +
+        `cloth carries a print, motif, embroidery, border or woven pattern, that pattern MUST ` +
+        `appear across the finished garment exactly as it appears in the sample — returning the ` +
+        `garment in a plain or solid version of the cloth's colour is a failed result. Scale the ` +
         `pattern realistically for a garment of this size.`
     );
   }
@@ -176,6 +184,7 @@ export async function composeGarment(req: ComposeRequest): Promise<string> {
   form.append("model", "gpt-image-2");
   form.append("size", "1024x1536"); // portrait: garments are taller than wide
   form.append("quality", req.quality ?? "medium");
+  if (req.inputFidelity) form.append("input_fidelity", req.inputFidelity);
   form.append("prompt", buildPrompt(req));
 
   const files = await Promise.all(

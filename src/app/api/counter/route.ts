@@ -167,10 +167,12 @@ export async function POST(req: Request): Promise<Response> {
             family,
             fabricNote: fabricNote || undefined,
             coverage,
-            /* Low, unlike the studio's medium: this render serves the one
-               customer standing at the counter, not the catalog. Trying low
-               end-to-end to judge whether the difference is worth 8x. */
-            quality: "low",
+            /* Medium, same as the catalog: the low trial wasn't worth the
+               fabric-fidelity it cost. */
+            quality: "medium",
+            /* The customer picked THIS bolt off the shelf — the render is
+               worthless if the print comes back as a flat average colour. */
+            inputFidelity: "high",
           });
         } catch (e: any) {
           await refundCompose(sb, shopId);
@@ -211,9 +213,10 @@ export async function POST(req: Request): Promise<Response> {
             coverage === "set",
             /* Counter fittings all come out on the same white studio backdrop —
                the shop wall behind the customer varies, the output shouldn't.
-               quality: low even for sets, to judge low end-to-end against the
-               kiosk's low/medium split. */
-            { studioBackground: true, quality: "low" }
+               Medium even for single garments: a customer is standing here
+               deciding on a purchase off this image. High input fidelity so the
+               pattern the compose step just made survives the second pass. */
+            { studioBackground: true, quality: "medium", inputFidelity: "high" }
           );
         } catch (e: any) {
           await refundTryon(sb, shopId, true); // the compose stands — its render is returned below

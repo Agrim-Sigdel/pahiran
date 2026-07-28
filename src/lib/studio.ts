@@ -62,6 +62,10 @@ export async function runStudio(
     /** Override the automatic quality choice (low for one garment, medium
         for a multi-piece set). */
     quality?: "low" | "medium" | "high";
+    /** Preserve the input images' exact detail — pattern, print, trim, and
+        the person's face — instead of letting the model reinterpret them.
+        Costs extra input tokens; the counter opts in. */
+    inputFidelity?: "high";
   }
 ): Promise<string> {
   /* What to replace and, just as importantly, what to leave alone. The generic
@@ -97,7 +101,8 @@ export async function runStudio(
     garmentImage,
     swap,
     opts?.quality ?? (multiPiece ? "medium" : "low"),
-    !!opts?.studioBackground
+    !!opts?.studioBackground,
+    opts?.inputFidelity
   );
 }
 
@@ -106,7 +111,8 @@ async function runStudioWithSwap(
   garmentImage: string,
   swap: string,
   quality: string,
-  studioBackground: boolean
+  studioBackground: boolean,
+  inputFidelity?: "high"
 ): Promise<string> {
   const toFile = async (src: string, name: string): Promise<File> => {
     if (src.startsWith("data:")) {
@@ -147,6 +153,7 @@ Background: replace the original background entirely with a clean professional s
   form.append("model", "gpt-image-2");
   form.append("size", "1024x1536");
   form.append("quality", quality);
+  if (inputFidelity) form.append("input_fidelity", inputFidelity);
   form.append(
     "prompt",
     `Virtual try-on photo edit. ${swap} Reproduce the second image's garment exactly. Any garment being ` +

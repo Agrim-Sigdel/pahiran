@@ -53,7 +53,7 @@ interface Props {
    it gets the most pixels. The customer's photo matches what the kiosk sends;
    the cut reference only has to carry a silhouette. All three ride in one JSON
    body, which is why none of them is sent at full size. */
-const CLOTH_QUALITY = [1200, 0.85] as const;
+const CLOTH_QUALITY = [1536, 0.9] as const;
 const CUT_QUALITY = [900, 0.8] as const;
 const PERSON_QUALITY = [1000, 0.85] as const;
 
