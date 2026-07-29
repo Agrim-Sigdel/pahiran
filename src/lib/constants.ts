@@ -35,6 +35,29 @@ export const FABRIC_UNITS = [
 export const familyLabel = (id: string): string =>
   FAMILIES.find((f) => f.id === id)?.label ?? id;
 
+/**
+ * What one press of a generate button is about to spend, worded the one way.
+ *
+ * Every button in this app that makes a picture costs the shop real money, and
+ * the number varies by press — two ticked cuts is two stitches, the counter is
+ * a stitch *and* a try-on because it renders the garment and then fits it to a
+ * person. A vendor who learns the price only from the meter dropping has been
+ * charged for a lesson.
+ *
+ * Two meters and two nouns, deliberately: "credits" as a single currency would
+ * be shorter and wrong — running out of try-ons and running out of stitches
+ * stop different things, and the Plan tab meters them apart.
+ *
+ * Returns "" when nothing would be spent, so a call site can render it blind.
+ */
+export function creditCost(stitches: number, tryons = 0): string {
+  const parts = [
+    stitches > 0 && stitches + " stitch" + (stitches === 1 ? "" : "es"),
+    tryons > 0 && tryons + " try-on" + (tryons === 1 ? "" : "s"),
+  ].filter(Boolean);
+  return parts.length ? "Uses " + parts.join(" and ") + " from your plan." : "";
+}
+
 /* ── the colour a bolt gets called ──────────────────────────────────────────
    The vocabulary a shop names cloth in. A vendor picks the shade with a real
    colour picker; this is what that shade snaps to, because the stored value
@@ -83,16 +106,30 @@ export const colorLabel = (id: string): string =>
 export const colorHex = (id: string): string | null =>
   FABRIC_COLORS.find((c) => c.id === id)?.hex ?? null;
 
-/** "Navy · Maroon" — how the pair reads on a card and in counter search. */
-export const colorText = (primary: string, secondary: string): string =>
-  [primary, secondary].filter(Boolean).map(colorLabel).join(" · ");
+/** "Navy · Gold" — how a cloth's colours read on a card and in counter search. */
+export const colorText = (colors: { id: string }[]): string =>
+  colors.filter((c) => c.id).map((c) => colorLabel(c.id)).join(" · ");
 
-/** "navy with maroon" — how the pair reads inside a render prompt. */
-export const colorPhrase = (primary: string, secondary: string): string => {
-  const p = primary ? colorLabel(primary).toLowerCase() : "";
-  const s = secondary ? colorLabel(secondary).toLowerCase() : "";
-  return p && s ? p + " with " + s : p || s;
-};
+/** "62% maroon, 28% gold, 10% ivory" — how they read inside a render prompt.
+    The percentages are the point: two bare words let the model pick which one
+    dominates, and it picks differently every run. */
+export const colorPhrase = (colors: { id: string; share: number }[]): string =>
+  colors
+    .filter((c) => c.id)
+    .map((c) => Math.round(c.share * 100) + "% " + colorLabel(c.id).toLowerCase())
+    .join(", ");
+
+/* Shares are read off a photo and then edited by hand, so they drift — a
+   deleted colour leaves the rest summing to 0.7, an added one pushes past 1.
+   Every write goes through here so the list is always a set of proportions,
+   which is the only form the prompt's percentages can be trusted in. */
+export function normalizeShares<T extends { share: number }>(colors: T[]): T[] {
+  const total = colors.reduce((n, c) => n + (c.share > 0 ? c.share : 0), 0);
+  if (colors.length === 0) return colors;
+  // All-zero (or negative) input still has to come out as a valid split.
+  if (total <= 0) return colors.map((c) => ({ ...c, share: 1 / colors.length }));
+  return colors.map((c) => ({ ...c, share: Math.max(0, c.share) / total }));
+}
 
 /* What a shop sells. Descriptive, and it decides the shop's try-on
    entitlement: the try-on model renders worn garments (tops / bottoms /

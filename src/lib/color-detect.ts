@@ -29,10 +29,10 @@ export interface ColorGuess {
 }
 
 export interface ColorReading {
-  primary: ColorGuess | null;
-  /** Only present when a second colour holds real area and is clearly a
-      different word from the first. A navy cloth with navy shadows has one. */
-  secondary: ColorGuess | null;
+  /* Every colour holding real area, most of it first, shares summing to 1.
+     A plain suiting comes back with one entry and a banarasi with five —
+     which is the whole reason this is a list and not two slots. */
+  colors: ColorGuess[];
   /** The photo is actively misreporting colour — blown out, or lit warm or
       cool enough to shift the whole frame. The guess is still returned (the
       vendor may recognise it) but the UI must lead with the doubt. */
@@ -49,12 +49,16 @@ const GRID = 120;
 /* Centre crop. A bolt photographed on a counter has counter in the corners;
    the middle is nearly always cloth. */
 const CROP = 0.72;
-/* A second colour needs this much of the frame before it's a colour rather
-   than a shadow, a fold, or JPEG noise around a motif. */
-const SECOND_MIN_SHARE = 0.1;
-/* ...and it has to be this far from the first in Lab, or "navy and blue" gets
-   reported as two colours when the cloth is plainly one. */
-const SECOND_MIN_DISTANCE = 26;
+/* A colour needs this much of the frame before it's a colour rather than a
+   shadow, a fold, or JPEG noise around a motif. */
+const MIN_SHARE = 0.05;
+/* Two palette words this close together describe one cloth colour, not two —
+   "navy and blue" on a plain navy bolt. The smaller merges into the larger,
+   which is also how its area gets counted where it belongs. */
+const MERGE_DISTANCE = 26;
+/* Past this many, it's a print and the tail is noise the vendor would only
+   have to delete. */
+const MAX_COLORS = 5;
 
 type Lab = [number, number, number];
 
@@ -196,7 +200,7 @@ function sample(img: HTMLImageElement): ImageData | null {
  * empty reading, and the vendor simply picks the colours themselves.
  */
 export function readFabricColors(dataUrl: string): Promise<ColorReading> {
-  const empty: ColorReading = { primary: null, secondary: null, unreliable: false, reason: null };
+  const empty: ColorReading = { colors: [], unreliable: false, reason: null };
   return new Promise((resolve) => {
     if (typeof window === "undefined" || !dataUrl) return resolve(empty);
     const img = new Image();
@@ -245,17 +249,26 @@ export function readFabricColors(dataUrl: string): Promise<ColorReading> {
         }))
         .sort((x, y) => y.share - x.share);
 
-      const primary = ranked[0] ?? null;
-      const primaryLab = primary ? labOf(primary.id) : null;
-      const secondary =
-        ranked
-          .slice(1)
-          .find(
-            (r) =>
-              r.share >= SECOND_MIN_SHARE &&
-              primaryLab !== null &&
-              (labOf(r.id) ? dist(primaryLab, labOf(r.id)!) : 0) >= SECOND_MIN_DISTANCE
-          ) ?? null;
+      /* Fold each near-neighbour into the bigger colour it belongs to before
+         dropping anything. Merging first is what keeps the shares honest: a
+         navy bolt that split 55/30 across navy and charcoal is 85% navy, not
+         55% navy with a third of the cloth unaccounted for. */
+      const merged: typeof ranked = [];
+      for (const r of ranked) {
+        const lab = labOf(r.id);
+        const into = merged.find((m) => {
+          const mLab = labOf(m.id);
+          return lab && mLab && dist(lab, mLab) < MERGE_DISTANCE;
+        });
+        if (into) into.share += r.share;
+        else merged.push({ ...r });
+      }
+
+      const kept = merged.filter((r) => r.share >= MIN_SHARE).slice(0, MAX_COLORS);
+      // Re-based on what survived, so the shares the vendor sees add to 100.
+      const keptTotal = kept.reduce((n, r) => n + r.share, 0) || 1;
+      const colors = kept.map((r) => ({ ...r, share: r.share / keptTotal }));
+      const primary = colors[0] ?? null;
 
       /* How sure the read is — and every rule here is about what a photo
          genuinely cannot settle, never a diagnosis of how it was taken.
@@ -290,7 +303,7 @@ export function readFabricColors(dataUrl: string): Promise<ColorReading> {
         reason = "There's a lot going on in this cloth — no single colour covers much of it.";
       }
 
-      resolve({ primary, secondary, unreliable: severe, reason });
+      resolve({ colors, unreliable: severe, reason });
     };
     img.src = dataUrl;
   });
@@ -307,5 +320,5 @@ export function colorDisagrees(picked: string, guessed: string): boolean {
   const a = labOf(picked);
   const b = labOf(guessed);
   if (!a || !b) return false; // one of them is free text — nothing to compare
-  return dist(a, b) >= SECOND_MIN_DISTANCE;
+  return dist(a, b) >= MERGE_DISTANCE;
 }

@@ -433,7 +433,8 @@ export function LeadsTab({ leads, catalog, onLeadHandled, shopName }: {
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span className="sr-only">Filter by status</span>
           <select value={status} onChange={(e) => { setStatus(e.target.value as typeof status); setLimit(PAGE); }}
-            style={{ padding: "10px 14px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)", fontSize: 13.5 }}>
+            className="ph-select"
+            style={{ padding: "10px 14px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)", color: "var(--ink)", fontSize: 13.5 }}>
             <option value="all">All orders</option>
             <option value="open">To call back</option>
             <option value="done">Done</option>

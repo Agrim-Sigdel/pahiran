@@ -16,6 +16,10 @@
 :root {
   color-scheme: light;
   --ink: #1A1714;          /* text, primary buttons — warm black, never #000 */
+  /* The select chevron, drawn in --ink. A data URI can't reference a custom
+     property or currentColor, so the stroke is written out and the dark theme
+     restates this one line with its own ink. */
+  --select-chevron: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1L5.5 5.5L10 1' fill='none' stroke='%231A1714' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --paper: #FAF6F0;        /* default background — flatters skin in photos */
   /* The one loud guest. A near-black green: deep enough to read as ink-with-
      intent on paper, green enough to be a hue rather than a shade of the text
@@ -250,6 +254,7 @@
   --slab: #180a05;         /* the loud panel — now the lightest, not the darkest */
 
   --ink: #F3EEE7;          /* text — warm off-white, never pure #fff */
+  --select-chevron: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1L5.5 5.5L10 1' fill='none' stroke='%23F3EEE7' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --stone: #C7B299;        /* secondary text — 8.1:1 on --card */
   --line: rgba(243, 238, 231, .11);  /* warm hairline; a white one greys the browns */
   --line-strong: #4A2A20;
@@ -462,11 +467,98 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
 .field input[aria-invalid="true"], .field textarea[aria-invalid="true"], .field select[aria-invalid="true"] { border-color: var(--danger); }
 .field .err { color: var(--danger); font-size: 12.5px; font-weight: 600; }
 .field .hint { color: var(--stone); font-size: 12.5px; font-weight: 500; }
-/* the required marker, so it isn't spelled three different ways */
+/* the required marker, so it isn't spelled three different ways.
+   It has to sit inside the same <span> as the label's words: .field is a
+   column flex container, so a bare text node and a sibling <span> become two
+   flex items and the asterisk drops onto its own line under the label. */
 .field .req { color: var(--danger); }
 /* textarea only: inherit the UI face rather than the browser's monospace
    default, and let it grow downward but never sideways out of its column */
 .field textarea { font-family: inherit; resize: vertical; min-height: 84px; }
+
+/* Every native select paints the platform's own chevron — a blue-grey double
+   arrow on macOS, a filled triangle on Android — and it is the one piece of
+   these forms drawn by somebody else. Ours instead, in the same ink as the
+   text beside it.
+
+   The arrow can't be a pseudo-element: a <select> is a replaced element and
+   renders no children of ours, so it goes in as a background image. That in
+   turn means any inline `background:` shorthand on a select would wipe it —
+   which is why the ones in this codebase set background-color instead. */
+select.ph-select, .field select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 11px 7px;
+  /* !important earns its place here: the chevron is drawn by this same rule,
+     and the clearance it needs is not a style choice a call site gets to
+     override. Several selects carry an inline `padding` shorthand for their
+     own vertical rhythm, and every one of those would otherwise reset
+     padding-right and run a long option straight under the arrow. */
+  padding-right: 38px !important;
+}
+/* Firefox keeps a focus ring on the text itself; this clears the inner one
+   without touching the outline that keyboard users need. */
+select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transparent; text-shadow: 0 0 0 var(--ink); }
+
+/* ── the brightness slider in our colour picker (ColorWheel.tsx) ──
+   The element *is* the track: the gradient it moves through — black into the
+   shade currently picked — is painted by an inline background at the call site,
+   so the control shows its own range instead of describing it. The thumb is a
+   transparent ring rather than a filled circle for the same reason: what it
+   sits on is the answer, and a solid thumb would cover it.
+
+   Carries a `.field input` beating selector because the picker is rendered
+   inside .field on the fabric form, and that rule's padding and border would
+   otherwise turn the track into an ordinary text box. */
+.field input.cw-range, input.cw-range {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 22px; padding: 0;
+  border-radius: 999px; border: 1px solid var(--line-strong);
+  cursor: pointer;
+}
+.cw-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: transparent; border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 1px 4px rgba(0,0,0,.4);
+}
+.cw-range::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: transparent; border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 1px 4px rgba(0,0,0,.4);
+}
+.cw-range:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ── optional block ──
+   A form that opens with fifteen fields reads as fifteen questions. The three
+   required ones stay in the open and everything else folds away behind one
+   line, so the fast path is short and the detail is a deliberate choice rather
+   than a wall to scroll past.
+
+   <details>, not a state-driven div: it comes with the disclosure semantics,
+   the keyboard behaviour and the toggle already correct. */
+.opt-block { border: 1px solid var(--line); border-radius: var(--radius-field); background: var(--paper); }
+.opt-block > summary {
+  cursor: pointer; list-style: none; padding: 13px 15px;
+  font-size: 13px; font-weight: 600; color: var(--ink);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border-radius: var(--radius-field);
+}
+.opt-block > summary::-webkit-details-marker { display: none; }
+/* Two borders on a rotated square — no asset, and it takes its colour from
+   the summary, so it follows the theme without a second declaration. */
+.opt-block > summary::after {
+  content: ""; width: 7px; height: 7px; flex-shrink: 0; margin-right: 3px;
+  border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform .18s ease;
+}
+.opt-block[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+.opt-block > summary .sub { font-weight: 500; color: var(--stone); font-size: 12px; }
+.opt-block .opt-body { display: flex; flex-direction: column; gap: 14px; padding: 2px 15px 15px; }
 
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 22px; overflow-x: auto; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
@@ -1076,6 +1168,12 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
   bottom: calc(16px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; gap: 8px; align-items: center;
   width: min(420px, calc(100vw - 24px)); pointer-events: none;
+}
+/* The long-running ones go up here instead. A sticky "stitching…" at the
+   bottom would sit beside the minimised progress bar in the same corner,
+   telling the vendor the same thing twice. */
+.toast-wrap.top {
+  bottom: auto; top: calc(16px + env(safe-area-inset-top));
 }
 .toast {
   pointer-events: auto; width: 100%;

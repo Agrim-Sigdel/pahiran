@@ -22,6 +22,12 @@ export type Toast = {
   action?: { label: string; onClick: () => void };
   /** ms until auto-dismiss; 0 keeps it until dismissed by hand */
   duration: number;
+  /* Where it sits. Bottom-centre is the default and stays that way — it's
+     within thumb reach on the phones this runs on, and it keeps clear of the
+     kiosk's header. "top" exists for the long-running ones: a sticky notice
+     that a render is in flight would otherwise sit beside the minimised
+     progress bar in the same bottom corner, saying the same thing twice. */
+  placement: "top" | "bottom";
 };
 
 type Listener = (toasts: Toast[]) => void;
@@ -48,7 +54,12 @@ export function dismissToast(id: number) {
 
 export function toast(
   message: string,
-  opts: { tone?: ToastTone; action?: Toast["action"]; duration?: number } = {},
+  opts: {
+    tone?: ToastTone;
+    action?: Toast["action"];
+    duration?: number;
+    placement?: Toast["placement"];
+  } = {},
 ): number {
   const tone = opts.tone ?? "info";
   /* Errors stay put. An error that fades after four seconds is an error the
@@ -58,7 +69,10 @@ export function toast(
   const id = nextId++;
   /* Newest first, and never more than three on screen — a failing loop
      shouldn't bury the page under its own retries. */
-  items = [{ id, message, tone, action: opts.action, duration }, ...items].slice(0, 3);
+  items = [
+    { id, message, tone, action: opts.action, duration, placement: opts.placement ?? "bottom" },
+    ...items,
+  ].slice(0, 3);
   emit();
   if (duration > 0) setTimeout(() => dismissToast(id), duration);
   return id;

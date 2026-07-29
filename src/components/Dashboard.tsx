@@ -3,13 +3,13 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import QRCode from "qrcode";
 import {
-  CATEGORIES, SIZES, FAMILIES, FABRIC_UNITS, FABRIC_COLORS,
-  npr, fabricPrice, familyLabel, colorHex, colorLabel, colorText, colorPhrase,
+  CATEGORIES, SIZES, FAMILIES, FABRIC_UNITS,
+  npr, fabricPrice, familyLabel, colorHex, colorLabel, colorText,
 } from "@/lib/constants";
-import { fileToCompressedDataURL } from "@/lib/images";
-import {
-  readFabricColors, colorDisagrees, hexToPaletteId, sampleImageHex, type ColorReading,
-} from "@/lib/color-detect";
+import { fileToDataURL } from "@/lib/images";
+import ImageCropper from "@/components/ImageCropper";
+import ColorList from "@/components/ColorList";
+import { readFabricColors, type ColorReading } from "@/lib/color-detect";
 import { OverviewTab, LeadsTab, garmentTryCounts, groupLeads } from "@/components/Analytics";
 import LocationPicker from "@/components/LocationPicker";
 import PlanTab from "@/components/PlanTab";
@@ -20,7 +20,7 @@ import AccountMenu from "@/components/AccountMenu";
 import Dialog, { confirmAsync } from "@/components/Dialog";
 import { toastErr, toastWarn } from "@/lib/toast";
 import { COVERAGES } from "@/lib/types";
-import type { Composition, CounterInput, CounterRun, Fabric, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
+import type { Composition, CounterInput, CounterRun, Fabric, FabricColor, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
 
 type Tab = "overview" | "leads" | "catalog" | "fabrics" | "designs" | "counter" | "settings" | "plan";
 
@@ -54,6 +54,8 @@ interface DashboardProps {
   publishComposition: (id: string, published: boolean) => void;
   priceComposition: (id: string, price: number) => void;
   noteComposition: (id: string, note: string) => void;
+  correctComposition: (id: string, correction: string, scope: "cut" | "cloth") => void;
+  fixFabricColor: (fabricId: string, colors: FabricColor[]) => void;
   removeComposition: (id: string) => void;
   /* The counter: a cloth and a customer that aren't catalog rows yet.
      `onStitched` fires when the piece exists, halfway through the run. */
@@ -70,6 +72,9 @@ interface DashboardProps {
   loading: boolean;
   launchKiosk: () => void;
   signOut: (() => void) | null;
+  /** True while the one running image generation is in flight, wherever it was
+      started from — stitching is one at a time. */
+  composing: boolean;
 }
 
 export default function Dashboard({
@@ -77,15 +82,36 @@ export default function Dashboard({
   toggleStock, fabrics, addFabric, editFabric, removeFabric, toggleFabricStock,
   styles, compositions, composeFabric, createStyle, updateStyle,
   publishComposition, priceComposition, noteComposition, removeComposition,
+  correctComposition, fixFabricColor,
   runCounter, keepCounterRun, counterEnabled,
-  events, leads, onLeadHandled, loading, launchKiosk, signOut,
+  events, leads, onLeadHandled, loading, launchKiosk, signOut, composing,
 }: DashboardProps) {
   const [tab, setTab] = useState<Tab>("overview");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Garment | null>(null);
   const [showFabricForm, setShowFabricForm] = useState(false);
   const [editingFabric, setEditingFabric] = useState<Fabric | null>(null);
-  const [studioFabric, setStudioFabric] = useState<Fabric | null>(null);
+  /* The id, not the row. A cloth-scoped correction reported inside the studio
+     writes to the fabric, and a captured object would go on holding the old
+     text — so the render it just marked for re-stitching would still read as
+     current, and the vendor's report would look like it did nothing. Deriving
+     it also closes the studio by itself if the bolt is deleted underneath. */
+  const [studioFabricId, setStudioFabricId] = useState<string | null>(null);
+  /* A trip out of the studio to fix the fabric's photo, and the way back. The
+     studio closes rather than stacking a second dialog on itself, and both
+     leaving the form and saving it land the vendor back on the previews they
+     were checking — the photo was only ever a detour inside that job. */
+  const [photoFix, setPhotoFix] = useState<
+    { fabricId: string; mode: "replace" | "crop" } | null
+  >(null);
+  const photoFixFabric = useMemo(
+    () => fabrics.find((f) => f.id === photoFix?.fabricId) ?? null,
+    [fabrics, photoFix]
+  );
+  const studioFabric = useMemo(
+    () => fabrics.find((f) => f.id === studioFabricId) ?? null,
+    [fabrics, studioFabricId]
+  );
   const [familyFilter, setFamilyFilter] = useState("All");
   const [cutFamilyFilter, setCutFamilyFilter] = useState("All");
   /* Same three jobs as the studio's form: new cut, edit a shop cut, copy a
@@ -253,7 +279,7 @@ export default function Dashboard({
                     style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13 }}
                   />
                   <select value={filter} onChange={(e) => setFilter(e.target.value)}
-                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13 }}>
+                    className="ph-select" style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)", fontSize: 13 }}>
                     <option>All</option>
                     {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
@@ -362,7 +388,7 @@ export default function Dashboard({
                 </div>
                 <div className="cat-tools">
                   <select value={familyFilter} onChange={(e) => setFamilyFilter(e.target.value)}
-                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13 }}>
+                    className="ph-select" style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)", fontSize: 13 }}>
                     <option>All</option>
                     {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
                   </select>
@@ -420,7 +446,7 @@ export default function Dashboard({
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 6, flexWrap: "wrap" }}>
                           <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: 13.5 }}>{fabricPrice(f.price, f.unit)}</span>
                           <span style={{ display: "flex", gap: 2 }}>
-                            <button className="ph-btn" onClick={() => setStudioFabric(f)} style={{ ...cardAction, fontWeight: 700 }}>
+                            <button className="ph-btn" onClick={() => setStudioFabricId(f.id)} style={{ ...cardAction, fontWeight: 700 }}>
                               Cuts
                             </button>
                             <button className="ph-btn" onClick={() => setEditingFabric(f)} style={cardAction}>
@@ -454,7 +480,7 @@ export default function Dashboard({
                 </div>
                 <div className="cat-tools">
                   <select value={cutFamilyFilter} onChange={(e) => setCutFamilyFilter(e.target.value)}
-                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13 }}>
+                    className="ph-select" style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)", fontSize: 13 }}>
                     <option>All</option>
                     {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
                   </select>
@@ -558,14 +584,33 @@ export default function Dashboard({
           fabric={studioFabric}
           styles={styles}
           compositions={compositions.filter((c) => c.fabricId === studioFabric.id)}
-          onClose={() => setStudioFabric(null)}
+          onClose={() => setStudioFabricId(null)}
           onCompose={(styleIds) => composeFabric(studioFabric.id, styleIds)}
           onCreateStyle={createStyle}
           onUpdateStyle={updateStyle}
           onPublish={publishComposition}
           onPrice={priceComposition}
           onNote={noteComposition}
+          onCorrect={correctComposition}
+          onFixColor={fixFabricColor}
+          onRephoto={(mode) => {
+            setPhotoFix({ fabricId: studioFabric.id, mode });
+            setStudioFabricId(null);
+          }}
+          composing={composing}
           onRemove={removeComposition}
+        />
+      )}
+      {photoFix && photoFixFabric && (
+        <FabricModal
+          initial={photoFixFabric}
+          photoIntent={photoFix.mode}
+          onClose={() => { setStudioFabricId(photoFix.fabricId); setPhotoFix(null); }}
+          onSave={(f) => {
+            editFabric({ ...photoFixFabric, ...f });
+            setStudioFabricId(photoFix.fabricId);
+            setPhotoFix(null);
+          }}
         />
       )}
       {cutForm && (
@@ -870,12 +915,13 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
   const [sizes, setSizes] = useState<string[]>(initial?.sizes ?? []);
   const [busy, setBusy] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [cropping, setCropping] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
-    try { setImage(await fileToCompressedDataURL(file)); }
+    try { setCropping(await fileToDataURL(file)); }
     catch { toastErr("Could not read that image. Try a JPG or PNG."); }
     setBusy(false);
   };
@@ -893,7 +939,9 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
     !(priceNum > 0) && "a price",
   ].filter(Boolean) as string[];
   const canSave = missing.length === 0 && !busy;
-  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-field)", border: "1px solid var(--line)", fontSize: 15, background: "var(--card)", color: "var(--ink)" };
+  /* backgroundColor, not the `background` shorthand: the shorthand resets
+     background-image, and that's where the select's own chevron lives. */
+  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-field)", border: "1px solid var(--line)", fontSize: 15, backgroundColor: "var(--card)", color: "var(--ink)" };
   const dirty = initial
     ? name !== initial.name || category !== initial.category || String(initial.price || "") !== price
       || image !== initial.image || sizes.join() !== initial.sizes.join()
@@ -923,7 +971,7 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
       {/* Real labels. Every field here was placeholder-only, so the moment a
           vendor typed anything the form became six unlabelled boxes. */}
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <label className="field">Garment name <span className="req">*</span>
+        <label className="field"><span>Garment name <span className="req">*</span></span>
           <input style={input} value={name} maxLength={80} data-autofocus
             onChange={(e) => setName(e.target.value)} placeholder="e.g. Red Banarasi Silk Sari" />
         </label>
@@ -933,7 +981,7 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
               {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
             </select>
           </label>
-          <label className="field" style={{ flex: 1 }}>Price (NPR) <span className="req">*</span>
+          <label className="field" style={{ flex: 1 }}><span>Price (NPR) <span className="req">*</span></span>
             <input style={{ ...input, borderColor: touched && !(priceNum > 0) ? "var(--danger)" : "var(--line)" }}
               value={price} maxLength={8} inputMode="numeric"
               aria-invalid={touched && !(priceNum > 0)}
@@ -985,6 +1033,12 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
           {initial ? "save changes" : "save to catalog"}
         </button>
       </div>
+      {cropping && (
+        <ImageCropper src={cropping} title="Crop the photo"
+          hint="Keep the garment and leave the room out — this is the picture shoppers see, and the one try-on puts on them."
+          onCancel={() => setCropping(null)}
+          onDone={(dataUrl) => { setCropping(null); setImage(dataUrl); }} />
+      )}
       {initial && onRemove && (
         <button className="ph-btn"
           onClick={async () => {
@@ -1007,272 +1061,121 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
 const andList = (xs: string[]): string =>
   xs.join(", ").replace(/, ([^,]*)$/, " and $1");
 
-/* ── one colour: the shade and the word for it ──
-   Both, because they do different jobs. The shade is what the vendor actually
-   sees and what a shopper will see on the card — and two bolts both correctly
-   called maroon are not the same maroon. The word is what the render prompt
-   reads, what the storefront filters on, and what the counter searches; a hex
-   is none of those things. So the picker moves the shade and the word snaps to
-   follow, and the vendor can overrule the word when the snap is wrong.
+/* ── the colours, read off the photo and shown — and now correctable here ──
 
-   The eyedropper is the control that matters here. Nobody can find "the navy
-   of this particular bolt" on a colour wheel from memory, but anybody can tap
-   it in the photo of the bolt in their hand. */
-function ColorRow({ label, hint, word, hex, onChange, image, clearable }: {
-  label: string;
-  hint?: string;
-  word: string;
-  hex: string;
-  onChange: (word: string, hex: string) => void;
-  /** Enables tap-the-photo. Null on a fabric with no photo yet. */
+   This started as a readout on purpose. The argument was that a vendor on this
+   form has nothing to judge the reading against except the photo it was
+   measured from, the two agree by construction, and so any "correction" made
+   here would be the measurement wearing the shop's name — which is exactly what
+   `colorsCorrected` exists to keep out of the render prompt.
+
+   The flaw in that was assuming the photo is all the vendor has. They are
+   standing at the counter with the bolt in their hands. A maroon shot under a
+   tube light reads orange in this list and they can see that from where they
+   are sitting, and making them list the bolt, stitch a cut, wait on a render
+   and only then be allowed to say "it's maroon" was several minutes of the
+   app's time spent not believing them.
+
+   So the chips stay the resting state — most readings are right, and a form
+   that opens six controls for a question already answered is a worse form —
+   and one tap opens the list underneath them, with the wheel, the palette and
+   the photo to sample from. An edit here is the shop's word, and it sets
+   `colorsCorrected` the same way one made in the studio does. */
+function ColorReadout({ reading, colors, onChange, corrected, image, onRecrop }: {
+  reading: ColorReading | null;
+  colors: FabricColor[];
+  onChange: (colors: FabricColor[]) => void;
+  /** These are the shop's own rather than the photo's — set here or in the
+      studio, either way the render follows them over the picture. */
+  corrected: boolean;
+  /** The fabric's own photo, so the picker has something to sample from. */
   image: string | null;
-  /** The second slot, where "one solid colour" is the common answer. */
-  clearable?: boolean;
+  /** The other thing a vendor can do about these colours, and the one this
+      form doesn't otherwise offer. The reading is taken from the middle of the
+      frame, so counter, shelf or shopping bag left in the crop is counter
+      measured as cloth — and the fix is a tighter crop, not a new photo. (A
+      new photo is already one tap away: the picture at the top of this form is
+      itself the button for that.) */
+  onRecrop: () => void;
 }) {
-  const isPalette = FABRIC_COLORS.some((c) => c.id === word);
-  const [custom, setCustom] = useState(Boolean(word) && !isPalette);
-  const [picking, setPicking] = useState(false);
-  const [imgBroken, setImgBroken] = useState(false);
-  const imgRef = useRef<HTMLImageElement>(null);
+  const [editing, setEditing] = useState(false);
 
-  // The photo reading writes these from outside; keep the free-text box in
-  // step so the two controls never both look live.
-  useEffect(() => { if (word && FABRIC_COLORS.some((c) => c.id === word)) setCustom(false); }, [word]);
+  const dot = (fill: string) => (
+    <span aria-hidden style={{
+      width: 14, height: 14, borderRadius: "50%", background: fill,
+      border: "1px solid var(--line-strong)", flexShrink: 0,
+    }} />
+  );
 
-  const swatch = hex || colorHex(word) || "#cccccc";
-  /* A shade the vendor moved re-snaps the word — unless they've named the
-     colour themselves, in which case their word is the point and only the
-     shade moves. */
-  const applyHex = (h: string) => onChange(custom ? word : hexToPaletteId(h), h);
-
-  const onSelect = (v: string) => {
-    if (v === "__other") { setCustom(true); return; }
-    setCustom(false);
-    // Choosing the word by hand means overruling the photo, so the shade
-    // follows the word rather than the other way round.
-    onChange(v, v ? colorHex(v) ?? "" : "");
-  };
-
-  const pickFromPhoto = (e: React.MouseEvent) => {
-    const el = imgRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const h = sampleImageHex(el, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
-    if (h) applyHex(h);
-    setPicking(false);
-  };
-
-  const headingId = "fabric-" + label.toLowerCase().replace(/\s+/g, "-");
+  /* Only ever a caveat about what a photo genuinely cannot settle, and only
+     while the reading is all we have. Once the vendor has corrected the
+     colours themselves, the photo's doubts about itself are beside the
+     point. */
+  const doubt = !corrected && reading?.reason ? reading.reason : null;
 
   return (
-    /* .field on purpose: it supplies the label type, the 6px rhythm between
-       rows, and — because `.field select` and `.field input` are styled —
-       makes these controls identical to every other control on the form
-       without restating a single value. The colour well is the one exception,
-       and overrides only what it has to.
+    <div className="field">
+      {/* Label left, the way out right. Sitting on the label's own line rather
+          than under the swatches because it belongs to the whole readout: it
+          is the answer to "these are wrong" for the one cause the vendor can't
+          fix by dragging a wheel — a crop with the counter still in it, which
+          gets averaged into the cloth's colours like any other pixels.
 
-       A group rather than a <label>, because a label binds to exactly one
-       control: wrapping three of them would tie the whole block to the colour
-       well, so clicking the hint would pop the OS colour picker open. Each
-       control carries its own aria-label instead. */
-    <div className="field" role="group" aria-labelledby={headingId}>
-      <span id={headingId}>{label}</span>
-      {hint && <span className="hint">{hint}</span>}
-
-      {/* stretch, so the well, the list and the button share one height */}
-      <span style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-        {/* The well *is* the picker — a native colour input, so every platform
-            brings its own and it's reachable from the keyboard. */}
-        <input type="color" value={swatch} aria-label={label + " shade"}
-          onChange={(e) => applyHex(e.target.value)}
-          style={{ width: 54, padding: 3, borderRadius: "var(--radius-field)", border: "1px solid var(--line)", background: "var(--card)", cursor: "pointer", flexShrink: 0 }} />
-        <select value={custom ? "__other" : word} aria-label={label + " name"}
-          onChange={(e) => onSelect(e.target.value)}
-          style={{ flex: 1, minWidth: 0 }}>
-          <option value="">{clearable ? "None" : "Choose a colour"}</option>
-          {FABRIC_COLORS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-          <option value="__other">Other…</option>
-        </select>
-        {image && !imgBroken && (
-          <button type="button" className="ph-btn" aria-pressed={picking}
-            aria-label={"Take the " + label.toLowerCase() + " from the photo"}
-            onClick={() => setPicking((p) => !p)}
-            style={{
-              padding: "0 14px", flexShrink: 0, whiteSpace: "nowrap",
-              fontSize: 13, fontWeight: 600, borderRadius: "var(--radius-field)",
-              background: "var(--card)",
-              border: "1px solid " + (picking ? "var(--ink)" : "var(--line)"),
-              color: picking ? "var(--ink)" : "var(--stone)",
-            }}>
-            {picking ? "cancel" : "from photo"}
+          Nothing to re-crop before a photo exists, so it waits for one. */}
+      <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        Colours
+        {image && (
+          <button type="button" className="ph-btn" onClick={onRecrop}
+            title="Crop this photo tighter — anything but cloth in the frame is measured as cloth"
+            style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3, padding: "4px 2px", minHeight: 28 }}>
+            re-crop
           </button>
         )}
       </span>
 
-      {custom && (
-        <input value={isPalette ? "" : word} maxLength={24} autoFocus
-          aria-label="Name this colour yourself" placeholder="e.g. peacock"
-          onChange={(e) => onChange(e.target.value, hex)} />
-      )}
-
-      {picking && image && (
+      {editing || colors.length === 0 ? (
         <>
-          <span className="hint">Tap a plain part of the cloth — not a shadow or a fold.</span>
-          {/* A button so it's focusable and announced; the keyboard route to
-              the same value is the well and the list beside it. */}
-          {/* Hugs the photo rather than stretching across the column: a
-              crosshair over blank space that still samples an edge pixel is a
-              lie about where you tapped. */}
-          <button type="button" onClick={pickFromPhoto} aria-label="Tap the photo to take its colour"
-            style={{ padding: 0, border: "1px solid var(--line)", borderRadius: "var(--radius-field)", background: "none", lineHeight: 0, cursor: "crosshair", overflow: "hidden", display: "block", alignSelf: "flex-start", maxWidth: "100%" }}>
-            {/* Stored photos are cross-origin; without this the canvas is
-                tainted and the pixels can't be read at all. */}
-            <img ref={imgRef} src={image} alt="" crossOrigin="anonymous"
-              onError={() => { setImgBroken(true); setPicking(false); }}
-              style={{ maxWidth: "100%", maxHeight: 200, width: "auto", display: "block" }} />
+          <ColorList colors={colors} onChange={onChange} image={image} />
+          <span className="hint">
+            {colors.length === 0
+              ? reading
+                ? "We couldn't pick colours out of this photo — set them yourself, or leave them and the previews will go on the photo alone."
+                : "Read off the photo when you add one, or set them yourself now."
+              : "Tap a swatch for the wheel, and set roughly how much of the cloth each colour covers — a border is a small share, not half the garment."}
+          </span>
+        </>
+      ) : (
+        <>
+          {/* The chips are the button. A separate "edit" link beside them would
+              be the smaller target and the less obvious one: the thing the
+              vendor wants to change is right there, and on a phone it is what
+              their thumb goes to anyway. */}
+          <button type="button" onClick={() => setEditing(true)}
+            aria-label="Change these colours and their shares"
+            style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 14, fontWeight: 400, color: "var(--ink)", minHeight: 24, background: "none", border: "none", padding: "2px 0", margin: 0, textAlign: "left", cursor: "pointer" }}>
+            {colors.map((c, i) => (
+              <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {dot(c.hex || colorHex(c.id) || "var(--line)")}
+                {colorLabel(c.id)}
+                <span style={{ color: "var(--stone)", fontSize: 12.5 }}>{Math.round(c.share * 100)}%</span>
+              </span>
+            ))}
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3 }}>
+              change
+            </span>
           </button>
+          <span className="hint">
+            {corrected
+              ? "Set by you — the previews follow these over the photo."
+              : "Measured from the photo. If the light has shifted them, correct them here against the cloth in your hands — the previews will follow your words instead."}
+          </span>
         </>
       )}
+
+      {doubt && (
+        <span className="hint" style={{ color: "var(--warn)" }}>{doubt}</span>
+      )}
     </div>
-  );
-}
-
-/* ── the colours, asked and then edited in one place ──
-   Three states, one spot in the form. The photo's reading is offered as a
-   question first, because the fastest correct answer is usually "yes" — and
-   answering "no" opens the pickers right here, seeded with what the photo saw,
-   rather than sending the vendor somewhere else to start from nothing.
-
-   It is only ever a question. The vendor is standing in front of the cloth and
-   the camera isn't: under a tube light a maroon bolt photographs orange, and
-   when the two disagree the vendor is right. */
-function ColorSection({
-  reading, image, primary, primaryHex, secondary, secondaryHex, onPrimary, onSecondary,
-}: {
-  reading: ColorReading | null;
-  image: string | null;
-  primary: string;
-  primaryHex: string;
-  secondary: string;
-  secondaryHex: string;
-  onPrimary: (word: string, hex: string) => void;
-  onSecondary: (word: string, hex: string) => void;
-}) {
-  const [mode, setMode] = useState<"ask" | "pick" | "set">(primary ? "set" : "pick");
-
-  // A fresh photo is a fresh question, however the last one was answered.
-  useEffect(() => { if (reading?.primary) setMode("ask"); }, [reading]);
-
-  const guess = reading?.primary ?? null;
-
-  /** A dot of a colour, at the size the rest of the modal uses for one. */
-  const dot = (fill: string, ml = 0) => (
-    <span aria-hidden style={{
-      width: 14, height: 14, borderRadius: "50%", background: fill,
-      border: "1px solid var(--line-strong)", flexShrink: 0, marginLeft: ml,
-    }} />
-  );
-
-  if (mode === "ask" && guess) {
-    /* colorPhrase, not colorText: "maroon with gold" is a sentence, where the
-       card layout's "Maroon · Gold" is a label. Same two colours, and reading
-       "it looks maroon · gold" out loud is how you notice the difference. */
-    const seen = colorPhrase(guess.id, reading?.secondary?.id ?? "");
-    const clash = colorDisagrees(primary, guess.id);
-    const warn = reading?.unreliable ?? false;
-    const take = () => {
-      onPrimary(guess.id, guess.hex);
-      if (reading?.secondary) onSecondary(reading.secondary.id, reading.secondary.hex);
-      setMode("set");
-    };
-    const action: React.CSSProperties = {
-      padding: "9px 15px", minHeight: 38, fontSize: 13, fontWeight: 600,
-      borderRadius: "var(--radius-btn)",
-    };
-    return (
-      <div className="field">
-        <span>Colours</span>
-        <div style={{
-          background: warn ? "var(--warn-bg)" : "var(--paper)",
-          border: "1px solid " + (warn ? "var(--warn)" : "var(--line)"),
-          borderRadius: "var(--radius-field)", padding: "13px 15px",
-          fontSize: 13, fontWeight: 400, color: "var(--ink)", lineHeight: 1.6,
-          display: "flex", flexDirection: "column", gap: 11,
-        }}>
-          {reading?.reason && (
-            <span style={{ color: "var(--stone)", fontSize: 12.5 }}>{reading.reason}</span>
-          )}
-          <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
-            <span aria-hidden style={{ display: "inline-flex", gap: 4, flexShrink: 0 }}>
-              {dot(guess.hex)}
-              {reading?.secondary && dot(reading.secondary.hex)}
-            </span>
-            <span>
-              {clash
-                ? <>You&apos;ve set <b>{colorLabel(primary).toLowerCase()}</b>, but this photo reads as <b>{seen}</b>.</>
-                : warn
-                ? <>Going by the photo alone it looks <b>{seen}</b> — check that against the cloth in your hand.</>
-                : <>From this photo it looks <b>{seen}</b>. Is that right?</>}
-            </span>
-          </span>
-          <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" className="ph-btn" onClick={take}
-              style={{
-                ...action,
-                background: warn || clash ? "var(--card)" : "var(--ink)",
-                color: warn || clash ? "var(--ink)" : "var(--card)",
-                border: "1px solid " + (warn || clash ? "var(--line-strong)" : "var(--ink)"),
-              }}>
-              {clash ? "Use " + colorLabel(guess.id).toLowerCase() : "Yes, that's it"}
-            </button>
-            <button type="button" className="ph-btn"
-              onClick={() => {
-                /* Open the pickers already holding what the photo saw.
-                   Correcting a colour that's nearly right is a nudge; starting
-                   from grey is a chore, and the vendor came here to say "not
-                   quite". */
-                if (!primary) onPrimary(guess.id, guess.hex);
-                setMode("pick");
-              }}
-              style={{ ...action, background: "var(--card)", border: "1px solid var(--line)", color: "var(--stone)" }}>
-              {clash ? "Keep " + colorLabel(primary).toLowerCase() : "No — I'll pick"}
-            </button>
-          </span>
-        </div>
-      </div>
-    );
-  }
-
-  if (mode === "set") {
-    return (
-      <div className="field">
-        <span>Colours</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 14, fontWeight: 400, color: "var(--ink)", minHeight: 24 }}>
-          {dot(primaryHex || colorHex(primary) || "var(--line)")}
-          {colorLabel(primary)}
-          {secondary && (
-            <>
-              {dot(secondaryHex || colorHex(secondary) || "var(--line)", 4)}
-              {colorLabel(secondary)}
-            </>
-          )}
-          <button type="button" className="ph-btn" onClick={() => setMode("pick")}
-            style={{ marginLeft: "auto", fontSize: 13, fontWeight: 600, color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3, padding: "4px 2px" }}>
-            change
-          </button>
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <ColorRow label="Main colour" word={primary} hex={primaryHex}
-        onChange={onPrimary} image={image} />
-      <ColorRow label="Second colour" word={secondary} hex={secondaryHex}
-        onChange={onSecondary} image={image} clearable
-        hint="The border, motif or contrast — leave as none if it's one solid colour." />
-    </>
   );
 }
 
@@ -1281,55 +1184,107 @@ function ColorSection({
    the person) and no category, but it does have a family, a unit, and a weave
    — and price without a unit is meaningless on a bolt. Sharing one component
    would mean a prop soup of mutually-exclusive fields. */
-function FabricModal({ initial, onClose, onSave, onRemove }: {
+function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
   initial?: Fabric;
   onClose: () => void;
   onSave: (f: Omit<Fabric, "id" | "itemCode">) => void;
   onRemove?: () => void;
+  /** Opened from the studio because the picture is what's wrong. "crop" goes
+      straight into the cropper on the photo that's already there; "replace"
+      opens here with the photo called out, and the vendor taps it themselves —
+      a file dialog fired on mount has no user gesture behind it and browsers
+      are right to block it. */
+  photoIntent?: "replace" | "crop";
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [family, setFamily] = useState<StyleFamily>(initial?.family ?? FAMILIES[0].id);
   const [price, setPrice] = useState(initial ? String(initial.price || "") : "");
   const [unit, setUnit] = useState<Fabric["unit"]>(initial?.unit ?? "meter");
   const [composition, setComposition] = useState(initial?.composition ?? "");
-  const [colorPrimary, setColorPrimary] = useState(initial?.colorPrimary ?? "");
-  const [colorSecondary, setColorSecondary] = useState(initial?.colorSecondary ?? "");
-  const [colorPrimaryHex, setColorPrimaryHex] = useState(initial?.colorPrimaryHex ?? "");
-  const [colorSecondaryHex, setColorSecondaryHex] = useState(initial?.colorSecondaryHex ?? "");
+  const [colors, setColors] = useState<FabricColor[]>(initial?.colors ?? []);
   const [note, setNote] = useState(initial?.note ?? "");
   const [image, setImage] = useState<string | null>(initial?.image ?? null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [touched, setTouched] = useState(false);
+  /* Open from the start when there's already something in there — a bolt whose
+     colours and weave are filled in shouldn't hide them behind a closed panel
+     the vendor has to discover before they can edit them. */
+  const [showOptional, setShowOptional] = useState(
+    Boolean(initial && (initial.composition || initial.colors.length || initial.note))
+  );
   /** What the photo says about its own colours. Drives the question the
       colours section leads with; never applied without an answer. */
   const [reading, setReading] = useState<ColorReading | null>(null);
+  /* Whether the colours below came from a person or from the pixels, which is
+     the whole of what `colorsCorrected` means. A reading applied on open is the
+     app measuring its own photo; a vendor moving the wheel is the shop saying
+     what the cloth is, and only the second may outrank the sample image in the
+     render prompt. Tracked as a gesture rather than by diffing against the
+     reading, because setting a colour back to exactly what was measured is
+     still the vendor vouching for it. */
+  const [colorsTouched, setColorsTouched] = useState(false);
+
+  /* The photo goes through the cropper before it becomes the fabric's image.
+     It matters more here than anywhere else in the app: this picture is the
+     one the render model is told to stitch from and the one the colour reader
+     measures, so counter and background in the frame are counter and
+     background in the catalog. */
+  const [cropping, setCropping] = useState<string | null>(
+    photoIntent === "crop" && initial?.image ? initial.image : null
+  );
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
-    try {
-      const dataUrl = await fileToCompressedDataURL(file);
-      setImage(dataUrl);
-      /* Reading it costs nothing — it's a canvas, not a model — so it never
-         gates the upload; a failed read simply comes back empty. */
-      setReading(await readFabricColors(dataUrl));
-    } catch { toastErr("Could not read that image. Try a JPG or PNG."); }
+    try { setCropping(await fileToDataURL(file)); }
+    catch { toastErr("Could not read that image. Try a JPG or PNG."); }
     setBusy(false);
   };
 
-  /* A bolt listed before colours existed gets asked the same question the
-     moment it's opened. Without this every fabric already in a shop's catalog
-     stays colourless forever and nothing downstream ever gets the benefit.
-     Only when it's genuinely blank — a fabric whose colours are already set is
-     not re-litigated every time the vendor edits its price. */
+  const acceptCrop = async (dataUrl: string) => {
+    setCropping(null);
+    setImage(dataUrl);
+    /* Reading it costs nothing — it's a canvas, not a model — so it never
+       gates the upload; a failed read simply comes back empty. Applied rather
+       than offered: a new photo is a new measurement, and it replaces whatever
+       the old one said about a cloth that is being re-photographed. Any
+       correction made against the old photo goes with it — updateFabric clears
+       colors_corrected whenever the picture changes. */
+    const r = await readFabricColors(dataUrl);
+    setReading(r);
+    /* Only when there is something to replace them with. A read that comes
+       back empty knows nothing about this cloth, and writing it in anyway would
+       clear a set of colours — possibly ones the vendor typed by hand — on the
+       strength of a canvas that failed. That matters more now that re-cropping
+       is a button next to the colours rather than a trip through the studio:
+       the vendor tightening a crop is not asking to lose their maroon. */
+    if (r.colors.length) {
+      setColors(r.colors.map((c) => ({ id: c.id, hex: c.hex, share: c.share })));
+      setColorsTouched(false);
+    }
+  };
+
+  /* A bolt listed before colours existed gets read the moment it's opened —
+     otherwise every fabric already in a shop's catalog stays colourless
+     forever and nothing downstream ever benefits. Only when it's genuinely
+     blank: a bolt whose colours are set, and especially one the vendor has
+     corrected against a render, is never re-measured behind their back. */
+  const [readApplied, setReadApplied] = useState(false);
   useEffect(() => {
-    if (!initial?.image || initial.colorPrimary) return;
+    if (!initial?.image || initial.colors.length) return;
     let live = true;
-    readFabricColors(initial.image).then((r) => { if (live) setReading(r); });
+    readFabricColors(initial.image).then((r) => {
+      if (!live) return;
+      setReading(r);
+      if (r.colors.length) {
+        setColors(r.colors.map((c) => ({ id: c.id, hex: c.hex, share: c.share })));
+        setReadApplied(true);
+      }
+    });
     return () => { live = false; };
-  }, [initial?.image, initial?.colorPrimary]);
+  }, [initial?.image, initial?.colors.length]);
 
   const priceNum = Number(price || 0);
   const missing = [
@@ -1341,23 +1296,30 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
      question on the way out, not a blocked save. A vendor with a queue at the
      counter always gets the bolt listed.
 
-     The second colour is only ever asked about when the photo actually found
-     one. Most bolts are a single solid colour, and a form that asks every one
-     of them for a second colour it doesn't have is a form vendors learn to
-     click through without reading. */
-  const soft = [
-    !colorPrimary && "a main colour",
-    !colorSecondary && reading?.secondary && "the second colour in the photo",
-    !note.trim() && "any extra detail",
-  ].filter(Boolean) as string[];
+     Colours are not on this list any more. They're measured rather than typed,
+     so there is nothing here for the vendor to have skipped, and a warning
+     about a field they cannot fill in is a warning that teaches them to click
+     through the next one. */
+  const soft = [!note.trim() && "any extra detail"].filter(Boolean) as string[];
+  /* Says what's in the folded panel without opening it — otherwise "optional"
+     is the only clue that a bolt's colours are set, and the vendor opens it
+     every time to check. */
+  const optionalSummary =
+    [composition.trim(), colorText(colors), note.trim() && "a note"]
+      .filter(Boolean)
+      .join(" · ") || "colours, weave, detail";
   const canSave = missing.length === 0 && !busy;
+  /* Colours only count as unsaved work when the vendor's own edits put them
+     there. A reading applied to an old colourless bolt on open is the app's
+     doing, not theirs — counting it would greet anyone who opened a legacy
+     fabric and closed it again with "discard what you've filled in?", about a
+     field they never touched. */
   const dirty = initial
     ? name !== initial.name || family !== initial.family || String(initial.price || "") !== price
       || unit !== initial.unit || composition !== (initial.composition ?? "")
-      || colorPrimary !== (initial.colorPrimary ?? "") || colorSecondary !== (initial.colorSecondary ?? "")
-      || colorPrimaryHex !== (initial.colorPrimaryHex ?? "") || colorSecondaryHex !== (initial.colorSecondaryHex ?? "")
+      || ((colorsTouched || !readApplied) && JSON.stringify(colors) !== JSON.stringify(initial.colors ?? []))
       || note !== (initial.note ?? "") || image !== initial.image
-    : Boolean(name.trim() || image || price || composition || colorPrimary || colorSecondary || note);
+    : Boolean(name.trim() || image || price || composition || note);
 
   const save = async () => {
     setTouched(true);
@@ -1365,9 +1327,14 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
     if (soft.length > 0) {
       const ok = await confirmAsync({
         title: "Save without " + andList(soft) + "?",
-        body: "You can add these later. They're what the photo can't say on its own, "
-          + "and they're what makes every stitched preview of this cloth come back right.",
-        confirmLabel: "Save anyway", cancelLabel: "Let me add them",
+        /* Says what actually happens to the field rather than praising it. It
+           is read straight into the prompt that generates this cloth's
+           previews, so skipping it isn't leaving a form incomplete — it's
+           handing the render less to work from. */
+        body: "Where a border sits, how the cloth drapes, what the pattern is — we read that "
+          + "alongside the photo when generating this cloth's previews, and a photo can't show "
+          + "it. You can add it later, but anything stitched before then won't have used it.",
+        confirmLabel: "Save anyway", cancelLabel: "Let me add it",
       });
       if (!ok) return;
     }
@@ -1375,9 +1342,17 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
       name: name.trim(), family, image: image!,
       price: priceNum, unit,
       composition: composition.trim(),
-      colorPrimary, colorSecondary, colorPrimaryHex, colorSecondaryHex,
-      color: colorText(colorPrimary, colorSecondary),
+      colors,
+      /* True the moment the vendor sets a colour by hand, here or in the
+         studio: both are the shop saying what the cloth is rather than the
+         canvas reporting what the photo was. Otherwise carried, so fixing a
+         typo in the price never demotes a correction — and cleared outright by
+         updateFabric when the photo itself changes, because a correction made
+         against the old picture says nothing about the new one. */
+      colorsCorrected: colorsTouched || (initial?.colorsCorrected ?? false),
+      color: colorText(colors),
       note: note.trim(),
+      correction: initial?.correction ?? "",
       inStock: initial?.inStock ?? true,
     });
   };
@@ -1393,11 +1368,22 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
         {initial ? "edit fabric" : "add a fabric"}
       </div>
 
+      {/* Sent here from the studio by a preview whose colour came out wrong.
+          The picture is the thing to change, so it's said before the vendor
+          reaches the form and the box below is drawn as the thing to press. */}
+      {photoIntent === "replace" && (
+        <div style={{ background: "var(--warn-bg)", border: "1px solid var(--warn)", borderRadius: "var(--radius-field)", padding: "11px 13px", marginBottom: 14, fontSize: 12.5, color: "var(--ink)", lineHeight: 1.6 }}>
+          Tap the picture below to shoot or upload a new one — daylight if you can, and fill the
+          frame with the weave. Everything else about this bolt stays as it is, and every preview
+          made from the old photo will be marked for re-stitching.
+        </div>
+      )}
+
       <button type="button" onClick={() => fileRef.current?.click()}
         aria-label={image ? "Change the fabric photo" : "Upload a fabric photo"}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
-        style={{ width: "100%", border: "1.5px dashed " + (image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-lg)", height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
+        style={{ width: "100%", border: "1.5px dashed " + (photoIntent === "replace" ? "var(--warn)" : image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-lg)", height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
         {busy ? <span>Processing photo…</span>
           : image ? <img src={image} alt="Fabric preview" style={{ height: "100%", objectFit: "contain" }} />
           : <div style={{ padding: 12 }}>Tap to upload a fabric photo<br /><span style={{ fontSize: 12 }}>Lay it flat in daylight — fill the frame with the weave</span></div>}
@@ -1409,7 +1395,7 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
           radius and one type size. Restating them here is what let the colour
           row drift 2px out of line with every other control. */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <label className="field">Fabric name <span className="req">*</span>
+        <label className="field"><span>Fabric name <span className="req">*</span></span>
           <input value={name} maxLength={80} data-autofocus
             onChange={(e) => setName(e.target.value)} placeholder="e.g. Navy Italian Wool" />
         </label>
@@ -1419,7 +1405,7 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
           </select>
         </label>
         <div style={{ display: "flex", gap: 10 }}>
-          <label className="field" style={{ flex: 1 }}>Price (NPR) <span className="req">*</span>
+          <label className="field" style={{ flex: 1 }}><span>Price (NPR) <span className="req">*</span></span>
             {/* The red border comes from the aria-invalid rule, so the state a
                 screen reader hears and the state the eye sees are one thing. */}
             <input value={price} maxLength={8} inputMode="numeric"
@@ -1432,29 +1418,46 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
             </select>
           </label>
         </div>
-        <label className="field">Weave
-          <input value={composition} maxLength={40}
-            onChange={(e) => setComposition(e.target.value)} placeholder="e.g. wool 120s" />
-        </label>
+        {/* Everything below is optional, so it folds away behind one line: a
+            bolt gets listed with a photo, a name and a price, and the vendor
+            with a customer waiting is not made to scroll past six fields they
+            were always going to skip.
 
-        {/* Two named slots, asked about and edited in the one place. The word
-            is what the render prompt reads, what the storefront filters on and
-            what the counter finds when a customer says "the maroon one"; the
-            shade beside it is this bolt's own. */}
-        <ColorSection reading={reading} image={busy ? null : image}
-          primary={colorPrimary} primaryHex={colorPrimaryHex}
-          secondary={colorSecondary} secondaryHex={colorSecondaryHex}
-          onPrimary={(w, h) => { setColorPrimary(w); setColorPrimaryHex(h); }}
-          onSecondary={(w, h) => { setColorSecondary(w); setColorSecondaryHex(h); }} />
+            It opens itself when the photo reading arrives, because that's a
+            question about this cloth that we asked and that deserves an
+            answer — hiding it behind a closed panel would be asking nobody. */}
+        <details className="opt-block" open={showOptional}
+          onToggle={(e) => setShowOptional(e.currentTarget.open)}>
+          <summary>
+            Optional customisation
+            <span className="sub">{optionalSummary}</span>
+          </summary>
+          <div className="opt-body">
+            <label className="field">Weave
+              <input value={composition} maxLength={40}
+                onChange={(e) => setComposition(e.target.value)} placeholder="e.g. wool 120s" />
+            </label>
 
-        <label className="field">Anything else we should know?
-          <textarea value={note} maxLength={300} onChange={(e) => setNote(e.target.value)}
-            placeholder="e.g. banarasi brocade with zari buttas — gold border on one edge only, goes on the pallu" />
-          <span className="hint">
-            Optional, but it&apos;s the part a photo can&apos;t show — the pattern, where a
-            border sits, how it drapes.
-          </span>
-        </label>
+            {/* Measured and shown, and correctable on the spot. These words are
+                what the render prompt reads, what the storefront filters on and
+                what the counter finds when a customer says "the maroon one" —
+                so the vendor holding the bolt gets to overrule the camera
+                without waiting for a preview to prove them right. */}
+            <ColorReadout reading={reading} colors={colors} image={image}
+              onChange={(next) => { setColorsTouched(true); setColors(next); }}
+              corrected={colorsTouched || (initial?.colorsCorrected ?? false)}
+              onRecrop={() => { if (image) setCropping(image); }} />
+
+            <label className="field">Anything else we should know?
+              <textarea value={note} maxLength={300} onChange={(e) => setNote(e.target.value)}
+                placeholder="e.g. banarasi brocade with zari buttas — gold border on one edge only, goes on the pallu" />
+              <span className="hint">
+                Optional, but it&apos;s the part a photo can&apos;t show — the pattern, where a
+                border sits, how it drapes.
+              </span>
+            </label>
+          </div>
+        </details>
       </div>
 
       {missing.length > 0 && (
@@ -1471,6 +1474,13 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
           {initial ? "save changes" : "save fabric"}
         </button>
       </div>
+      {cropping && (
+        <ImageCropper src={cropping} title="Keep just the cloth"
+          hint="Drag the box onto the weave and leave the counter out. Everything inside it is what gets stitched from — and what we read the colour off."
+          confirmLabel="use this crop"
+          onCancel={() => setCropping(null)} onDone={acceptCrop} />
+      )}
+
       {initial && onRemove && (
         <button className="ph-btn"
           onClick={async () => {

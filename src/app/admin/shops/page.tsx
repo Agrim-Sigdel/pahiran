@@ -300,7 +300,8 @@ function ShopsTable() {
                       value={s.category}
                       disabled={busy === s.id + ":category"}
                       onChange={(e) => act(s, { action: "category", category: e.target.value }, "category")}
-                      style={{ padding: "8px 10px", fontSize: 12, borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)" }}
+                      className="ph-select"
+                      style={{ padding: "8px 10px", fontSize: 12, borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)" }}
                     >
                       {Object.entries(CATEGORY_LABEL).map(([id, label]) => (
                         <option key={id} value={id}>{label}</option>

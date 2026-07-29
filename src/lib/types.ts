@@ -1,7 +1,7 @@
 /* Shared domain types. The storage adapter maps DB rows (snake_case)
    to these app-facing shapes, so components never see raw rows. */
 
-import { colorText } from "@/lib/constants";
+import { colorPhrase, colorText } from "@/lib/constants";
 
 /* Admin approval state. Only 'approved' shops can add catalog items, run
    try-ons, or be read by the public — see 20260721000100_admin_console.sql.
@@ -63,6 +63,24 @@ export type StyleFamily =
 /** How a fabric is priced — per running meter, per single piece, or per set. */
 export type FabricUnit = "meter" | "piece" | "set";
 
+/* One colour in a cloth, and how much of it there is.
+
+   The share is what stops the render guessing. Two words alone ("maroon,
+   gold") leave an image model free to decide which one dominates, and it
+   decides differently on different runs — a gold border becomes a gold
+   garment. "78% maroon, 22% gold" cannot be read two ways.
+
+   Read off the photo to begin with, then corrected by the vendor, who can see
+   the bolt and the light it was shot under. */
+export interface FabricColor {
+  /** A FABRIC_COLORS id, or the vendor's own word when the palette had none. */
+  id: string;
+  /** The exact shade, for the swatch. "" falls back to the palette's. */
+  hex: string;
+  /** Fraction of the cloth, 0..1. The list always sums to 1. */
+  share: number;
+}
+
 export interface Fabric {
   id: string;
   itemCode: string | null; // printed on the bolt tag; null in localStorage mode
@@ -72,23 +90,31 @@ export interface Fabric {
   price: number; // NPR, per `unit`
   unit: FabricUnit;
   composition: string; // "wool 120s", "banarasi silk"; "" = unspecified
-  /* The two colours the shop would name this bolt by. Palette ids from
-     FABRIC_COLORS, or the vendor's own text when the palette had no word for
-     it; "" = not set. Secondary is the border, motif or contrast — most solid
-     cloths have none. */
-  colorPrimary: string;
-  colorSecondary: string;
-  /* The exact shade behind each word, picked off the photo or dialled in.
-     Display only — two bolts both correctly called maroon are not the same
-     maroon. "" when never set; fall back to the palette's swatch. */
-  colorPrimaryHex: string;
-  colorSecondaryHex: string;
+  /* Every colour in this cloth, most of it first, with how much of it each
+     one covers. A list rather than two slots because cloth doesn't come in
+     twos: a plain suiting has one colour, a banarasi has five, and forcing
+     either into "primary + secondary" throws away the difference between a
+     gold border and a gold-dominant weave. */
+  colors: FabricColor[];
+  /* The shop set these themselves, against a render that got them wrong —
+     rather than them being what the upload photo measured. It is the only
+     thing that lets the render prompt put the words above the sample photo,
+     and it can only become true after a preview exists: before that, a
+     "correction" would be a measurement taken off the very photo it claims to
+     overrule. See the colour paragraph in compose.ts. */
+  colorsCorrected: boolean;
   /** Derived: "Navy · Gold". What cards and counter search read. */
   color: string;
   /* What the shop knows about this cloth that a photo doesn't show — the
      pattern, where a border falls, how heavily it drapes. Feeds the compose
      prompt. */
   note: string;
+  /* What previous renders of this cloth got wrong — "it came out too orange,
+     it's maroon". True of the cloth, so it applies to every cut stitched from
+     it, and changing it marks every preview of this bolt as needing a
+     re-stitch. Distinct from `note`, which describes the cloth rather than
+     correcting a render of it. */
+  correction: string;
   inStock: boolean;
 }
 
@@ -114,16 +140,62 @@ export interface Composition {
   /* Which revision of the cut produced this image. Null on renders made before
      revisions existed — unknowable, not stale. */
   renderedStyleRevision: number | null;
+  /** The vendor has looked at this image and said it is the cloth. */
+  approved: boolean;
+  /* What the vendor said was wrong with the last attempt at this pairing, and
+     what the current image was actually made under. Same two-values-compared
+     trick as the note: a correction the render hasn't seen yet is what makes
+     stitching again worth paying for. */
+  correction: string;
+  renderedCorrection: string;
+  /** The cloth-wide correction this image was made under — see Fabric.correction. */
+  renderedFabricCorrection: string;
+  /* The cloth's colours as they stood when this image was made. Null on
+     renders that predate the mirror — unknowable, not stale, same as
+     renderedStyleRevision. Correcting a bolt's colours moves fabrics.colors
+     and leaves this behind, which is what marks every preview of that bolt as
+     needing a re-stitch. */
+  renderedColors: FabricColor[] | null;
+  /* The fabric's own photo — `Fabric.image`, the picture the vendor uploaded —
+     as it stood when this render was made. Empty on renders that predate the
+     mirror.
+
+     Replacing that photo is the strongest change a vendor can make to a cloth,
+     because the render was drawn from those pixels and nothing else describes
+     the weave, so every preview of the fabric is marked for re-stitching. */
+  renderedFabricImage: string;
 }
 
 /** Why a render no longer matches what the shop is offering, or null if it
-    still does. The two inputs a vendor can change after the fact are the
-    pairing's note and the cut itself; everything else means a new render. */
+    still does. Everything a vendor can change after the fact without ordering
+    a new render lives here; anything else means a new render outright. */
 export function staleReason(
   c: Composition,
-  style?: Style | null
-): "note" | "cut" | null {
+  style?: Style | null,
+  fabric?: Fabric | null
+): "note" | "cut" | "fix" | "cloth" | "colour" | "photo" | null {
   if (c.status !== "ready") return null;
+  /* Ahead of everything else: a new photo of the bolt is a new cloth as far as
+     this picture is concerned, and whatever else has changed is beside the
+     point next to that. Empty means the render predates the mirror. */
+  if (fabric && c.renderedFabricImage && c.renderedFabricImage !== fabric.image) {
+    return "photo";
+  }
+  /* Corrections rank above notes: a vendor who has just said "this came out
+     the wrong colour" should be told that's what needs re-stitching, not shown
+     a stale-note badge that says nothing about what they reported. */
+  if (c.correction.trim() !== c.renderedCorrection.trim()) return "fix";
+  /* Compared as the phrase the prompt reads, not as the stored objects: a
+     nudged hex is display-only and never reaches a render, so it must not cost
+     one. Null renderedColors predates the mirror and is left alone. */
+  if (
+    fabric &&
+    c.renderedColors !== null &&
+    colorPhrase(fabric.colors) !== colorPhrase(c.renderedColors)
+  ) {
+    return "colour";
+  }
+  if (fabric && fabric.correction.trim() !== c.renderedFabricCorrection.trim()) return "cloth";
   if (c.note.trim() !== c.renderedNote.trim()) return "note";
   if (style && c.renderedStyleRevision !== null && style.revision !== c.renderedStyleRevision) {
     return "cut";
@@ -308,11 +380,10 @@ export interface FabricRow {
   unit: string | null;
   composition: string | null;
   color: string | null;
-  color_primary: string | null;
-  color_secondary: string | null;
-  color_primary_hex: string | null;
-  color_secondary_hex: string | null;
+  colors: FabricColor[] | null;
+  colors_corrected: boolean | null;
   note: string | null;
+  correction: string | null;
   in_stock: boolean;
 }
 
@@ -328,6 +399,12 @@ export interface CompositionRow {
   note: string | null;
   rendered_note: string | null;
   rendered_style_revision: number | null;
+  approved: boolean | null;
+  correction: string | null;
+  rendered_correction: string | null;
+  rendered_fabric_correction: string | null;
+  rendered_colors: FabricColor[] | null;
+  rendered_fabric_image: string | null;
 }
 
 export function rowToComposition(r: CompositionRow): Composition {
@@ -343,6 +420,15 @@ export function rowToComposition(r: CompositionRow): Composition {
     note: r.note ?? "",
     renderedNote: r.rendered_note ?? "",
     renderedStyleRevision: r.rendered_style_revision ?? null,
+    approved: r.approved ?? false,
+    correction: r.correction ?? "",
+    renderedCorrection: r.rendered_correction ?? "",
+    renderedFabricCorrection: r.rendered_fabric_correction ?? "",
+    /* Null and [] are different answers here: null is a render made before the
+       mirror existed and never stale for colour, [] is a render made from a
+       cloth that genuinely had no colours set. */
+    renderedColors: Array.isArray(r.rendered_colors) ? r.rendered_colors : null,
+    renderedFabricImage: r.rendered_fabric_image ?? "",
   };
 }
 
@@ -360,8 +446,18 @@ export interface StyleRow {
 }
 
 export function rowToFabric(r: FabricRow): Fabric {
-  const primary = r.color_primary ?? "";
-  const secondary = r.color_secondary ?? "";
+  /* Rows written before 20260729000100 carry the old free-text colour and no
+     list. That one word becomes the whole cloth — which is what it always
+     claimed to be — and the vendor refines it the next time they open the
+     bolt. Guarded as an array: `colors` is jsonb, and a row hand-edited to an
+     object would otherwise crash every card that maps over it. */
+  const stored = Array.isArray(r.colors) ? r.colors : [];
+  const colors: FabricColor[] =
+    stored.length > 0
+      ? stored
+      : r.color
+      ? [{ id: r.color, hex: "", share: 1 }]
+      : [];
   return {
     id: r.id,
     itemCode: r.item_code ?? null,
@@ -371,15 +467,11 @@ export function rowToFabric(r: FabricRow): Fabric {
     price: r.price_npr,
     unit: (r.unit as FabricUnit) ?? "meter",
     composition: r.composition ?? "",
-    colorPrimary: primary,
-    colorSecondary: secondary,
-    colorPrimaryHex: r.color_primary_hex ?? "",
-    colorSecondaryHex: r.color_secondary_hex ?? "",
-    /* The stored join is authoritative once the slots are set; the old
-       free-text column carries rows written before 20260729000100 and rows the
-       backfill left alone. */
-    color: colorText(primary, secondary) || (r.color ?? ""),
+    colors,
+    colorsCorrected: r.colors_corrected ?? false,
+    color: colorText(colors) || (r.color ?? ""),
     note: r.note ?? "",
+    correction: r.correction ?? "",
     inStock: r.in_stock,
   };
 }

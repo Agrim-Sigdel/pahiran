@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { FAMILIES, familyLabel, fabricPrice } from "@/lib/constants";
+import { FAMILIES, familyLabel, fabricPrice, creditCost } from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
 import { downloadImage } from "@/lib/looks";
 import { StitchingOverlay, ImageZoom } from "@/components/FabricStudio";
@@ -471,7 +471,10 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
               : "Show us the cut in a photo, or describe it in words."
             : !fabricImage || !personImage
             ? "Needs the cloth and the customer."
-            : "Uses one stitch and one try-on from your plan."}
+            /* Two meters for one press: the cloth is stitched into a garment,
+               then that garment is fitted to the customer. Said the moment the
+               button goes live, which is the moment it can be pressed. */
+            : creditCost(1, 1)}
         </span>
       </div>
 
@@ -712,9 +715,11 @@ function FabricPickerModal({ fabrics, selectedId, onPick, onClose }: {
   );
 }
 
+/* backgroundColor, not the `background` shorthand: the shorthand resets
+   background-image, and .ph-select draws its chevron there. */
 const selectStyle: React.CSSProperties = {
   padding: "12px 15px", borderRadius: "var(--radius-lg)", border: "1px solid var(--line)",
-  fontSize: 15, background: "var(--card)", color: "var(--ink)", fontWeight: 400,
+  fontSize: 15, backgroundColor: "var(--card)", color: "var(--ink)", fontWeight: 400,
   letterSpacing: 0, textTransform: "none", width: "100%",
 };
 
