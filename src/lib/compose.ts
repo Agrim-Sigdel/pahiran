@@ -37,6 +37,10 @@ export interface ComposeRequest {
   /** The vendor's knowledge about this specific cloth: where a border falls,
       how heavy it is. Worth more than any prompt wording we could invent. */
   fabricNote?: string;
+  /** What the shop calls this cloth's colours — "navy with gold". A tiebreaker
+      for a photo shot under a tube light, never licence to recolour: see how
+      it's worded below. */
+  fabricColors?: string;
   /** Which pieces to make. Left to the wording, the model decides for itself
       whether "worn over matching churidar" means it should draw the churidar —
       and it answers differently on different runs. */
@@ -74,7 +78,7 @@ async function toFile(src: string, name: string): Promise<File> {
    It is also simply the format try-on models are trained on, so the constraint
    that protects body fidelity improves fit quality at the same time. */
 function buildPrompt(req: ComposeRequest): string {
-  const { sources, hint, family, fabricNote, note } = req;
+  const { sources, hint, family, fabricNote, fabricColors, note } = req;
   const coverage = req.coverage ?? "set";
   const fabricIdx = sources.findIndex((s) => s.role === "fabric");
   const styleIdx = sources.findIndex((s) => s.role === "style-ref");
@@ -141,6 +145,20 @@ function buildPrompt(req: ComposeRequest): string {
   }
 
   if (hint.trim()) parts.push("Cut to make: " + hint.trim());
+
+  /* The sample image is always the authority on colour — said again here,
+     because naming a colour at all is an invitation to paint it. The words are
+     worth including anyway: a bolt photographed under a tube light comes in
+     warmer than it is, and "the shop calls this maroon" is what stops the
+     model committing to the orange it can see. Correction, not instruction. */
+  if (fabricColors?.trim()) {
+    parts.push(
+      `The shop calls this cloth ${fabricColors.trim()}. Use that only to settle what the cloth ` +
+        `sample is ambiguous about — lighting in the sample photo may have shifted it warmer or ` +
+        `cooler than it truly is. Where the words and the sample disagree, follow the sample. ` +
+        `Do not repaint the cloth to match the words.`
+    );
+  }
   if (fabricNote?.trim()) parts.push("The shop's note about this cloth: " + fabricNote.trim());
   /* Last of the three, so the most specific instruction is the freshest — this
      one was written about this cloth in this cut, and nothing else. */

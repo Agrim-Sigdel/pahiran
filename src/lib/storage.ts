@@ -7,7 +7,7 @@
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { currentAccessToken, currentUserId } from "@/lib/account";
 import { dataURLToBlob } from "@/lib/images";
-import { familyLabel } from "@/lib/constants";
+import { colorText, familyLabel } from "@/lib/constants";
 import { GLOBAL_STYLES } from "@/lib/style-library";
 import {
   type Garment,
@@ -348,7 +348,19 @@ const lsFabrics = (): Fabric[] => {
     return ids
       .map((id) => lsGet("fabric:" + id))
       .filter((v): v is string => Boolean(v))
-      .map((v) => JSON.parse(v) as Fabric);
+      .map((v) => JSON.parse(v) as Fabric)
+      /* Rows written before 20260729000100 have one free-text colour and no
+         shade. Supabase mode gets this from the migration; local mode has no
+         migrations, so it happens on read. Same landing place either way:
+         whatever the old box said becomes the main colour, unchanged. */
+      .map((f) => ({
+        ...f,
+        colorPrimary: f.colorPrimary ?? f.color ?? "",
+        colorSecondary: f.colorSecondary ?? "",
+        colorPrimaryHex: f.colorPrimaryHex ?? "",
+        colorSecondaryHex: f.colorSecondaryHex ?? "",
+        color: colorText(f.colorPrimary ?? f.color ?? "", f.colorSecondary ?? ""),
+      }));
   } catch {
     return [];
   }
@@ -411,7 +423,13 @@ export async function addFabric(
       price_npr: fabric.price,
       unit: fabric.unit,
       composition: fabric.composition || null,
-      color: fabric.color || null,
+      color_primary: fabric.colorPrimary || null,
+      color_secondary: fabric.colorSecondary || null,
+      color_primary_hex: fabric.colorPrimaryHex || null,
+      color_secondary_hex: fabric.colorSecondaryHex || null,
+      // Derived, and written rather than computed on read: the counter's search
+      // index and three card layouts read this one column.
+      color: colorText(fabric.colorPrimary, fabric.colorSecondary) || null,
       note: fabric.note || null,
       in_stock: fabric.inStock,
     })
@@ -453,7 +471,11 @@ export async function updateFabric(
       price_npr: fabric.price,
       unit: fabric.unit,
       composition: fabric.composition || null,
-      color: fabric.color || null,
+      color_primary: fabric.colorPrimary || null,
+      color_secondary: fabric.colorSecondary || null,
+      color_primary_hex: fabric.colorPrimaryHex || null,
+      color_secondary_hex: fabric.colorSecondaryHex || null,
+      color: colorText(fabric.colorPrimary, fabric.colorSecondary) || null,
       note: fabric.note || null,
       in_stock: fabric.inStock,
     })
@@ -858,6 +880,15 @@ export async function saveCounterRun(
       price: 0,
       unit: "meter",
       composition: "",
+      /* Left unset on purpose. The counter is a customer standing at the
+         desk, not a cataloguing session, so it never asks for colours — and a
+         colour read off the photo without the vendor confirming it is a guess
+         wearing a fact's clothes. The fabric modal asks the next time this
+         bolt is opened. */
+      colorPrimary: "",
+      colorSecondary: "",
+      colorPrimaryHex: "",
+      colorSecondaryHex: "",
       color: "",
       note: input.fabricNote.trim(),
       inStock: true,

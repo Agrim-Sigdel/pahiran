@@ -2,6 +2,7 @@ import { serviceClient, bearer, ownsShop } from "@/lib/billing";
 import { badOrigin } from "@/lib/origin";
 import { composeGarment, openaiKey, type ComposeSource } from "@/lib/compose";
 import { consumeCompose, refundCompose } from "@/lib/plan";
+import { colorPhrase } from "@/lib/constants";
 import type { StyleCoverage } from "@/lib/types";
 
 /* Vendor-only: render a fabric in one or more cuts.
@@ -66,7 +67,7 @@ export async function POST(req: Request): Promise<Response> {
      debugging in entirely the wrong direction. */
   const { data: fabric, error: fabricErr } = await sb
     .from("fabrics")
-    .select("id, shop_id, name, family, image_url, note")
+    .select("id, shop_id, name, family, image_url, note, color_primary, color_secondary")
     .eq("id", fabricId)
     .eq("shop_id", shopId)
     .maybeSingle();
@@ -148,6 +149,8 @@ export async function POST(req: Request): Promise<Response> {
         hint: style.prompt_hint || "",
         family: fabric.family,
         fabricNote: fabric.note || undefined,
+        fabricColors:
+          colorPhrase(fabric.color_primary || "", fabric.color_secondary || "") || undefined,
         coverage: (style.coverage as StyleCoverage) || "set",
         note: note || undefined,
       });

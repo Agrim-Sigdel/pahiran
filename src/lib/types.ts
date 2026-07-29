@@ -1,6 +1,8 @@
 /* Shared domain types. The storage adapter maps DB rows (snake_case)
    to these app-facing shapes, so components never see raw rows. */
 
+import { colorText } from "@/lib/constants";
+
 /* Admin approval state. Only 'approved' shops can add catalog items, run
    try-ons, or be read by the public — see 20260721000100_admin_console.sql.
    Local (no-Supabase) mode has no admin, so it treats every shop as approved. */
@@ -70,9 +72,22 @@ export interface Fabric {
   price: number; // NPR, per `unit`
   unit: FabricUnit;
   composition: string; // "wool 120s", "banarasi silk"; "" = unspecified
+  /* The two colours the shop would name this bolt by. Palette ids from
+     FABRIC_COLORS, or the vendor's own text when the palette had no word for
+     it; "" = not set. Secondary is the border, motif or contrast — most solid
+     cloths have none. */
+  colorPrimary: string;
+  colorSecondary: string;
+  /* The exact shade behind each word, picked off the photo or dialled in.
+     Display only — two bolts both correctly called maroon are not the same
+     maroon. "" when never set; fall back to the palette's swatch. */
+  colorPrimaryHex: string;
+  colorSecondaryHex: string;
+  /** Derived: "Navy · Gold". What cards and counter search read. */
   color: string;
-  /* What the shop knows about this cloth that a photo doesn't show — where a
-     border falls, how heavily it drapes. Feeds the compose prompt. */
+  /* What the shop knows about this cloth that a photo doesn't show — the
+     pattern, where a border falls, how heavily it drapes. Feeds the compose
+     prompt. */
   note: string;
   inStock: boolean;
 }
@@ -293,6 +308,10 @@ export interface FabricRow {
   unit: string | null;
   composition: string | null;
   color: string | null;
+  color_primary: string | null;
+  color_secondary: string | null;
+  color_primary_hex: string | null;
+  color_secondary_hex: string | null;
   note: string | null;
   in_stock: boolean;
 }
@@ -341,6 +360,8 @@ export interface StyleRow {
 }
 
 export function rowToFabric(r: FabricRow): Fabric {
+  const primary = r.color_primary ?? "";
+  const secondary = r.color_secondary ?? "";
   return {
     id: r.id,
     itemCode: r.item_code ?? null,
@@ -350,7 +371,14 @@ export function rowToFabric(r: FabricRow): Fabric {
     price: r.price_npr,
     unit: (r.unit as FabricUnit) ?? "meter",
     composition: r.composition ?? "",
-    color: r.color ?? "",
+    colorPrimary: primary,
+    colorSecondary: secondary,
+    colorPrimaryHex: r.color_primary_hex ?? "",
+    colorSecondaryHex: r.color_secondary_hex ?? "",
+    /* The stored join is authoritative once the slots are set; the old
+       free-text column carries rows written before 20260729000100 and rows the
+       backfill left alone. */
+    color: colorText(primary, secondary) || (r.color ?? ""),
     note: r.note ?? "",
     inStock: r.in_stock,
   };

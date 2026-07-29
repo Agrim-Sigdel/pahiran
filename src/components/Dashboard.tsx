@@ -2,8 +2,14 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import QRCode from "qrcode";
-import { CATEGORIES, SIZES, FAMILIES, FABRIC_UNITS, npr, fabricPrice, familyLabel } from "@/lib/constants";
+import {
+  CATEGORIES, SIZES, FAMILIES, FABRIC_UNITS, FABRIC_COLORS,
+  npr, fabricPrice, familyLabel, colorHex, colorLabel, colorText, colorPhrase,
+} from "@/lib/constants";
 import { fileToCompressedDataURL } from "@/lib/images";
+import {
+  readFabricColors, colorDisagrees, hexToPaletteId, sampleImageHex, type ColorReading,
+} from "@/lib/color-detect";
 import { OverviewTab, LeadsTab, garmentTryCounts, groupLeads } from "@/components/Analytics";
 import LocationPicker from "@/components/LocationPicker";
 import PlanTab from "@/components/PlanTab";
@@ -956,7 +962,7 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
           out with no explanation anywhere on the form. */}
       {missing.length > 0 && (
         <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--stone)" }}>
-          Still needs {missing.join(", ").replace(/, ([^,]*)$/, " and $1")}.
+          Still needs {andList(missing)}.
         </div>
       )}
 
@@ -997,6 +1003,279 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
   );
 }
 
+/** "a main colour, a second colour and any extra detail" */
+const andList = (xs: string[]): string =>
+  xs.join(", ").replace(/, ([^,]*)$/, " and $1");
+
+/* ── one colour: the shade and the word for it ──
+   Both, because they do different jobs. The shade is what the vendor actually
+   sees and what a shopper will see on the card — and two bolts both correctly
+   called maroon are not the same maroon. The word is what the render prompt
+   reads, what the storefront filters on, and what the counter searches; a hex
+   is none of those things. So the picker moves the shade and the word snaps to
+   follow, and the vendor can overrule the word when the snap is wrong.
+
+   The eyedropper is the control that matters here. Nobody can find "the navy
+   of this particular bolt" on a colour wheel from memory, but anybody can tap
+   it in the photo of the bolt in their hand. */
+function ColorRow({ label, hint, word, hex, onChange, image, clearable }: {
+  label: string;
+  hint?: string;
+  word: string;
+  hex: string;
+  onChange: (word: string, hex: string) => void;
+  /** Enables tap-the-photo. Null on a fabric with no photo yet. */
+  image: string | null;
+  /** The second slot, where "one solid colour" is the common answer. */
+  clearable?: boolean;
+}) {
+  const isPalette = FABRIC_COLORS.some((c) => c.id === word);
+  const [custom, setCustom] = useState(Boolean(word) && !isPalette);
+  const [picking, setPicking] = useState(false);
+  const [imgBroken, setImgBroken] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  // The photo reading writes these from outside; keep the free-text box in
+  // step so the two controls never both look live.
+  useEffect(() => { if (word && FABRIC_COLORS.some((c) => c.id === word)) setCustom(false); }, [word]);
+
+  const swatch = hex || colorHex(word) || "#cccccc";
+  /* A shade the vendor moved re-snaps the word — unless they've named the
+     colour themselves, in which case their word is the point and only the
+     shade moves. */
+  const applyHex = (h: string) => onChange(custom ? word : hexToPaletteId(h), h);
+
+  const onSelect = (v: string) => {
+    if (v === "__other") { setCustom(true); return; }
+    setCustom(false);
+    // Choosing the word by hand means overruling the photo, so the shade
+    // follows the word rather than the other way round.
+    onChange(v, v ? colorHex(v) ?? "" : "");
+  };
+
+  const pickFromPhoto = (e: React.MouseEvent) => {
+    const el = imgRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const h = sampleImageHex(el, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+    if (h) applyHex(h);
+    setPicking(false);
+  };
+
+  const headingId = "fabric-" + label.toLowerCase().replace(/\s+/g, "-");
+
+  return (
+    /* .field on purpose: it supplies the label type, the 6px rhythm between
+       rows, and — because `.field select` and `.field input` are styled —
+       makes these controls identical to every other control on the form
+       without restating a single value. The colour well is the one exception,
+       and overrides only what it has to.
+
+       A group rather than a <label>, because a label binds to exactly one
+       control: wrapping three of them would tie the whole block to the colour
+       well, so clicking the hint would pop the OS colour picker open. Each
+       control carries its own aria-label instead. */
+    <div className="field" role="group" aria-labelledby={headingId}>
+      <span id={headingId}>{label}</span>
+      {hint && <span className="hint">{hint}</span>}
+
+      {/* stretch, so the well, the list and the button share one height */}
+      <span style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+        {/* The well *is* the picker — a native colour input, so every platform
+            brings its own and it's reachable from the keyboard. */}
+        <input type="color" value={swatch} aria-label={label + " shade"}
+          onChange={(e) => applyHex(e.target.value)}
+          style={{ width: 54, padding: 3, borderRadius: "var(--radius-field)", border: "1px solid var(--line)", background: "var(--card)", cursor: "pointer", flexShrink: 0 }} />
+        <select value={custom ? "__other" : word} aria-label={label + " name"}
+          onChange={(e) => onSelect(e.target.value)}
+          style={{ flex: 1, minWidth: 0 }}>
+          <option value="">{clearable ? "None" : "Choose a colour"}</option>
+          {FABRIC_COLORS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          <option value="__other">Other…</option>
+        </select>
+        {image && !imgBroken && (
+          <button type="button" className="ph-btn" aria-pressed={picking}
+            aria-label={"Take the " + label.toLowerCase() + " from the photo"}
+            onClick={() => setPicking((p) => !p)}
+            style={{
+              padding: "0 14px", flexShrink: 0, whiteSpace: "nowrap",
+              fontSize: 13, fontWeight: 600, borderRadius: "var(--radius-field)",
+              background: "var(--card)",
+              border: "1px solid " + (picking ? "var(--ink)" : "var(--line)"),
+              color: picking ? "var(--ink)" : "var(--stone)",
+            }}>
+            {picking ? "cancel" : "from photo"}
+          </button>
+        )}
+      </span>
+
+      {custom && (
+        <input value={isPalette ? "" : word} maxLength={24} autoFocus
+          aria-label="Name this colour yourself" placeholder="e.g. peacock"
+          onChange={(e) => onChange(e.target.value, hex)} />
+      )}
+
+      {picking && image && (
+        <>
+          <span className="hint">Tap a plain part of the cloth — not a shadow or a fold.</span>
+          {/* A button so it's focusable and announced; the keyboard route to
+              the same value is the well and the list beside it. */}
+          {/* Hugs the photo rather than stretching across the column: a
+              crosshair over blank space that still samples an edge pixel is a
+              lie about where you tapped. */}
+          <button type="button" onClick={pickFromPhoto} aria-label="Tap the photo to take its colour"
+            style={{ padding: 0, border: "1px solid var(--line)", borderRadius: "var(--radius-field)", background: "none", lineHeight: 0, cursor: "crosshair", overflow: "hidden", display: "block", alignSelf: "flex-start", maxWidth: "100%" }}>
+            {/* Stored photos are cross-origin; without this the canvas is
+                tainted and the pixels can't be read at all. */}
+            <img ref={imgRef} src={image} alt="" crossOrigin="anonymous"
+              onError={() => { setImgBroken(true); setPicking(false); }}
+              style={{ maxWidth: "100%", maxHeight: 200, width: "auto", display: "block" }} />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── the colours, asked and then edited in one place ──
+   Three states, one spot in the form. The photo's reading is offered as a
+   question first, because the fastest correct answer is usually "yes" — and
+   answering "no" opens the pickers right here, seeded with what the photo saw,
+   rather than sending the vendor somewhere else to start from nothing.
+
+   It is only ever a question. The vendor is standing in front of the cloth and
+   the camera isn't: under a tube light a maroon bolt photographs orange, and
+   when the two disagree the vendor is right. */
+function ColorSection({
+  reading, image, primary, primaryHex, secondary, secondaryHex, onPrimary, onSecondary,
+}: {
+  reading: ColorReading | null;
+  image: string | null;
+  primary: string;
+  primaryHex: string;
+  secondary: string;
+  secondaryHex: string;
+  onPrimary: (word: string, hex: string) => void;
+  onSecondary: (word: string, hex: string) => void;
+}) {
+  const [mode, setMode] = useState<"ask" | "pick" | "set">(primary ? "set" : "pick");
+
+  // A fresh photo is a fresh question, however the last one was answered.
+  useEffect(() => { if (reading?.primary) setMode("ask"); }, [reading]);
+
+  const guess = reading?.primary ?? null;
+
+  /** A dot of a colour, at the size the rest of the modal uses for one. */
+  const dot = (fill: string, ml = 0) => (
+    <span aria-hidden style={{
+      width: 14, height: 14, borderRadius: "50%", background: fill,
+      border: "1px solid var(--line-strong)", flexShrink: 0, marginLeft: ml,
+    }} />
+  );
+
+  if (mode === "ask" && guess) {
+    /* colorPhrase, not colorText: "maroon with gold" is a sentence, where the
+       card layout's "Maroon · Gold" is a label. Same two colours, and reading
+       "it looks maroon · gold" out loud is how you notice the difference. */
+    const seen = colorPhrase(guess.id, reading?.secondary?.id ?? "");
+    const clash = colorDisagrees(primary, guess.id);
+    const warn = reading?.unreliable ?? false;
+    const take = () => {
+      onPrimary(guess.id, guess.hex);
+      if (reading?.secondary) onSecondary(reading.secondary.id, reading.secondary.hex);
+      setMode("set");
+    };
+    const action: React.CSSProperties = {
+      padding: "9px 15px", minHeight: 38, fontSize: 13, fontWeight: 600,
+      borderRadius: "var(--radius-btn)",
+    };
+    return (
+      <div className="field">
+        <span>Colours</span>
+        <div style={{
+          background: warn ? "var(--warn-bg)" : "var(--paper)",
+          border: "1px solid " + (warn ? "var(--warn)" : "var(--line)"),
+          borderRadius: "var(--radius-field)", padding: "13px 15px",
+          fontSize: 13, fontWeight: 400, color: "var(--ink)", lineHeight: 1.6,
+          display: "flex", flexDirection: "column", gap: 11,
+        }}>
+          {reading?.reason && (
+            <span style={{ color: "var(--stone)", fontSize: 12.5 }}>{reading.reason}</span>
+          )}
+          <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
+            <span aria-hidden style={{ display: "inline-flex", gap: 4, flexShrink: 0 }}>
+              {dot(guess.hex)}
+              {reading?.secondary && dot(reading.secondary.hex)}
+            </span>
+            <span>
+              {clash
+                ? <>You&apos;ve set <b>{colorLabel(primary).toLowerCase()}</b>, but this photo reads as <b>{seen}</b>.</>
+                : warn
+                ? <>Going by the photo alone it looks <b>{seen}</b> — check that against the cloth in your hand.</>
+                : <>From this photo it looks <b>{seen}</b>. Is that right?</>}
+            </span>
+          </span>
+          <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" className="ph-btn" onClick={take}
+              style={{
+                ...action,
+                background: warn || clash ? "var(--card)" : "var(--ink)",
+                color: warn || clash ? "var(--ink)" : "var(--card)",
+                border: "1px solid " + (warn || clash ? "var(--line-strong)" : "var(--ink)"),
+              }}>
+              {clash ? "Use " + colorLabel(guess.id).toLowerCase() : "Yes, that's it"}
+            </button>
+            <button type="button" className="ph-btn"
+              onClick={() => {
+                /* Open the pickers already holding what the photo saw.
+                   Correcting a colour that's nearly right is a nudge; starting
+                   from grey is a chore, and the vendor came here to say "not
+                   quite". */
+                if (!primary) onPrimary(guess.id, guess.hex);
+                setMode("pick");
+              }}
+              style={{ ...action, background: "var(--card)", border: "1px solid var(--line)", color: "var(--stone)" }}>
+              {clash ? "Keep " + colorLabel(primary).toLowerCase() : "No — I'll pick"}
+            </button>
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "set") {
+    return (
+      <div className="field">
+        <span>Colours</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 14, fontWeight: 400, color: "var(--ink)", minHeight: 24 }}>
+          {dot(primaryHex || colorHex(primary) || "var(--line)")}
+          {colorLabel(primary)}
+          {secondary && (
+            <>
+              {dot(secondaryHex || colorHex(secondary) || "var(--line)", 4)}
+              {colorLabel(secondary)}
+            </>
+          )}
+          <button type="button" className="ph-btn" onClick={() => setMode("pick")}
+            style={{ marginLeft: "auto", fontSize: 13, fontWeight: 600, color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3, padding: "4px 2px" }}>
+            change
+          </button>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <ColorRow label="Main colour" word={primary} hex={primaryHex}
+        onChange={onPrimary} image={image} />
+      <ColorRow label="Second colour" word={secondary} hex={secondaryHex}
+        onChange={onSecondary} image={image} clearable
+        hint="The border, motif or contrast — leave as none if it's one solid colour." />
+    </>
+  );
+}
+
 /* ── Fabric modal ──
    Deliberately not a GarmentModal variant. A fabric has no sizes (it's cut to
    the person) and no category, but it does have a family, a unit, and a weave
@@ -1013,21 +1292,44 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
   const [price, setPrice] = useState(initial ? String(initial.price || "") : "");
   const [unit, setUnit] = useState<Fabric["unit"]>(initial?.unit ?? "meter");
   const [composition, setComposition] = useState(initial?.composition ?? "");
-  const [color, setColor] = useState(initial?.color ?? "");
+  const [colorPrimary, setColorPrimary] = useState(initial?.colorPrimary ?? "");
+  const [colorSecondary, setColorSecondary] = useState(initial?.colorSecondary ?? "");
+  const [colorPrimaryHex, setColorPrimaryHex] = useState(initial?.colorPrimaryHex ?? "");
+  const [colorSecondaryHex, setColorSecondaryHex] = useState(initial?.colorSecondaryHex ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
   const [image, setImage] = useState<string | null>(initial?.image ?? null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [touched, setTouched] = useState(false);
+  /** What the photo says about its own colours. Drives the question the
+      colours section leads with; never applied without an answer. */
+  const [reading, setReading] = useState<ColorReading | null>(null);
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
-    try { setImage(await fileToCompressedDataURL(file)); }
-    catch { toastErr("Could not read that image. Try a JPG or PNG."); }
+    try {
+      const dataUrl = await fileToCompressedDataURL(file);
+      setImage(dataUrl);
+      /* Reading it costs nothing — it's a canvas, not a model — so it never
+         gates the upload; a failed read simply comes back empty. */
+      setReading(await readFabricColors(dataUrl));
+    } catch { toastErr("Could not read that image. Try a JPG or PNG."); }
     setBusy(false);
   };
+
+  /* A bolt listed before colours existed gets asked the same question the
+     moment it's opened. Without this every fabric already in a shop's catalog
+     stays colourless forever and nothing downstream ever gets the benefit.
+     Only when it's genuinely blank — a fabric whose colours are already set is
+     not re-litigated every time the vendor edits its price. */
+  useEffect(() => {
+    if (!initial?.image || initial.colorPrimary) return;
+    let live = true;
+    readFabricColors(initial.image).then((r) => { if (live) setReading(r); });
+    return () => { live = false; };
+  }, [initial?.image, initial?.colorPrimary]);
 
   const priceNum = Number(price || 0);
   const missing = [
@@ -1035,17 +1337,56 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
     !image && "a photo",
     !(priceNum > 0) && "a price",
   ].filter(Boolean) as string[];
+  /* Optional, but the part a photo can't say — so a blank one is worth one
+     question on the way out, not a blocked save. A vendor with a queue at the
+     counter always gets the bolt listed.
+
+     The second colour is only ever asked about when the photo actually found
+     one. Most bolts are a single solid colour, and a form that asks every one
+     of them for a second colour it doesn't have is a form vendors learn to
+     click through without reading. */
+  const soft = [
+    !colorPrimary && "a main colour",
+    !colorSecondary && reading?.secondary && "the second colour in the photo",
+    !note.trim() && "any extra detail",
+  ].filter(Boolean) as string[];
   const canSave = missing.length === 0 && !busy;
-  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-field)", border: "1px solid var(--line)", fontSize: 15, background: "var(--card)", color: "var(--ink)" };
   const dirty = initial
     ? name !== initial.name || family !== initial.family || String(initial.price || "") !== price
       || unit !== initial.unit || composition !== (initial.composition ?? "")
-      || color !== (initial.color ?? "") || note !== (initial.note ?? "") || image !== initial.image
-    : Boolean(name.trim() || image || price || composition || color || note);
+      || colorPrimary !== (initial.colorPrimary ?? "") || colorSecondary !== (initial.colorSecondary ?? "")
+      || colorPrimaryHex !== (initial.colorPrimaryHex ?? "") || colorSecondaryHex !== (initial.colorSecondaryHex ?? "")
+      || note !== (initial.note ?? "") || image !== initial.image
+    : Boolean(name.trim() || image || price || composition || colorPrimary || colorSecondary || note);
+
+  const save = async () => {
+    setTouched(true);
+    if (!canSave) return;
+    if (soft.length > 0) {
+      const ok = await confirmAsync({
+        title: "Save without " + andList(soft) + "?",
+        body: "You can add these later. They're what the photo can't say on its own, "
+          + "and they're what makes every stitched preview of this cloth come back right.",
+        confirmLabel: "Save anyway", cancelLabel: "Let me add them",
+      });
+      if (!ok) return;
+    }
+    onSave({
+      name: name.trim(), family, image: image!,
+      price: priceNum, unit,
+      composition: composition.trim(),
+      colorPrimary, colorSecondary, colorPrimaryHex, colorSecondaryHex,
+      color: colorText(colorPrimary, colorSecondary),
+      note: note.trim(),
+      inStock: initial?.inStock ?? true,
+    });
+  };
 
   return (
+    /* 430 rather than 400: the colour row carries a well, a list and a button
+       side by side, and at 400 the list is narrower than the words in it. */
     <Dialog onClose={onClose} title={initial ? "edit fabric" : "add a fabric"} hideHeader
-      width={400} dirty={dirty}
+      width={430} dirty={dirty}
       dirtyMessage="This fabric isn't saved yet. Discard what you've filled in?"
       panelStyle={{ padding: "28px 26px" }}>
       <div className="ph-display" style={{ fontSize: 24, color: "var(--ink)", marginBottom: 18 }}>
@@ -1063,69 +1404,69 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
       </button>
       <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* No inline styles on any of these: `.field input/select/textarea` in
+          globals.css already gives every control on the form one padding, one
+          radius and one type size. Restating them here is what let the colour
+          row drift 2px out of line with every other control. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <label className="field">Fabric name <span className="req">*</span>
-          <input style={input} value={name} maxLength={80} data-autofocus
+          <input value={name} maxLength={80} data-autofocus
             onChange={(e) => setName(e.target.value)} placeholder="e.g. Navy Italian Wool" />
         </label>
         <label className="field">Stitched into
-          <select value={family} onChange={(e) => setFamily(e.target.value as StyleFamily)} style={input}>
+          <select value={family} onChange={(e) => setFamily(e.target.value as StyleFamily)}>
             {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
           </select>
         </label>
         <div style={{ display: "flex", gap: 10 }}>
           <label className="field" style={{ flex: 1 }}>Price (NPR) <span className="req">*</span>
-            <input style={{ ...input, borderColor: touched && !(priceNum > 0) ? "var(--danger)" : "var(--line)" }}
-              value={price} maxLength={8} inputMode="numeric" aria-invalid={touched && !(priceNum > 0)}
+            {/* The red border comes from the aria-invalid rule, so the state a
+                screen reader hears and the state the eye sees are one thing. */}
+            <input value={price} maxLength={8} inputMode="numeric"
+              aria-invalid={touched && !(priceNum > 0)}
               onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))} placeholder="1800" />
           </label>
           <label className="field" style={{ flex: 1 }}>Sold by
-            <select value={unit} onChange={(e) => setUnit(e.target.value as Fabric["unit"])} style={input}>
+            <select value={unit} onChange={(e) => setUnit(e.target.value as Fabric["unit"])}>
               {FABRIC_UNITS.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
             </select>
           </label>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <label className="field" style={{ flex: 1 }}>Weave
-            <input style={input} value={composition} maxLength={40}
-              onChange={(e) => setComposition(e.target.value)} placeholder="e.g. wool 120s" />
-          </label>
-          <label className="field" style={{ flex: 1 }}>Colour
-            <input style={input} value={color} maxLength={30}
-              onChange={(e) => setColor(e.target.value)} placeholder="e.g. navy" />
-          </label>
-        </div>
-        <label className="field">Anything we should know about this cloth?
-          <textarea style={{ ...input, minHeight: 68, resize: "vertical", fontFamily: "inherit" }}
-            value={note} maxLength={300} onChange={(e) => setNote(e.target.value)}
-            placeholder="e.g. gold border runs along one edge only — it goes on the pallu" />
+        <label className="field">Weave
+          <input value={composition} maxLength={40}
+            onChange={(e) => setComposition(e.target.value)} placeholder="e.g. wool 120s" />
+        </label>
+
+        {/* Two named slots, asked about and edited in the one place. The word
+            is what the render prompt reads, what the storefront filters on and
+            what the counter finds when a customer says "the maroon one"; the
+            shade beside it is this bolt's own. */}
+        <ColorSection reading={reading} image={busy ? null : image}
+          primary={colorPrimary} primaryHex={colorPrimaryHex}
+          secondary={colorSecondary} secondaryHex={colorSecondaryHex}
+          onPrimary={(w, h) => { setColorPrimary(w); setColorPrimaryHex(h); }}
+          onSecondary={(w, h) => { setColorSecondary(w); setColorSecondaryHex(h); }} />
+
+        <label className="field">Anything else we should know?
+          <textarea value={note} maxLength={300} onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. banarasi brocade with zari buttas — gold border on one edge only, goes on the pallu" />
           <span className="hint">
-            Optional, but this is the part a photo can't show. Where a border sits or how
-            heavily a cloth drapes is what makes the stitched preview right.
+            Optional, but it&apos;s the part a photo can&apos;t show — the pattern, where a
+            border sits, how it drapes.
           </span>
         </label>
       </div>
 
       {missing.length > 0 && (
-        <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--stone)" }}>
-          Still needs {missing.join(", ").replace(/, ([^,]*)$/, " and $1")}.
+        <div style={{ marginTop: 14, fontSize: 12.5, color: "var(--stone)" }}>
+          Still needs {andList(missing)}.
         </div>
       )}
 
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
         <button className="ph-btn" onClick={onClose}
           style={{ flex: 1, color: "var(--ink)", padding: 13, fontSize: 13, letterSpacing: ".06em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 600 }}>cancel</button>
-        <button className="ph-btn" aria-disabled={!canSave}
-          onClick={() => {
-            setTouched(true);
-            if (!canSave) return;
-            onSave({
-              name: name.trim(), family, image: image!,
-              price: priceNum, unit,
-              composition: composition.trim(), color: color.trim(), note: note.trim(),
-              inStock: initial?.inStock ?? true,
-            });
-          }}
+        <button className="ph-btn" aria-disabled={!canSave} onClick={save}
           style={{ flex: 2, background: canSave ? "var(--ink)" : "var(--line)", color: canSave ? "var(--card)" : "var(--stone)", padding: 13, fontSize: 13, letterSpacing: ".06em", borderRadius: "var(--radius-btn)", fontWeight: 600, cursor: canSave ? "pointer" : "not-allowed" }}>
           {initial ? "save changes" : "save fabric"}
         </button>
