@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Dashboard from "@/components/Dashboard";
 import { StitchingOverlay } from "@/components/FabricStudio";
@@ -551,6 +551,11 @@ export default function DashboardPage() {
 
   return (
     <>
+    {/* Suspense because <Dashboard> reads ?tab= : the plan and settings pages
+        moved out of the tab bar into the account menu, so a toast pointing at
+        /dashboard?tab=plan is how a vendor who just hit their catalog limit
+        gets to the plans. Same shape as /login and /kiosk. */}
+    <Suspense fallback={null}>
     <Dashboard
       shop={shop} updateShop={updateShop} changeSlug={shop.slug ? changeSlug : null}
       catalog={catalog} addGarment={addGarment} editGarment={editGarment}
@@ -572,6 +577,7 @@ export default function DashboardPage() {
       signOut={signOut}
       composing={job !== null}
     />
+    </Suspense>
     {/* Outside <Dashboard> on purpose: the job has to keep drawing after the
         studio that started it is closed. */}
     {job && (

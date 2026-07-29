@@ -265,13 +265,7 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
         {mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
       </button>
 
-      {/* Signing up is agreeing to something, so the terms of that agreement
-          have to be reachable from the form. Neither auth surface linked to
-          the privacy policy at all. */}
-      <p style={{ marginTop: 16, fontSize: 12, color: "var(--stone)", lineHeight: 1.6 }}>
-        {mode === "signup" ? "By creating an account you agree to how we handle your data — see our " : "How we handle your data: "}
-        <Link href="/privacy" style={{ color: "var(--violet)", fontWeight: 600 }}>privacy policy</Link>.
-      </p>
+  
 
       <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--stone)" }}>
         {copy.crossLink.question}{" "}

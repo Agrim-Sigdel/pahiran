@@ -569,6 +569,22 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
 .tabs button.on::after { content: ""; position: absolute; left: 18px; right: 18px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--violet); }
 .tabs .badge { background: var(--butter); color: var(--on-light); font-size: 11px; font-weight: 700; border-radius: 10px; padding: 1px 8px; margin-left: 6px; }
 
+/* ── the switch inside a tab ──
+   Bolts and cuts are one job — a bolt is only worth listing once there is a
+   cut to stitch it into — so they share the Fabrics tab and this picks the
+   view. Deliberately NOT a second .tabs row: two underlined bars stacked on
+   each other read as two levels of nav with no hierarchy between them, which
+   is how the dashboard ended up with eight top-level tabs in the first
+   place. */
+.subtabs { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--card); }
+.subtabs button {
+  font-family: var(--font-display), sans-serif; font-size: 13px; font-weight: 600;
+  color: var(--stone); background: none; border: none; cursor: pointer;
+  padding: 7px 17px; min-height: 34px; border-radius: var(--radius-pill); white-space: nowrap;
+}
+.subtabs button.on { background: var(--ink); color: var(--card); }
+.subtabs button:focus-visible { outline: 3px solid var(--violet); outline-offset: 2px; }
+
 .garment-rail::-webkit-scrollbar { height: 0; }
 
 /* dashboard catalog toolbar: title + tools on one row on desktop; on phones

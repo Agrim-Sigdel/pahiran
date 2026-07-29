@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
 import {
   CATEGORIES, SIZES, FAMILIES, FABRIC_UNITS,
@@ -22,7 +23,21 @@ import { toastErr, toastWarn } from "@/lib/toast";
 import { COVERAGES } from "@/lib/types";
 import type { Composition, CounterInput, CounterRun, Fabric, FabricColor, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
 
-type Tab = "overview" | "leads" | "catalog" | "fabrics" | "designs" | "counter" | "settings" | "plan";
+/* Only "leads", "catalog" and "fabrics" are in the tab bar. "overview" is the
+   root the bar sits under, "plan" and "settings" are pages reached from the
+   account menu (see PAGES), and the counter is an action rather than a place,
+   so it isn't a tab at all any more.
+
+   The bar carried eight entries at once — five on a catalog-only shop — in a
+   horizontally-scrolling strip, which on a phone meant half the product was
+   off the right edge of a nav with no affordance saying so. */
+type Tab = "overview" | "leads" | "catalog" | "fabrics" | "settings" | "plan";
+
+/* Set-up-once surfaces: rarely opened, but a toast or a bookmark has to be
+   able to send a vendor straight to one, so they carry a ?tab= of their own. */
+const PAGES = { plan: "Plan & billing", settings: "Shop settings" } as const;
+type Page = keyof typeof PAGES;
+const isPage = (t: string | null): t is Page => t === "plan" || t === "settings";
 
 /* One row of actions on every catalog card. 11px text in 4×5px padding gave
    a ~20×24px target on a surface the marketing tells vendors to run from a
@@ -86,7 +101,16 @@ export default function Dashboard({
   runCounter, keepCounterRun, counterEnabled,
   events, leads, onLeadHandled, loading, launchKiosk, signOut, composing,
 }: DashboardProps) {
+  const router = useRouter();
+  const urlTab = useSearchParams().get("tab");
+
   const [tab, setTab] = useState<Tab>("overview");
+  /* Where "back" goes from Plan or Shop settings: the tab they were reading
+     when they opened it, not a fixed home. */
+  const [returnTab, setReturnTab] = useState<Tab>("overview");
+  /* Bolts or cuts, inside the Fabrics tab. */
+  const [fabricView, setFabricView] = useState<"bolts" | "cuts">("bolts");
+  const [showCounter, setShowCounter] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Garment | null>(null);
   const [showFabricForm, setShowFabricForm] = useState(false);
@@ -112,8 +136,11 @@ export default function Dashboard({
     () => fabrics.find((f) => f.id === studioFabricId) ?? null,
     [fabrics, studioFabricId]
   );
+  /* One family filter across both halves of the Fabrics tab. They used to be
+     two states behind two tabs; now that the same select sits in the same
+     place in both views, having it silently reset to All when you flipped
+     from the kurta bolts to the kurta cuts would read as a bug. */
   const [familyFilter, setFamilyFilter] = useState("All");
-  const [cutFamilyFilter, setCutFamilyFilter] = useState("All");
   /* Same three jobs as the studio's form: new cut, edit a shop cut, copy a
      library cut into one the shop owns. */
   const [cutForm, setCutForm] = useState<{ mode: "new" | "edit" | "copy"; style?: Style } | null>(null);
@@ -149,13 +176,13 @@ export default function Dashboard({
     [fabrics, familyFilter]
   );
 
-  /* The designs tab: every cut, the shop's own first within each family so
+  /* The cuts view: every cut, the shop's own first within each family so
      their tailoring sits above the library's. */
   const visibleCuts = useMemo(() => {
-    const list = cutFamilyFilter === "All" ? styles : styles.filter((s) => s.family === cutFamilyFilter);
+    const list = familyFilter === "All" ? styles : styles.filter((s) => s.family === familyFilter);
     return [...list].sort((a, b) =>
       Number(!!b.shopId) - Number(!!a.shopId) || a.sort - b.sort || a.name.localeCompare(b.name));
-  }, [styles, cutFamilyFilter]);
+  }, [styles, familyFilter]);
   const yourCutCount = useMemo(() => visibleCuts.filter((s) => s.shopId).length, [visibleCuts]);
 
   /* Only ready renders count on the card — a failed or in-flight one isn't a
@@ -170,28 +197,52 @@ export default function Dashboard({
   }, [compositions]);
 
   /* Made-to-order is a tailoring flow, so it follows the same entitlement as
-     the kiosk: a catalog-only shop never sees it. */
+     the kiosk: a catalog-only shop never sees it. Cuts ride inside Fabrics,
+     the counter is a header button and the overview is the root this bar sits
+     under — so this is the whole bar: three entries on a tailor's shop, two on
+     a catalog-only one, and no sideways scroll on a phone for either. */
   const TABS: { key: Tab; label: string; badge?: number }[] = [
-    { key: "overview", label: "Overview" },
     { key: "leads", label: "Orders", badge: openLeads || undefined },
     { key: "catalog", label: "Catalog" },
-    ...(shop.type === "apparel"
-      ? [{ key: "fabrics" as Tab, label: "Fabrics" }, { key: "designs" as Tab, label: "Designs" }, { key: "counter" as Tab, label: "Counter" }]
-      : []),
-    { key: "plan", label: "Plan" },
-    { key: "settings", label: "Settings" },
+    ...(shop.type === "apparel" ? [{ key: "fabrics" as Tab, label: "Fabrics" }] : []),
   ];
+
+  /* Plan and Shop settings are addressable; the bar tabs are view state. So
+     opening a page writes ?tab=, and going back to the bar clears it —
+     otherwise a vendor who read the plans, carried on into the catalog and
+     reloaded would land back on the plans. */
+  const openPage = (p: Page) => {
+    if (!isPage(tab)) setReturnTab(tab);
+    setTab(p);
+    router.replace("/dashboard?tab=" + p, { scroll: false });
+  };
+  const goTab = (t: Tab) => {
+    setTab(t);
+    if (urlTab) router.replace("/dashboard", { scroll: false });
+  };
+
+  /* The catalog- and fabric-limit toasts have always pushed /dashboard?tab=plan
+     to send a vendor to the plans. Nothing read it: the tab was local state and
+     the query string went nowhere, so "see plans" changed the address bar and
+     left the vendor exactly where they were. Now that the Plan page has no tab
+     of its own, that link is the main way in — so it has to work. */
+  useEffect(() => { if (isPage(urlTab)) setTab(urlTab); }, [urlTab]);
 
   return (
     <div id="main" style={{ maxWidth: 1080, margin: "0 auto", padding: "0 min(26px, 4vw) 50px" }}>
       {/* header */}
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22px 0 16px", flexWrap: "wrap", gap: 12 }}>
-        <div>
+        {/* The wordmark is the way home now that the overview has no tab of
+            its own — the gesture every site on the web already trained a
+            vendor to expect, so the account menu isn't the only road back. */}
+        <button className="ph-btn" onClick={() => goTab("overview")}
+          aria-label="Overview" title="Overview"
+          style={{ padding: 0, background: "none", border: "none", textAlign: "left", cursor: "pointer" }}>
           <div className="wordmark" style={{ fontSize: 22 }}>p<span className="ee" style={{ color: "var(--butter-deep)" }}>ee</span>q</div>
           <div style={{ fontSize: 12, color: "var(--stone)", letterSpacing: ".12em", marginTop: 3 }}>
             {[shop.name, shop.area].filter(Boolean).join(" · ") || "Vendor dashboard"}
           </div>
-        </div>
+        </button>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           {/* Every apparel shop has a storefront, so every apparel shop gets a
               link to it. This used to render only in the non-apparel branch,
@@ -203,6 +254,18 @@ export default function Dashboard({
               <Icon name="open" /> view storefront
             </a>
           )}
+          {/* The counter is a thing you DO — three photographs and a fitting,
+              for the customer standing in front of you right now — not a place
+              with contents to come back to. It sat in the tab bar next to
+              Catalog and Fabrics, which are places, and it kept a permanent
+              slot for a flow that starts from zero every time. It belongs
+              beside "launch kiosk": the other button that starts something. */}
+          {shop.type === "apparel" && (
+            <button className="ph-btn" onClick={() => setShowCounter(true)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "9px 16px" }}>
+              <Icon name="scissors" /> counter
+            </button>
+          )}
           {/* The kiosk is the try-on flow, so a catalog-only shop has no use
               for it — their storefront link is the thing to share. */}
           {shop.type === "apparel" && (
@@ -211,7 +274,7 @@ export default function Dashboard({
               onClick={() => {
                 if (catalog.length === 0) {
                   toastWarn("Add at least one garment first — the kiosk needs something to show shoppers.");
-                  setTab("catalog");
+                  goTab("catalog");
                   return;
                 }
                 launchKiosk();
@@ -220,8 +283,19 @@ export default function Dashboard({
           {/* Sign out lived here as 12px grey text immediately left of the
               primary CTA. It is an account action, so it belongs in the
               account menu every other page in the product already has — and
-              the dashboard was the only page without one. */}
-          <AccountMenu />
+              the dashboard was the only page without one. Overview, Plan and
+              Shop settings now sit in the same menu. Overview takes the slot
+              the dead "Dashboard" self-link used to hold, which is what let it
+              out of the tab bar: it is where a vendor lands, not somewhere
+              they navigate to between jobs. */}
+          <AccountMenu
+            extraItems={[
+              { label: "Overview", onSelect: () => goTab("overview") },
+              ...(Object.keys(PAGES) as Page[]).map((p) => ({
+                label: PAGES[p], onSelect: () => openPage(p),
+              })),
+            ]}
+          />
           {!signOut && null}
         </div>
       </header>
@@ -229,12 +303,25 @@ export default function Dashboard({
       {/* tabs */}
       <div className="tabs">
         {TABS.map((t) => (
-          <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
+          <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => goTab(t.key)}>
             {t.label}
             {t.badge ? <span className="badge">{t.badge}</span> : null}
           </button>
         ))}
       </div>
+
+      {/* On a page, no tab in the bar is lit — so the page says its own name
+          and offers the way back to the tab the vendor left. Tapping any tab
+          works too; this is just the one that doesn't ask them to choose. */}
+      {isPage(tab) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "-4px 0 2px", flexWrap: "wrap" }}>
+          <button className="ph-btn" onClick={() => goTab(returnTab)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
+            <Icon name="back" /> back
+          </button>
+          <span className="ph-display" style={{ fontSize: 20, color: "var(--ink)" }}>{PAGES[tab].toLowerCase()}</span>
+        </div>
+      )}
 
       {loading ? (
         <div style={{ color: "var(--stone)", padding: 40, textAlign: "center" }}>Loading your shop…</div>
@@ -242,12 +329,22 @@ export default function Dashboard({
         <>
           {tab === "overview" && (
             <div className="fade-up">
+              {/* Named, because the overview is the one view no tab in the bar
+                  lights up for — it is what the bar sits under, not an entry
+                  in it. Without this the landing screen is three stat tiles
+                  and a chart under a nav where nothing is selected. */}
+              <div className="cat-bar">
+                <div>
+                  <span className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>overview</span>
+                  <span style={{ color: "var(--stone)", marginLeft: 10, fontSize: 13 }}>how your shop is doing</span>
+                </div>
+              </div>
               {/* --warn. This was `var(--camel)`, a legacy alias of the
                   body-text grey, so an "alert" drawn in it was the same colour
                   as the paragraph under it: the one row on the page meaning
                   "people are waiting for a phone call" read as decoration. */}
               {openLeads > 0 && (
-                <button className="ph-btn" onClick={() => setTab("leads")}
+                <button className="ph-btn" onClick={() => goTab("leads")}
                   style={{ width: "100%", textAlign: "left", background: "var(--warn-bg)", border: "1px solid var(--warn)", borderRadius: "var(--radius-card)", padding: "12px 16px", marginBottom: 14, fontSize: 13.5, color: "var(--ink)" }}>
                   <b style={{ color: "var(--warn)" }}>{openLeads} order{openLeads !== 1 ? "s" : ""} to call back</b> — tap to view
                 </button>
@@ -379,26 +476,51 @@ export default function Dashboard({
             </div>
           )}
 
+          {/* Fabrics and cuts are the two halves of one job — a bolt is only
+              worth listing once there is a cut to stitch it into, and the
+              fabric card's "Cuts" button already crossed between them — so
+              they share a tab and a family filter, and the switch below picks
+              the half. Two top-level tabs for this was two names for one
+              workspace. */}
           {tab === "fabrics" && (
             <div className="fade-up">
               <div className="cat-bar">
-                <div>
-                  <span className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>fabrics</span>
-                  <span style={{ color: "var(--stone)", marginLeft: 10, fontSize: 13 }}>{fabrics.length} fabric{fabrics.length !== 1 ? "s" : ""}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minWidth: 0 }}>
+                  <div className="subtabs">
+                    <button className={fabricView === "bolts" ? "on" : ""}
+                      aria-pressed={fabricView === "bolts"}
+                      onClick={() => setFabricView("bolts")}>Bolts</button>
+                    <button className={fabricView === "cuts" ? "on" : ""}
+                      aria-pressed={fabricView === "cuts"}
+                      onClick={() => setFabricView("cuts")}>Cuts</button>
+                  </div>
+                  <span style={{ color: "var(--stone)", fontSize: 13 }}>
+                    {fabricView === "bolts"
+                      ? `${fabrics.length} fabric${fabrics.length !== 1 ? "s" : ""}`
+                      : `${visibleCuts.length} cut${visibleCuts.length !== 1 ? "s" : ""}${yourCutCount > 0 ? ` · ${yourCutCount} yours` : ""}`}
+                  </span>
                 </div>
                 <div className="cat-tools">
                   <select value={familyFilter} onChange={(e) => setFamilyFilter(e.target.value)}
+                    aria-label={fabricView === "bolts" ? "Filter fabrics by family" : "Filter cuts by family"}
                     className="ph-select" style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)", fontSize: 13 }}>
                     <option>All</option>
                     {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
                   </select>
-                  <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => setShowFabricForm(true)}>
-                    + add fabric
-                  </button>
+                  {fabricView === "bolts" ? (
+                    <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => setShowFabricForm(true)}>
+                      + add fabric
+                    </button>
+                  ) : (
+                    <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }}
+                      onClick={() => setCutForm({ mode: "new" })}>
+                      + add your own cut
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {visibleFabrics.length === 0 ? (
+              {fabricView === "bolts" && (visibleFabrics.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--stone)" }}>
                   <div style={{ fontSize: 14, marginBottom: 6 }}>
                     {fabrics.length > 0 ? "No fabrics in that family." : "No fabrics yet."}
@@ -464,81 +586,54 @@ export default function Dashboard({
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          )}
+              ))}
 
-          {tab === "designs" && (
-            <div className="fade-up">
-              <div className="cat-bar">
-                <div>
-                  <span className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>designs</span>
-                  <span style={{ color: "var(--stone)", marginLeft: 10, fontSize: 13 }}>
-                    {visibleCuts.length} cut{visibleCuts.length !== 1 ? "s" : ""}
-                    {yourCutCount > 0 ? ` · ${yourCutCount} yours` : ""}
-                  </span>
-                </div>
-                <div className="cat-tools">
-                  <select value={cutFamilyFilter} onChange={(e) => setCutFamilyFilter(e.target.value)}
-                    className="ph-select" style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)", fontSize: 13 }}>
-                    <option>All</option>
-                    {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-                  </select>
-                  <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }}
-                    onClick={() => setCutForm({ mode: "new" })}>
-                    + add your own cut
-                  </button>
-                </div>
-              </div>
+              {fabricView === "cuts" && (
+                <>
+                  <div style={{ fontSize: 12.5, color: "var(--stone)", margin: "-2px 0 18px", lineHeight: 1.65 }}>
+                    Every cut a cloth can be stitched into. Library cuts come with peeq and are
+                    shared by every shop; cuts marked yours belong to your shop alone, and only
+                    you can change them.
+                  </div>
 
-              <div style={{ fontSize: 12.5, color: "var(--stone)", margin: "-2px 0 18px", lineHeight: 1.65 }}>
-                Every cut a cloth can be stitched into. Library cuts come with peeq and are
-                shared by every shop; cuts marked yours belong to your shop alone, and only
-                you can change them.
-              </div>
-
-              {visibleCuts.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--stone)" }}>
-                  <div style={{ fontSize: 14, marginBottom: 18 }}>No cuts in that family yet.</div>
-                  <button className="ph-btn btn-solid" style={{ padding: "11px 22px", fontSize: 12 }}
-                    onClick={() => setCutForm({ mode: "new" })}>+ add your own cut</button>
-                </div>
-              ) : (
-                FAMILIES.filter((f) => cutFamilyFilter === "All" || f.id === cutFamilyFilter).map((f) => {
-                  const familyCuts = visibleCuts.filter((s) => s.family === f.id);
-                  if (familyCuts.length === 0) return null;
-                  /* Two different shapes of card, so two rows: putting a tall
-                     wireframe next to a three-line description in one grid
-                     leaves the text cards mostly white space. */
-                  const withImage = familyCuts.filter((c) => c.refImage);
-                  const textOnly = familyCuts.filter((c) => !c.refImage);
-                  const edit = (c: Style) => setCutForm({ mode: c.shopId ? "edit" : "copy", style: c });
-                  return (
-                    <div key={f.id} style={{ marginBottom: 30 }}>
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: 10 }}>
-                        <span className="ph-display" style={{ fontSize: 16, color: "var(--ink)" }}>{f.label.toLowerCase()}</span>
-                        <span style={{ fontSize: 11.5, color: "var(--stone)" }}>{familyCuts.length}</span>
-                      </div>
-                      {withImage.length > 0 && (
-                        <div className="card-grid" style={{ marginBottom: textOnly.length ? 12 : 0 }}>
-                          {withImage.map((c) => <CutCard key={c.id} cut={c} onEdit={() => edit(c)} />)}
-                        </div>
-                      )}
-                      {textOnly.length > 0 && (
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 12 }}>
-                          {textOnly.map((c) => <TextCutCard key={c.id} cut={c} onEdit={() => edit(c)} />)}
-                        </div>
-                      )}
+                  {visibleCuts.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--stone)" }}>
+                      <div style={{ fontSize: 14, marginBottom: 18 }}>No cuts in that family yet.</div>
+                      <button className="ph-btn btn-solid" style={{ padding: "11px 22px", fontSize: 12 }}
+                        onClick={() => setCutForm({ mode: "new" })}>+ add your own cut</button>
                     </div>
-                  );
-                })
+                  ) : (
+                    FAMILIES.filter((f) => familyFilter === "All" || f.id === familyFilter).map((f) => {
+                      const familyCuts = visibleCuts.filter((s) => s.family === f.id);
+                      if (familyCuts.length === 0) return null;
+                      /* Two different shapes of card, so two rows: putting a tall
+                         wireframe next to a three-line description in one grid
+                         leaves the text cards mostly white space. */
+                      const withImage = familyCuts.filter((c) => c.refImage);
+                      const textOnly = familyCuts.filter((c) => !c.refImage);
+                      const edit = (c: Style) => setCutForm({ mode: c.shopId ? "edit" : "copy", style: c });
+                      return (
+                        <div key={f.id} style={{ marginBottom: 30 }}>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: 10 }}>
+                            <span className="ph-display" style={{ fontSize: 16, color: "var(--ink)" }}>{f.label.toLowerCase()}</span>
+                            <span style={{ fontSize: 11.5, color: "var(--stone)" }}>{familyCuts.length}</span>
+                          </div>
+                          {withImage.length > 0 && (
+                            <div className="card-grid" style={{ marginBottom: textOnly.length ? 12 : 0 }}>
+                              {withImage.map((c) => <CutCard key={c.id} cut={c} onEdit={() => edit(c)} />)}
+                            </div>
+                          )}
+                          {textOnly.length > 0 && (
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 12 }}>
+                              {textOnly.map((c) => <TextCutCard key={c.id} cut={c} onEdit={() => edit(c)} />)}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </>
               )}
-            </div>
-          )}
-
-          {tab === "counter" && (
-            <div className="fade-up">
-              <CounterTryOn onRun={runCounter} onKeep={keepCounterRun} enabled={counterEnabled} styles={styles} fabrics={fabrics} onAddGarment={addGarment} />
             </div>
           )}
 
@@ -631,6 +726,32 @@ export default function Dashboard({
             setCutForm(null);
           }}
         />
+      )}
+      {/* Full-screen rather than a centred modal: the counter is three photo
+          uploads and a fitting to study, which is a screen's worth of work —
+          and it keeps the room it had as a tab. closeOnBackdrop is off because
+          by step three there are three uploaded photographs in here, and a
+          stray tap on the edge would bin all of them. */}
+      {showCounter && (
+        <Dialog variant="full" hideHeader closeOnBackdrop={false}
+          ariaLabel="At the counter" onClose={() => setShowCounter(false)}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "14px min(26px, 4vw)", background: "var(--card)", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
+            <div>
+              <span className="ph-display" style={{ fontSize: 20, color: "var(--ink)" }}>at the counter</span>
+              <span style={{ fontSize: 12, color: "var(--stone)", marginLeft: 10 }}>one cloth, one customer, right now</span>
+            </div>
+            <button className="ph-btn" onClick={() => setShowCounter(false)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
+              <Icon name="close" /> close
+            </button>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px min(26px, 4vw) 44px" }}>
+            <div style={{ maxWidth: 1080, margin: "0 auto" }}>
+              <CounterTryOn onRun={runCounter} onKeep={keepCounterRun} enabled={counterEnabled}
+                styles={styles} fabrics={fabrics} onAddGarment={addGarment} />
+            </div>
+          </div>
+        </Dialog>
       )}
       {showTagSheet && (
         <TagSheetModal

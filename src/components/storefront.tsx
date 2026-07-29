@@ -609,10 +609,7 @@ function CheckoutSignIn({ signedIn }: { signedIn: boolean }) {
               {mode === "signin" ? "New here? Create one" : "Already have one? Sign in"}
             </button>
           </div>
-          <p style={{ fontSize: 11.5, color: "var(--stone)", margin: "2px 0 0", lineHeight: 1.5 }}>
-            {mode === "signup" ? "By creating an account you agree to our " : "How we handle your data: "}
-            <Link href="/privacy" target="_blank" style={{ color: "var(--violet)", fontWeight: 600 }}>privacy policy</Link>.
-          </p>
+        
         </form>
       )}
     </div>

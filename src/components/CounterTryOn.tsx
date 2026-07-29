@@ -251,10 +251,12 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
     setPersonImage(null);
   };
 
+  /* No title on either branch: this is opened as a full-screen panel from the
+     dashboard header, and that panel names itself. It used to be a tab, which
+     is why it carried its own heading. */
   if (!enabled) {
     return (
-      <div className="panel">
-        <div className="panel-head"><span className="title">at the counter</span></div>
+      <div className="panel" style={{ marginTop: 0 }}>
         <p style={{ color: "var(--stone)", fontSize: 13.5, lineHeight: 1.7, margin: 0, maxWidth: 520 }}>
           The counter stitches and fits on our servers, so it needs your shop connected to the
           cloud. In local mode the dashboard still works — the counter is the one thing that
@@ -266,13 +268,6 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
 
   return (
     <>
-      <div className="cat-bar">
-        <div>
-          <span className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>at the counter</span>
-          <span style={{ color: "var(--stone)", marginLeft: 10, fontSize: 13 }}>one cloth, one customer, right now</span>
-        </div>
-      </div>
-
       {/* ── the result, above the form: the vendor's eyes belong here the
           moment there is something to look at, and the form stays filled in
           below so the next customer only needs a new photo. ── */}
