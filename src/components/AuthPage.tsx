@@ -65,6 +65,15 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
   const [mode, setMode] = useState<"signin" | "signup">(
     params.get("mode") === "signup" ? "signup" : "signin"
   );
+
+  /* Where to land after sign-in, when the visit started somewhere specific —
+     /counter bounces through here as ?next=/dashboard?counter=1. Same-site
+     relative paths only ("//evil.com" parses as protocol-relative), and only
+     for vendors: a shopper's home is /account no matter where they came from. */
+  const rawNext = params.get("next");
+  const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
+  const landing = (role: "shopper" | "vendor") =>
+    role === "vendor" && next ? next : roleHome(role);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [reveal, setReveal] = useState(false);
@@ -87,7 +96,7 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
       const { data } = await supabase().auth.getSession();
       if (data.session) {
         const role = (await getRole()) ?? intent;
-        router.replace(roleHome(role));
+        router.replace(landing(role));
         return;
       }
       setChecking(false);
@@ -161,7 +170,7 @@ export default function AuthPage({ intent }: { intent: "shopper" | "vendor" }) {
         if (error) throw error;
       }
       const role = await ensureRole(intent);
-      router.push(roleHome(role));
+      router.push(landing(role));
     } catch (err: unknown) {
       /* Supabase's own strings were surfaced verbatim. "Invalid login
          credentials" and "AuthApiError: …" are messages for a developer;

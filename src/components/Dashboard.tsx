@@ -102,7 +102,9 @@ export default function Dashboard({
   events, leads, onLeadHandled, loading, launchKiosk, signOut, composing,
 }: DashboardProps) {
   const router = useRouter();
-  const urlTab = useSearchParams().get("tab");
+  const search = useSearchParams();
+  const urlTab = search.get("tab");
+  const urlCounter = search.get("counter");
 
   const [tab, setTab] = useState<Tab>("overview");
   /* Where "back" goes from Plan or Shop settings: the tab they were reading
@@ -227,6 +229,16 @@ export default function Dashboard({
      left the vendor exactly where they were. Now that the Plan page has no tab
      of its own, that link is the main way in — so it has to work. */
   useEffect(() => { if (isPage(urlTab)) setTab(urlTab); }, [urlTab]);
+
+  /* A printed access card lands on /dashboard?counter=1: the counter opens
+     itself, then the flag is cleared so a reload doesn't reopen it. */
+  useEffect(() => {
+    if (urlCounter && shop.type === "apparel") {
+      setShowCounter(true);
+      router.replace("/dashboard", { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCounter]);
 
   return (
     <div id="main" style={{ maxWidth: 1080, margin: "0 auto", padding: "0 min(26px, 4vw) 50px" }}>

@@ -45,7 +45,11 @@ export default function DashboardPage() {
       if (isSupabaseConfigured()) {
         const { data } = await supabase().auth.getSession();
         if (!data.session) {
-          router.replace("/login");
+          /* Carry the destination through the sign-in: /counter arrives here
+             as /dashboard?counter=1, and losing the query would sign the
+             vendor in only to strand them on the plain dashboard. */
+          const here = window.location.pathname + window.location.search;
+          router.replace(here === "/dashboard" ? "/login" : "/login?next=" + encodeURIComponent(here));
           return;
         }
         // shopper accounts don't get a shop provisioned — send them to /account
