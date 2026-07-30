@@ -5,7 +5,7 @@
 
 import { cache } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { rowToGarment, type Garment, type Shop, type ShopRow, type GarmentRow } from "@/lib/types";
+import { rowToGarment, normalizeStorefront, type Garment, type Shop, type ShopRow, type GarmentRow } from "@/lib/types";
 
 /** True when the server can read shop data at all. Lets callers tell "no such
     shop" (→ 404) apart from "local mode, ask the browser instead". */
@@ -29,6 +29,9 @@ function rowToShop(r: ShopRow): Shop {
     status: (r.status as Shop["status"]) ?? "approved", statusNote: r.status_note ?? null,
     type: (r.type as Shop["type"]) ?? "apparel", category: (r.category as Shop["category"]) ?? "clothing",
     lat: r.lat ?? null, lng: r.lng ?? null,
+    /* Normalised here, server-side, so the custom words and slots are in the
+       first HTML the crawler and the shopper both get. */
+    storefront: normalizeStorefront(r.storefront),
   };
 }
 

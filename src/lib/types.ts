@@ -1,7 +1,7 @@
 /* Shared domain types. The storage adapter maps DB rows (snake_case)
    to these app-facing shapes, so components never see raw rows. */
 
-import { colorPhrase, colorText } from "@/lib/constants";
+import { colorPhrase, colorText, STOREFRONT_SECTION_IDS, STOREFRONT_SECTIONS, STOREFRONT_ACCENTS } from "@/lib/constants";
 
 /* Admin approval state. Only 'approved' shops can add catalog items, run
    try-ons, or be read by the public — see 20260721000100_admin_console.sql.
@@ -35,6 +35,136 @@ export interface Shop {
   category: ShopCategory; // what they sell; sets `type` at signup
   lat: number | null; // OSM map pin; null = not placed yet
   lng: number | null;
+  storefront: StorefrontConfig; // /s/{slug} overrides; always complete — see normalizeStorefront
+}
+
+/* ── storefront customisation ──
+   What a vendor can change about their /s/{slug} page: the words each section
+   says, which picture fills which slot, the order and visibility of the
+   sections, and an accent. Null on any text field means "say the default"
+   (STOREFRONT_DEFAULTS), an empty picks/images list means "the automatic
+   slice of the catalog" — so the zero config renders today's page exactly. */
+
+export type StorefrontSectionId = (typeof STOREFRONT_SECTION_IDS)[number];
+
+/* An image slot is filled by pointing at a catalog piece (stays live: its
+   photo, name, price and product link follow the garment) or by a plain
+   image URL — an uploaded banner, or a stitched fit's render picked in the
+   editor. The optional label is what the hero's caption bar says for it
+   ("Suit · Navy Herringbone"); absent means the slide says nothing. Stored
+   as a URL rather than a composition id so the public page never has to
+   read the compositions table. */
+export type SlotImage =
+  | { kind: "garment"; garmentId: string }
+  | { kind: "upload"; url: string; label?: string };
+
+export interface StorefrontConfig {
+  accent: string | null; // STOREFRONT_ACCENTS id; null = the peeq accent
+  announceText: string | null;
+  hero: {
+    kicker: string | null;
+    headline: string | null; // "\n" is a line break, rendered pre-line
+    body: string | null;
+    images: SlotImage[]; // [] = auto: first five in-stock pieces
+  };
+  featured: {
+    heading: string | null;
+    picks: string[]; // garment ids, max 4; [] = auto slice
+  };
+  promo: {
+    kicker: string | null;
+    heading: string | null;
+    body: string | null;
+    image: SlotImage | null; // null = auto: a piece the bands above haven't shown
+  };
+  sections: { id: StorefrontSectionId; hidden: boolean }[]; // order + visibility
+}
+
+export function defaultStorefront(): StorefrontConfig {
+  return {
+    accent: null,
+    announceText: null,
+    hero: { kicker: null, headline: null, body: null, images: [] },
+    featured: { heading: null, picks: [] },
+    promo: { kicker: null, heading: null, body: null, image: null },
+    sections: STOREFRONT_SECTION_IDS.map((id) => ({ id, hidden: false })),
+  };
+}
+
+/* jsonb → a complete config, whatever is actually stored. Same defensive
+   stance as the colors guard in rowToFabric: this column is hand-editable and
+   written by every client version there has ever been, so nothing in it is
+   trusted — unknown section ids drop, a section a newer app added appears at
+   its default position, `collection` can never arrive hidden, and a slot that
+   isn't one of the two known shapes becomes no slot. */
+const cfgText = (v: unknown): string | null =>
+  typeof v === "string" && v.trim() !== "" ? v : null;
+
+const cfgSlot = (v: unknown): SlotImage | null => {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (o.kind === "garment" && typeof o.garmentId === "string") return { kind: "garment", garmentId: o.garmentId };
+  if (o.kind === "upload" && typeof o.url === "string") {
+    return typeof o.label === "string" && o.label.trim() !== ""
+      ? { kind: "upload", url: o.url, label: o.label }
+      : { kind: "upload", url: o.url };
+  }
+  return null;
+};
+
+export function normalizeStorefront(raw: unknown): StorefrontConfig {
+  const cfg = defaultStorefront();
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return cfg;
+  const o = raw as Record<string, unknown>;
+
+  const accent = cfgText(o.accent);
+  cfg.accent = accent && STOREFRONT_ACCENTS.some((a) => a.id === accent) ? accent : null;
+  cfg.announceText = cfgText(o.announceText);
+
+  const hero = (o.hero ?? {}) as Record<string, unknown>;
+  cfg.hero.kicker = cfgText(hero.kicker);
+  cfg.hero.headline = cfgText(hero.headline);
+  cfg.hero.body = cfgText(hero.body);
+  cfg.hero.images = (Array.isArray(hero.images) ? hero.images : [])
+    .map(cfgSlot).filter((s): s is SlotImage => !!s).slice(0, 8);
+
+  const featured = (o.featured ?? {}) as Record<string, unknown>;
+  cfg.featured.heading = cfgText(featured.heading);
+  cfg.featured.picks = (Array.isArray(featured.picks) ? featured.picks : [])
+    .filter((p): p is string => typeof p === "string").slice(0, 4);
+
+  const promo = (o.promo ?? {}) as Record<string, unknown>;
+  cfg.promo.kicker = cfgText(promo.kicker);
+  cfg.promo.heading = cfgText(promo.heading);
+  cfg.promo.body = cfgText(promo.body);
+  cfg.promo.image = cfgSlot(promo.image);
+
+  /* Stored order wins for the sections it names; anything it doesn't name is
+     slotted in after the last present section that canonically precedes it,
+     so a section this build knows and the stored config doesn't lands where
+     the default order would put it rather than at the end. */
+  const canon = STOREFRONT_SECTION_IDS as readonly string[];
+  const seen = new Map<StorefrontSectionId, boolean>();
+  for (const s of Array.isArray(o.sections) ? o.sections : []) {
+    if (!s || typeof s !== "object") continue;
+    const id = (s as Record<string, unknown>).id;
+    if (typeof id !== "string" || !canon.includes(id) || seen.has(id as StorefrontSectionId)) continue;
+    const sid = id as StorefrontSectionId;
+    seen.set(sid, STOREFRONT_SECTIONS[sid].hideable && !!(s as Record<string, unknown>).hidden);
+  }
+  const order = [...seen.keys()];
+  for (const sid of STOREFRONT_SECTION_IDS) {
+    if (seen.has(sid)) continue;
+    let at = 0;
+    for (let i = 0; i < order.length; i++) {
+      if (canon.indexOf(order[i]) < canon.indexOf(sid)) at = i + 1;
+    }
+    order.splice(at, 0, sid);
+    seen.set(sid, false);
+  }
+  cfg.sections = order.map((id) => ({ id, hidden: seen.get(id)! }));
+
+  return cfg;
 }
 
 export interface Garment {
@@ -353,6 +483,7 @@ export interface ShopRow {
   category: string | null; // absent until 20260721000500_shop_category.sql is applied
   lat: number | null;
   lng: number | null;
+  storefront?: unknown; // jsonb; absent until 20260730000100_storefront_config.sql is applied
 }
 
 export interface GarmentRow {

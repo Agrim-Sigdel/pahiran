@@ -1,20 +1,22 @@
 "use client";
 
-import { useState, useEffect, useId, useMemo } from "react";
+import { Fragment, useState, useEffect, useId, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getShopBySlug, loadCatalog } from "@/lib/storage";
-import { waLink } from "@/lib/constants";
+import { waLink, accentClass, STOREFRONT_DEFAULTS } from "@/lib/constants";
 import { osmViewUrl } from "@/lib/osm";
 import { useCart, useWishlist } from "@/lib/cart";
 import { useAccount, getContact } from "@/lib/account";
 import AccountMenu from "@/components/AccountMenu";
-import { ShopCard, CartDrawer } from "@/components/storefront";
-import GarmentImage from "@/components/GarmentImage";
-import HeroCarousel from "@/components/HeroCarousel";
+import {
+  ShopCard, CartDrawer,
+  AnnounceBar, HeroSection, FeaturedSection, PromoSection,
+  resolveStorefrontSlots, defaultHeroBody,
+} from "@/components/storefront";
 import TryOnCta, { offersTryOn, type TryOnState } from "@/components/TryOnCta";
 import Icon from "@/components/Icon";
-import type { Garment, Shop } from "@/lib/types";
+import type { Garment, Shop, StorefrontSectionId } from "@/lib/types";
 
 /* Public storefront — a traditional shopping experience: browse, save, pick a
    size, add to a bag, and check out as one itemised order. Every piece links
@@ -95,23 +97,12 @@ export default function StorefrontClient({
   }
 
   const tryonHref = "/k/" + slug;
-  const inStock = catalog.filter((g) => g.inStock);
-  /* The hero, the featured row and the try-on promo used to take the SAME
-     slice off the front of the catalog, so the first four pieces appeared
-     three times on one page and the promo panel showed a fourth copy of
-     featured[1]. A shop with six items looked like it had two.
-
-     Each band now takes a different window, and each falls back to
-     overlapping only when the shop genuinely doesn't have enough stock to
-     fill them — where repetition is honest rather than an accident. */
-  const heroSlides = inStock.slice(0, 5);
-  const featured = inStock.length > 5 ? inStock.slice(5, 9) : inStock.slice(0, 4);
-  /* the promo's photo: something neither band above has shown, when there is
-     one — otherwise the piece least recently seen */
-  const promoPiece =
-    inStock.length > 9 ? inStock[9]
-    : inStock.length > 5 ? inStock[inStock.length - 1]
-    : featured[1] ?? inStock[0] ?? null;
+  /* The vendor's page description: which words, which pictures where, which
+     sections in which order. Always complete (see normalizeStorefront) — a
+     null field means "the default", so a shop that never opened the editor
+     renders exactly the page this file always rendered. */
+  const cfg = shop.storefront;
+  const slots = resolveStorefrontSlots(cfg, catalog, slug);
 
   // collection pipeline: category / saved → search → sort
   let shown = savedOnly ? catalog.filter((g) => wish.has(g.id)) : (filter === "All" ? catalog : catalog.filter((g) => g.category === filter));
@@ -150,15 +141,113 @@ export default function StorefrontClient({
       saved={wish.has(g.id)} onToggleSave={() => wish.toggle(g.id)} onAdd={() => cart.add(g, g.sizes[0] || "")} />
   );
 
+  /* The sections, in the vendor's order, hidden ones dropped. Every text is
+     the vendor's words or the default — never both, never neither. */
+  const visibleSections = cfg.sections.filter((s) => !s.hidden);
+  const announceFirst = visibleSections[0]?.id === "announce";
+  const bodySections = announceFirst ? visibleSections.slice(1) : visibleSections;
+
+  const sectionFor = (id: StorefrontSectionId): React.ReactNode => {
+    switch (id) {
+      case "announce":
+        return <AnnounceBar text={cfg.announceText ?? STOREFRONT_DEFAULTS.announceText} />;
+      case "hero":
+        return (
+          <HeroSection shop={shop}
+            kicker={cfg.hero.kicker ?? STOREFRONT_DEFAULTS.heroKicker}
+            headline={cfg.hero.headline ?? STOREFRONT_DEFAULTS.heroHeadline}
+            body={cfg.hero.body ?? defaultHeroBody(shop)}
+            slides={slots.heroSlides} tryOn={tryOn} tryonHref={tryonHref} />
+        );
+      case "featured":
+        return slots.featured.length > 0 ? (
+          <FeaturedSection heading={cfg.featured.heading ?? STOREFRONT_DEFAULTS.featuredHeading}>
+            {slots.featured.map(card)}
+          </FeaturedSection>
+        ) : null;
+      case "promo":
+        /* the whole section is about a feature a general shop doesn't have,
+           so it goes rather than greys out — whatever the config says */
+        return offersTryOn(shop) ? (
+          <PromoSection shop={shop}
+            kicker={cfg.promo.kicker ?? STOREFRONT_DEFAULTS.promoKicker}
+            heading={cfg.promo.heading ?? STOREFRONT_DEFAULTS.promoHeading}
+            body={cfg.promo.body ?? STOREFRONT_DEFAULTS.promoBody}
+            promo={slots.promo} tryOn={tryOn} tryonHref={tryonHref} />
+        ) : null;
+      case "collection":
+        return (
+          <section id="collection" className="section-pad">
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+              <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(20px, 3vw, 26px)", color: "var(--ink)", margin: 0 }}>
+                {savedOnly ? "saved pieces" : "the collection"}
+              </h2>
+              {/* aria-live, so a shopper filtering with a screen reader hears the
+                  result count change instead of typing into silence */}
+              <span aria-live="polite" style={{ color: "var(--stone)", fontSize: 13 }}>{shown.length} piece{shown.length !== 1 ? "s" : ""}</span>
+            </div>
+
+            {/* search + sort */}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+              <div style={{ flex: "1 1 220px", position: "relative", display: "flex" }}>
+                <label htmlFor={searchId} className="sr-only">Search the collection</label>
+                <input id={searchId} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the collection…"
+                  style={{ flex: 1, padding: "11px 16px", paddingRight: query ? 40 : 16, borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)", fontSize: 14 }} />
+                {query && (
+                  <button className="ph-btn" onClick={() => setQuery("")} aria-label="Clear the search"
+                    style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", padding: 8, color: "var(--stone)", fontSize: 14 }}>
+                    <Icon name="close" />
+                  </button>
+                )}
+              </div>
+              {/* No "Sort:" prefix on one option and not on the others — it read
+                  as a heading above a list of three rather than one of four. */}
+              <label htmlFor={sortId} className="sr-only">Sort the collection</label>
+              <select id={sortId} value={sort} onChange={(e) => setSort(e.target.value as Sort)}
+                className="ph-select"
+                style={{ padding: "11px 16px", borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", backgroundColor: "var(--card)", color: "var(--ink)", fontSize: 14, fontWeight: 500, cursor: "pointer" }}>
+                <option value="new">Newest first</option>
+                <option value="price-asc">Price: low to high</option>
+                <option value="price-desc">Price: high to low</option>
+              </select>
+            </div>
+
+            {(cats.length > 1 || savedOnly) && (
+              <div className="garment-rail" style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 20 }}>
+                <button className={"efc-chip " + (!savedOnly && filter === "All" ? "on" : "off")} onClick={() => { setSavedOnly(false); setFilter("All"); }}>All</button>
+                {cats.map((c) => (
+                  <button key={c} className={"efc-chip " + (!savedOnly && filter === c ? "on" : "off")} onClick={() => { setSavedOnly(false); setFilter(c); }}>{c}</button>
+                ))}
+                {wish.count > 0 && (
+                  <button className={"efc-chip " + (savedOnly ? "on" : "off")} onClick={() => setSavedOnly(true)}><Icon name="heart-filled" /> Saved</button>
+                )}
+              </div>
+            )}
+
+            {shown.length === 0 ? (
+              <div style={{ color: "var(--stone)", padding: 50, textAlign: "center" }}>
+                {savedOnly
+                  ? "No saved pieces yet — tap the heart on anything you like."
+                  : q
+                    ? `Nothing matches "${query}".`
+                    : `Nothing listed${filter !== "All" ? " in this category" : ""} right now — check back soon.`}
+              </div>
+            ) : (
+              <div className="shop-grid">
+                {shown.map(card)}
+              </div>
+            )}
+          </section>
+        );
+    }
+  };
+
   return (
-    <div style={{ background: "var(--paper)", minHeight: "100dvh" }}>
-      {/* announce bar */}
-      {/* "no account needed" sat directly above a checkout that pitches
-          signing up. Both are true — an account is optional — so the bar says
-          optional rather than unnecessary. */}
-      <div style={{ background: "var(--butter)", color: "var(--on-light)", textAlign: "center", fontSize: 13, fontWeight: 500, padding: "9px 12px" }}>
-        try it on before you buy · one photo, account optional · order in a tap
-      </div>
+    <div className={accentClass(cfg.accent)} style={{ background: "var(--paper)", minHeight: "100dvh" }}>
+      {/* The announce bar belongs above the nav when it leads the order —
+          which is the default, and the strip this page always opened with.
+          Moved down the order, it renders in place like any other section. */}
+      {announceFirst && sectionFor("announce")}
 
       {/* nav */}
       <nav className="efc-nav">
@@ -211,148 +300,15 @@ export default function StorefrontClient({
         </div>
       </nav>
 
-      {/* hero */}
-      <div id="main" className="hero-grid">
-        <div className="hero-copy">
-          <div className="kicker">a little look before you buy</div>
-          <h1 className="ph-display" style={{ fontSize: "clamp(32px, 4.6vw, 50px)", lineHeight: 1.12, color: "var(--ink)", margin: 0 }}>
-            look first,<br />then buy
-          </h1>
-          {/* no maxWidth of its own — .hero-copy already holds the measure, and
-              a second, narrower cap made the paragraph wrap tighter than the
-              heading above it */}
-          <p style={{ color: "var(--stone)", fontSize: 15.5, lineHeight: 1.7, margin: 0 }}>
-            {offersTryOn(shop)
-              ? "Browse the collection, add your pieces to the bag, and order in one message — or take a photo and see anything on you first."
-              : "Browse the collection, add what you want to the bag, and order in one message."}
-          </p>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <a href="#collection" className="btn-violet">shop the collection</a>
-            <TryOnCta shop={shop} state={tryOn} href={tryonHref} className="btn-outline" />
-          </div>
-        </div>
-        {/* The hero slides through the collection rather than betting the whole
-            landing page on one piece. Each slide keeps its own ratio (--ar)
-            instead of being cropped into a shared frame — vendors shoot
-            portrait, square and landscape, and a fixed frame beheads whoever
-            doesn't match. The CSS derives the width from a capped height, so a
-            tall photo gets narrow instead of getting tall.
-
-            A shop with nothing in stock used to render no hero at all, which
-            left the copy alone in a half-empty row. It falls back to a stock
-            try-on shot instead — the one thing that's true of every shop
-            here, and it points at the kiosk rather than at a product. */}
-        {heroSlides.length > 0 ? (
-          <HeroCarousel slides={heroSlides} slug={slug} />
-        ) : (
-          <Link href={offersTryOn(shop) ? tryonHref : "#collection"} className="hero-visual"
-            style={{ "--ar": "0.6667", background: "var(--paper-deep)", display: "block", position: "relative" } as React.CSSProperties}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/hero/hero-a.jpg" alt="Someone seeing a piece on themselves with peeq" className="img-blend"
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-          </Link>
-        )}
+      {/* The skip-link's target: everything below the nav, in whatever order
+          the vendor put it. The hero markup (and the fallback stock shot for
+          a shop with nothing to show) lives in HeroSection — see
+          storefront.tsx, where the editor's live preview reads it too. */}
+      <div id="main">
+        {bodySections.map((s) => (
+          <Fragment key={s.id}>{sectionFor(s.id)}</Fragment>
+        ))}
       </div>
-
-      {/* featured */}
-      {featured.length > 0 && (
-        <section className="section-pad">
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 22, flexWrap: "wrap", gap: 10 }}>
-            <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(20px, 3vw, 26px)", color: "var(--ink)", margin: 0 }}>featured pieces</h2>
-            <a className="linklike" href="#collection">view all →</a>
-          </div>
-          <div className="shop-grid">
-            {featured.map(card)}
-          </div>
-        </section>
-      )}
-
-      {/* try-on promo — the whole section is about a feature a general shop
-          doesn't have, so it goes rather than greys out. */}
-      {offersTryOn(shop) && (
-      <section className="section-pad" style={{ background: "var(--paper-deep)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
-          <div style={{ padding: "40px 36px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 14 }}>
-            <div className="kicker">the trial room, reinvented</div>
-            <h3 className="ph-display" style={{ fontWeight: 600, fontSize: 28, lineHeight: 1.22, color: "var(--ink)", margin: 0 }}>
-              not sure? see it on you first
-            </h3>
-            <p style={{ color: "var(--stone)", fontSize: 14.5, lineHeight: 1.7, margin: 0 }}>
-              No queue, no changing room. Take one photo, see the piece on you, then add it to your bag with a tap.
-            </p>
-            <div><TryOnCta shop={shop} state={tryOn} href={tryonHref} className="btn-violet" /></div>
-          </div>
-          {promoPiece && (
-            <Link href={`/s/${slug}/${encodeURIComponent(promoPiece.id)}`} style={{ minHeight: 220, background: "var(--paper-deep)", display: "block", position: "relative" }}>
-              <GarmentImage src={promoPiece.image} alt={promoPiece.name} sizes="(max-width: 900px) 100vw, 50vw" />
-            </Link>
-          )}
-        </div>
-      </section>
-      )}
-
-      {/* full collection */}
-      <section id="collection" className="section-pad">
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-          <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(20px, 3vw, 26px)", color: "var(--ink)", margin: 0 }}>
-            {savedOnly ? "saved pieces" : "the collection"}
-          </h2>
-          {/* aria-live, so a shopper filtering with a screen reader hears the
-              result count change instead of typing into silence */}
-          <span aria-live="polite" style={{ color: "var(--stone)", fontSize: 13 }}>{shown.length} piece{shown.length !== 1 ? "s" : ""}</span>
-        </div>
-
-        {/* search + sort */}
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-          <div style={{ flex: "1 1 220px", position: "relative", display: "flex" }}>
-            <label htmlFor={searchId} className="sr-only">Search the collection</label>
-            <input id={searchId} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the collection…"
-              style={{ flex: 1, padding: "11px 16px", paddingRight: query ? 40 : 16, borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)", fontSize: 14 }} />
-            {query && (
-              <button className="ph-btn" onClick={() => setQuery("")} aria-label="Clear the search"
-                style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", padding: 8, color: "var(--stone)", fontSize: 14 }}>
-                <Icon name="close" />
-              </button>
-            )}
-          </div>
-          {/* No "Sort:" prefix on one option and not on the others — it read
-              as a heading above a list of three rather than one of four. */}
-          <label htmlFor={sortId} className="sr-only">Sort the collection</label>
-          <select id={sortId} value={sort} onChange={(e) => setSort(e.target.value as Sort)}
-            className="ph-select"
-            style={{ padding: "11px 16px", borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", backgroundColor: "var(--card)", color: "var(--ink)", fontSize: 14, fontWeight: 500, cursor: "pointer" }}>
-            <option value="new">Newest first</option>
-            <option value="price-asc">Price: low to high</option>
-            <option value="price-desc">Price: high to low</option>
-          </select>
-        </div>
-
-        {(cats.length > 1 || savedOnly) && (
-          <div className="garment-rail" style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 20 }}>
-            <button className={"efc-chip " + (!savedOnly && filter === "All" ? "on" : "off")} onClick={() => { setSavedOnly(false); setFilter("All"); }}>All</button>
-            {cats.map((c) => (
-              <button key={c} className={"efc-chip " + (!savedOnly && filter === c ? "on" : "off")} onClick={() => { setSavedOnly(false); setFilter(c); }}>{c}</button>
-            ))}
-            {wish.count > 0 && (
-              <button className={"efc-chip " + (savedOnly ? "on" : "off")} onClick={() => setSavedOnly(true)}><Icon name="heart-filled" /> Saved</button>
-            )}
-          </div>
-        )}
-
-        {shown.length === 0 ? (
-          <div style={{ color: "var(--stone)", padding: 50, textAlign: "center" }}>
-            {savedOnly
-              ? "No saved pieces yet — tap the heart on anything you like."
-              : q
-                ? `Nothing matches "${query}".`
-                : `Nothing listed${filter !== "All" ? " in this category" : ""} right now — check back soon.`}
-          </div>
-        ) : (
-          <div className="shop-grid">
-            {shown.map(card)}
-          </div>
-        )}
-      </section>
 
       {/* footer */}
       <footer className="section-pad" style={{ background: "var(--slab)", color: "var(--on-slab)", paddingBottom: 30 }}>

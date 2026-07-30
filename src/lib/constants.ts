@@ -187,3 +187,63 @@ export const CHECKOUT = {
   whatsapp: process.env.NEXT_PUBLIC_CHECKOUT_WHATSAPP !== "0",
   leads: process.env.NEXT_PUBLIC_CHECKOUT_LEADS !== "0",
 };
+
+/* ── storefront customisation ──
+   The words the /s/{slug} page falls back to when the shop hasn't written its
+   own. One place, because two readers depend on them agreeing: the renderer
+   (a null override means "say the default") and the editor (the default is
+   the placeholder, so a vendor sees what silence will say). */
+export const STOREFRONT_DEFAULTS = {
+  announceText: "try it on before you buy · one photo, account optional · order in a tap",
+  heroKicker: "a little look before you buy",
+  heroHeadline: "look first,\nthen buy",
+  /* Two bodies because the default pitch depends on what the shop offers —
+     a general shop must not promise try-on. A vendor's own text replaces
+     either. */
+  heroBodyTryOn: "Browse the collection, add your pieces to the bag, and order in one message — or take a photo and see anything on you first.",
+  heroBody: "Browse the collection, add what you want to the bag, and order in one message.",
+  featuredHeading: "featured pieces",
+  promoKicker: "the trial room, reinvented",
+  promoHeading: "not sure? see it on you first",
+  promoBody: "No queue, no changing room. Take one photo, see the piece on you, then add it to your bag with a tap.",
+} as const;
+
+/* The sections a shop can reorder, in their default order. `collection` is
+   orderable but never hideable — it IS the shop. Nav and footer are not
+   sections: they carry the bag, the account and the legal links, which a
+   config must not be able to remove. */
+export const STOREFRONT_SECTION_IDS = ["announce", "hero", "featured", "promo", "collection"] as const;
+
+export const STOREFRONT_SECTIONS: Record<
+  (typeof STOREFRONT_SECTION_IDS)[number],
+  { label: string; hideable: boolean }
+> = {
+  announce: { label: "Announcement bar", hideable: true },
+  hero: { label: "Hero", hideable: true },
+  featured: { label: "Featured pieces", hideable: true },
+  promo: { label: "Try-on promo", hideable: true },
+  collection: { label: "The collection", hideable: false },
+};
+
+/* Accent presets, not free hex: an accent is used as button fill under
+   --on-accent text and as link text on --paper/--card, in both themes — four
+   contrast obligations a colour picker would hand straight to the vendor.
+   Each id maps to a .sf-accent-{id} class in globals.css that overrides
+   --violet (and, in dark, --on-accent) inside the theme's own selectors, the
+   way the brand accent itself flips from deep-on-pale to bright-on-dark.
+   Swatches in the editor take the class and paint var(--violet), so they show
+   the theme-appropriate value for free. */
+export const STOREFRONT_ACCENTS = [
+  { id: "plum", label: "Plum" },
+  { id: "wine", label: "Wine" },
+  { id: "rust", label: "Rust" },
+  { id: "ocean", label: "Ocean" },
+  { id: "teal", label: "Teal" },
+  { id: "moss", label: "Moss" },
+  { id: "indigo", label: "Indigo" },
+  { id: "ink", label: "Ink" },
+] as const;
+
+/** The CSS class carrying a shop's accent, or "" for the peeq default. */
+export const accentClass = (id: string | null | undefined): string =>
+  id && STOREFRONT_ACCENTS.some((a) => a.id === id) ? "sf-accent-" + id : "";

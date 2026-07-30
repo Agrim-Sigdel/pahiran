@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import KioskV2 from "@/components/KioskV2";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { loadCatalog, loadPublishedCompositions, loadShop } from "@/lib/storage";
-import type { Wearable, Shop } from "@/lib/types";
+import { defaultStorefront, type Wearable, type Shop } from "@/lib/types";
 
 /* Vendor's own kiosk (launched from the dashboard). Public shopper links
    go to /k/[slug] instead.
@@ -18,7 +18,7 @@ import type { Wearable, Shop } from "@/lib/types";
 function KioskOwn() {
   const router = useRouter();
   const params = useSearchParams();
-  const [shop, setShop] = useState<Shop>({ id: null, slug: null, vendorCode: null, name: "", area: "", whatsapp: "", listed: false, status: "approved", statusNote: null, type: "apparel", category: "clothing", lat: null, lng: null });
+  const [shop, setShop] = useState<Shop>({ id: null, slug: null, vendorCode: null, name: "", area: "", whatsapp: "", listed: false, status: "approved", statusNote: null, type: "apparel", category: "clothing", lat: null, lng: null, storefront: defaultStorefront() });
   const [catalog, setCatalog] = useState<Wearable[] | null>(null); // null = loading
 
   useEffect(() => {

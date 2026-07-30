@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import GarmentImage from "@/components/GarmentImage";
 import { npr } from "@/lib/constants";
-import type { Garment } from "@/lib/types";
 
 /* The storefront hero, sliding through the collection instead of committing
    the whole landing page to one piece.
@@ -18,12 +17,22 @@ import type { Garment } from "@/lib/types";
    good the moment the shopper takes over, and never starts for a visitor who
    asked for reduced motion. */
 
+/* A slide, not a Garment: a shop can now put its own photo in the hero — a
+   banner, the shopfront — and that picture has no name, no price and no
+   product page. name "" and price null render as silence, not as placeholders. */
+export type HeroSlide = {
+  id: string;
+  image: string;
+  name: string; // label + alt; "" on an uploaded banner
+  href: string; // a product page, or "#collection" for a banner
+  price: number | null; // null = no price line
+};
+
 const ADVANCE_MS = 5000;
 const SWIPE_PX = 40;
 
-export default function HeroCarousel({ slides, slug, priority = true }: {
-  slides: Garment[];
-  slug: string;
+export default function HeroCarousel({ slides, priority = true }: {
+  slides: HeroSlide[];
   priority?: boolean;
 }) {
   const count = slides.length;
@@ -92,7 +101,7 @@ export default function HeroCarousel({ slides, slug, priority = true }: {
       {slides.map((g, i) => {
         const on = i === current;
         return (
-          <Link key={g.id} href={`/s/${slug}/${encodeURIComponent(g.id)}`}
+          <Link key={g.id} href={g.href}
             className="hero-slide" aria-hidden={!on} tabIndex={on ? 0 : -1}
             style={{ opacity: on ? 1 : 0, pointerEvents: on ? "auto" : "none" }}>
             {mounted.has(i) && (
@@ -117,25 +126,33 @@ export default function HeroCarousel({ slides, slug, priority = true }: {
       })}
 
       {/* name, price and the dots share one scrim — a slideshow with no label
-          leaves the shopper looking at a piece they can't name. */}
+          leaves the shopper looking at a piece they can't name. A banner slide
+          has nothing to say there, so the bar only appears when the current
+          slide has words or there are dots to show. */}
+      {(slides[current].name !== "" || slides[current].price !== null || count > 1) && (
       <div className="hero-bar">
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {slides[current].name}
-          </div>
-          <div style={{ fontSize: 12.5, opacity: 0.85 }}>{npr(slides[current].price)}</div>
+          {slides[current].name !== "" && (
+            <div style={{ fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {slides[current].name}
+            </div>
+          )}
+          {slides[current].price !== null && (
+            <div style={{ fontSize: 12.5, opacity: 0.85 }}>{npr(slides[current].price)}</div>
+          )}
         </div>
 
         {count > 1 && (
           <div style={{ display: "flex", gap: 7, alignItems: "center", flexShrink: 0 }}>
             {slides.map((g, i) => (
               <button key={g.id} className="hero-dot" onClick={() => go(i)}
-                aria-label={`Show ${g.name}`} aria-current={i === current}
+                aria-label={g.name ? `Show ${g.name}` : `Show slide ${i + 1}`} aria-current={i === current}
                 data-on={i === current ? "" : undefined} />
             ))}
           </div>
         )}
       </div>
+      )}
 
       {count > 1 && (
         <>

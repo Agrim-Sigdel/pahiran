@@ -2,21 +2,27 @@
 
 import { useState, useEffect, useId, useRef } from "react";
 import Link from "next/link";
-import { npr, waLink, CHECKOUT } from "@/lib/constants";
+import { npr, waLink, CHECKOUT, STOREFRONT_DEFAULTS } from "@/lib/constants";
 import { submitOrder } from "@/lib/storage";
 import { signInWithEmail, signUpWithEmail, sendPasswordReset, ensureRole, saveContact } from "@/lib/account";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { nameError, phoneError, fieldErrorStyle } from "@/lib/validate";
 import { useCart, type CartLine } from "@/lib/cart";
 import GarmentImage from "@/components/GarmentImage";
-import TryOnCta, { type TryOnState } from "@/components/TryOnCta";
+import HeroCarousel, { type HeroSlide } from "@/components/HeroCarousel";
+import TryOnCta, { offersTryOn, type TryOnState } from "@/components/TryOnCta";
 import Icon from "@/components/Icon";
 import Dialog from "@/components/Dialog";
-import type { Garment, Shop } from "@/lib/types";
+import type { Garment, Shop, StorefrontConfig, SlotImage } from "@/lib/types";
 
 /* Shared storefront building blocks — used by both the collection page
    (/s/[slug]) and the product page (/s/[slug]/[garment]) so cards, the
-   wishlist heart, and the cart drawer behave identically everywhere. */
+   wishlist heart, and the cart drawer behave identically everywhere.
+
+   The customisable sections (announce bar, hero, featured, promo) live here
+   too, because they now have a second reader: the dashboard's storefront
+   editor renders these same components for its live preview, so what the
+   vendor sees while editing IS the production markup, not a copy of it. */
 
 export type CartApi = ReturnType<typeof useCart>;
 
@@ -624,6 +630,189 @@ function StepDot({ label, active = false, done = false }: { label: string; activ
       {done ? <Icon name="check" size={11} /> : label}
     </span>
   );
+}
+
+/* ---------- customisable page sections ----------
+   Everything below is pure over (config, catalog, resolved slots): no cart,
+   no account, no fetches. That's what lets the editor preview render the
+   real sections against a draft config without dragging the page's state
+   machinery into the dashboard. */
+
+/** What the configured image slots resolve to, ready to render. */
+export interface ResolvedSlots {
+  heroSlides: HeroSlide[];
+  featured: Garment[];
+  promo: { image: string; alt: string; href: string } | null;
+}
+
+/* Config → pixels. An empty hero/featured/promo config falls back to the
+   automatic slices, and the auto bands deliberately take DIFFERENT windows of
+   the catalog: the hero, the featured row and the promo used to take the same
+   slice off the front, so the first four pieces appeared three times on one
+   page and a shop with six items looked like it had two. They overlap only
+   when the shop genuinely doesn't have enough stock to fill them — where
+   repetition is honest rather than an accident.
+
+   A pick pointing at a deleted garment resolves to nothing rather than a
+   broken tile, and a slot list that resolves to nothing falls back to auto —
+   a vendor who curated five pieces and then sold and deleted all five has a
+   storefront again, not a blank hero. */
+export function resolveStorefrontSlots(
+  cfg: StorefrontConfig,
+  catalog: Garment[],
+  slug: string
+): ResolvedSlots {
+  const byId = new Map(catalog.map((g) => [g.id, g]));
+  const inStock = catalog.filter((g) => g.inStock);
+  const productHref = (g: Garment) => `/s/${slug}/${encodeURIComponent(g.id)}`;
+
+  const garmentSlide = (g: Garment): HeroSlide => ({
+    id: g.id, image: g.image, name: g.name, href: productHref(g), price: g.price,
+  });
+  const slotSlide = (slot: SlotImage, i: number): HeroSlide | null => {
+    if (slot.kind === "upload") {
+      /* a labelled slot (a stitched fit picked in the editor) captions its
+         slide; a plain banner stays silent */
+      return { id: "upload-" + i, image: slot.url, name: slot.label ?? "", href: "#collection", price: null };
+    }
+    const g = byId.get(slot.garmentId);
+    return g ? garmentSlide(g) : null;
+  };
+
+  const pickedSlides = cfg.hero.images
+    .map(slotSlide).filter((s): s is HeroSlide => !!s);
+  const heroSlides = pickedSlides.length > 0
+    ? pickedSlides
+    : inStock.slice(0, 5).map(garmentSlide);
+
+  const pickedFeatured = cfg.featured.picks
+    .map((id) => byId.get(id)).filter((g): g is Garment => !!g);
+  const featured = pickedFeatured.length > 0
+    ? pickedFeatured
+    : inStock.length > 5 ? inStock.slice(5, 9) : inStock.slice(0, 4);
+
+  /* the auto promo photo: something neither band above has shown, when there
+     is one — otherwise the piece least recently seen */
+  const autoPromoPiece =
+    inStock.length > 9 ? inStock[9]
+    : inStock.length > 5 ? inStock[inStock.length - 1]
+    : featured[1] ?? inStock[0] ?? null;
+
+  let promo: ResolvedSlots["promo"] = null;
+  if (cfg.promo.image?.kind === "upload") {
+    promo = { image: cfg.promo.image.url, alt: "", href: "#collection" };
+  } else {
+    const picked = cfg.promo.image?.kind === "garment" ? byId.get(cfg.promo.image.garmentId) : undefined;
+    const piece = picked ?? autoPromoPiece;
+    if (piece) promo = { image: piece.image, alt: piece.name, href: productHref(piece) };
+  }
+
+  return { heroSlides, featured, promo };
+}
+
+export function AnnounceBar({ text }: { text: string }) {
+  return (
+    <div style={{ background: "var(--butter)", color: "var(--on-light)", textAlign: "center", fontSize: 13, fontWeight: 500, padding: "9px 12px" }}>
+      {text}
+    </div>
+  );
+}
+
+export function HeroSection({ shop, kicker, headline, body, slides, tryOn, tryonHref }: {
+  shop: Shop;
+  kicker: string;
+  headline: string; // "\n" is a line break — rendered pre-line
+  body: string;
+  slides: HeroSlide[];
+  tryOn: TryOnState;
+  tryonHref: string;
+}) {
+  return (
+    <div className="hero-grid">
+      <div className="hero-copy">
+        <div className="kicker">{kicker}</div>
+        <h1 className="ph-display" style={{ fontSize: "clamp(32px, 4.6vw, 50px)", lineHeight: 1.12, color: "var(--ink)", margin: 0, whiteSpace: "pre-line" }}>
+          {headline}
+        </h1>
+        {/* no maxWidth of its own — .hero-copy already holds the measure, and
+            a second, narrower cap made the paragraph wrap tighter than the
+            heading above it */}
+        <p style={{ color: "var(--stone)", fontSize: 15.5, lineHeight: 1.7, margin: 0 }}>
+          {body}
+        </p>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <a href="#collection" className="btn-violet">shop the collection</a>
+          <TryOnCta shop={shop} state={tryOn} href={tryonHref} className="btn-outline" />
+        </div>
+      </div>
+      {/* A shop with nothing to show here used to render no hero at all, which
+          left the copy alone in a half-empty row. It falls back to a stock
+          try-on shot instead — the one thing that's true of every shop here,
+          and it points at the kiosk rather than at a product. */}
+      {slides.length > 0 ? (
+        <HeroCarousel slides={slides} />
+      ) : (
+        <Link href={offersTryOn(shop) ? tryonHref : "#collection"} className="hero-visual"
+          style={{ "--ar": "0.6667", background: "var(--paper-deep)", display: "block", position: "relative" } as React.CSSProperties}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/hero/hero-a.jpg" alt="Someone seeing a piece on themselves with peeq" className="img-blend"
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        </Link>
+      )}
+    </div>
+  );
+}
+
+export function FeaturedSection({ heading, children }: { heading: string; children: React.ReactNode }) {
+  return (
+    <section className="section-pad">
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 22, flexWrap: "wrap", gap: 10 }}>
+        <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(20px, 3vw, 26px)", color: "var(--ink)", margin: 0 }}>{heading}</h2>
+        <a className="linklike" href="#collection">view all →</a>
+      </div>
+      <div className="shop-grid">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+export function PromoSection({ shop, kicker, heading, body, promo, tryOn, tryonHref }: {
+  shop: Shop;
+  kicker: string;
+  heading: string;
+  body: string;
+  promo: ResolvedSlots["promo"];
+  tryOn: TryOnState;
+  tryonHref: string;
+}) {
+  return (
+    <section className="section-pad" style={{ background: "var(--paper-deep)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
+        <div style={{ padding: "40px 36px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 14 }}>
+          <div className="kicker">{kicker}</div>
+          <h3 className="ph-display" style={{ fontWeight: 600, fontSize: 28, lineHeight: 1.22, color: "var(--ink)", margin: 0 }}>
+            {heading}
+          </h3>
+          <p style={{ color: "var(--stone)", fontSize: 14.5, lineHeight: 1.7, margin: 0 }}>
+            {body}
+          </p>
+          <div><TryOnCta shop={shop} state={tryOn} href={tryonHref} className="btn-violet" /></div>
+        </div>
+        {promo && (
+          <Link href={promo.href} style={{ minHeight: 220, background: "var(--paper-deep)", display: "block", position: "relative" }}>
+            <GarmentImage src={promo.image} alt={promo.alt} sizes="(max-width: 900px) 100vw, 50vw" />
+          </Link>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** The body copy the hero falls back to — the default pitch depends on
+    whether this shop can promise try-on at all. */
+export function defaultHeroBody(shop: Shop): string {
+  return offersTryOn(shop) ? STOREFRONT_DEFAULTS.heroBodyTryOn : STOREFRONT_DEFAULTS.heroBody;
 }
 
 function CartRow({ line, onQty, onRemove }: { line: CartLine; onQty: (q: number) => void; onRemove: () => void }) {

@@ -36,6 +36,7 @@ import {
   rowToFabric,
   rowToStyle,
   rowToComposition,
+  normalizeStorefront,
 } from "@/lib/types";
 
 const PREFIX = "pahiran:";
@@ -49,7 +50,7 @@ function rowToShop(r: ShopRow): Shop {
   // status falls back to 'approved' when the column isn't there yet (admin
   // console migration unapplied) — same fail-soft stance as listed/lat/lng, so
   // an un-migrated database doesn't lock every vendor out of their catalog.
-  return { id: r.id, slug: r.slug, vendorCode: r.vendor_code ?? null, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "", listed: r.listed ?? false, status: (r.status as Shop["status"]) ?? "approved", statusNote: r.status_note ?? null, type: (r.type as Shop["type"]) ?? "apparel", category: (r.category as Shop["category"]) ?? "clothing", lat: r.lat ?? null, lng: r.lng ?? null };
+  return { id: r.id, slug: r.slug, vendorCode: r.vendor_code ?? null, name: r.name, area: r.area ?? "", whatsapp: r.whatsapp ?? "", listed: r.listed ?? false, status: (r.status as Shop["status"]) ?? "approved", statusNote: r.status_note ?? null, type: (r.type as Shop["type"]) ?? "apparel", category: (r.category as Shop["category"]) ?? "clothing", lat: r.lat ?? null, lng: r.lng ?? null, storefront: normalizeStorefront(r.storefront) };
 }
 
 /* ---------- vendor's own shop (auth-scoped in Supabase mode) ---------- */
@@ -58,7 +59,16 @@ export async function loadShop(): Promise<Shop | null> {
   if (!isSupabaseConfigured()) {
     try {
       const s = lsGet("shop:profile");
-      return s ? { id: null, slug: null, vendorCode: null, whatsapp: "", listed: false, status: "approved" as const, statusNote: null, type: "apparel" as const, category: "clothing" as const, lat: null, lng: null, ...JSON.parse(s) } : null;
+      if (!s) return null;
+      const parsed = JSON.parse(s);
+      return {
+        id: null, slug: null, vendorCode: null, whatsapp: "", listed: false,
+        status: "approved" as const, statusNote: null, type: "apparel" as const,
+        category: "clothing" as const, lat: null, lng: null,
+        ...parsed,
+        // whatever was stored, the app only ever holds a complete config
+        storefront: normalizeStorefront(parsed.storefront),
+      };
     } catch {
       return null;
     }
@@ -123,6 +133,7 @@ export async function saveShop(profile: Shop): Promise<void> {
       lsSet("shop:profile", JSON.stringify({
         name: profile.name, area: profile.area, whatsapp: profile.whatsapp, listed: profile.listed,
         type: profile.type, category: profile.category, lat: profile.lat, lng: profile.lng,
+        storefront: profile.storefront,
       }));
     } catch {}
     return;
@@ -131,18 +142,36 @@ export async function saveShop(profile: Shop): Promise<void> {
   const sb = supabase();
   const fields = { name: profile.name, area: profile.area, whatsapp: profile.whatsapp || null };
   const { error } = await sb.from("shops")
-    .update({ ...fields, listed: profile.listed, lat: profile.lat, lng: profile.lng, type: profile.type, category: profile.category })
+    .update({ ...fields, listed: profile.listed, lat: profile.lat, lng: profile.lng, type: profile.type, category: profile.category, storefront: profile.storefront })
     .eq("id", profile.id);
   if (!error) return;
   if (error.code === "42703") {
-    // shops.listed / lat / lng / type don't exist yet (20260714_shop_listed.sql,
-    // 20260715_shop_location.sql or 20260721000300_shop_type.sql not applied) —
-    // still persist the core profile so settings keep working.
+    // shops.listed / lat / lng / type / storefront don't exist yet (one of
+    // 20260714_shop_listed.sql, 20260715_shop_location.sql,
+    // 20260721000300_shop_type.sql or 20260730000100_storefront_config.sql
+    // not applied) — still persist the core profile so settings keep working.
     const { error: retryError } = await sb.from("shops").update(fields).eq("id", profile.id);
     if (retryError) throw retryError;
     return;
   }
   throw error;
+}
+
+/** Persist a storefront image (a hero banner, a promo photo) and return the
+    URL to store in the shop's storefront config. Same bucket and folder rule
+    as garment photos — the storage RLS policy keys on the shop-id folder —
+    with /storefront/ inside it so a bucket listing tells the two apart.
+    Local mode keeps the data URL as-is, like everything else it stores. */
+export async function uploadStorefrontImage(shop: Shop | null, dataUrl: string): Promise<string> {
+  if (!isSupabaseConfigured()) return dataUrl;
+  if (!shop?.id) throw new Error("No shop — sign in first");
+  const sb = supabase();
+  const path = shop.id + "/storefront/" + crypto.randomUUID() + ".jpg";
+  const { error } = await sb.storage
+    .from("garments")
+    .upload(path, dataURLToBlob(dataUrl), { contentType: "image/jpeg" });
+  if (error) throw error;
+  return sb.storage.from("garments").getPublicUrl(path).data.publicUrl;
 }
 
 /** Change the shop's public /k/{slug} link. Supabase mode only. */
