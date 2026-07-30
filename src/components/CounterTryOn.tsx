@@ -311,8 +311,7 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
             <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 10 }}>
               <img src={orphanRender} alt="The stitched piece" style={{ width: 68, height: 90, objectFit: "cover", borderRadius: "var(--radius-sm)", border: "1px solid var(--line)" }} />
               <span style={{ color: "var(--stone)", fontSize: 12, lineHeight: 1.55 }}>
-                The stitching came out — only the fitting failed. Try again with a clearer,
-                waist-up photo of the customer.
+                Only the fitting failed — retry.
               </span>
             </div>
           )}
@@ -327,7 +326,7 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
             onImage={(img) => { setFabricImage(img); setPickedFabricId(null); }}
             max={CLOTH_QUALITY}
             label="Photo of the cloth"
-            hint="Lay it flat in daylight — fill the frame with the weave"
+            hint="Daylight, fill the frame"
             camera
             onError={setError}
           />
@@ -346,7 +345,7 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
           </label>
           <label className="field" style={{ marginTop: 12 }}>Anything the photo can&apos;t show
             <textarea value={fabricNote} maxLength={300} onChange={(e) => setFabricNote(e.target.value)}
-              placeholder="e.g. gold border runs along one edge only" aria-label="Note about this cloth" style={{ minHeight: 62 }} />
+              placeholder="e.g. gold border, one edge" aria-label="Note about this cloth" style={{ minHeight: 62 }} />
           </label>
         </Step>
 
@@ -397,13 +396,13 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
                 onImage={setStyleImage}
                 max={CUT_QUALITY}
                 label="Photo of the cut"
-                hint="A stitched sample or a mannequin — any cloth, any colour"
+                hint="Any cloth, any colour"
                 optional
                 onError={setError}
               />
               <label className="field" style={{ marginTop: 12 }}>…or describe it
                 <textarea value={stylePrompt} maxLength={400} onChange={(e) => setStylePrompt(e.target.value)}
-                  placeholder="e.g. single-breasted, one-button peak lapel, tapered trousers"
+                  placeholder="e.g. one-button peak lapel"
                   style={{ minHeight: 62 }} />
               </label>
               {/* The one thing the render can't infer reliably, and try-on reads it
@@ -441,7 +440,7 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
             onImage={setPersonImage}
             max={PERSON_QUALITY}
             label="Photo of the customer"
-            hint="Waist-up, facing you, plain wall behind them"
+            hint="Waist-up, plain wall"
             camera
             onError={setError}
           />
@@ -449,7 +448,7 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
               there is a counter between them and the upload, so the asking is
               the vendor's job and it has to be said out loud. */}
           <div style={{ fontSize: 11.5, color: "var(--stone)", marginTop: 12, lineHeight: 1.6 }}>
-            Ask before you photograph anyone. The photo stays private to this shop.
+            Ask first. Photos stay private.
           </div>
         </Step>
       </div>
@@ -462,10 +461,10 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
         <span style={{ fontSize: 11.5, color: "var(--stone)", lineHeight: 1.55 }}>
           {fabricImage && personImage && !describable
             ? cutSource === "existing"
-              ? "Pick a cut to stitch this cloth into."
-              : "Show us the cut in a photo, or describe it in words."
+              ? "Pick a cut."
+              : "Add a photo or description."
             : !fabricImage || !personImage
-            ? "Needs the cloth and the customer."
+            ? "Needs cloth and customer."
             /* Two meters for one press: the cloth is stitched into a garment,
                then that garment is fitted to the customer. Said the moment the
                button goes live, which is the moment it can be pressed. */
@@ -930,8 +929,8 @@ function Result({ run, input, onKeep, onAddGarment, onStartOver }: {
             <div style={{ fontSize: 12.5, color: "var(--ink)", lineHeight: 1.6 }}>
               <Icon name="check" />{" "}
               {kept === "fabric"
-                ? "Kept. It's in your Fabrics tab — set a price there, then publish it for shoppers."
-                : "Added. It's in your Catalog tab, in stock and try-on ready, marked stitched to order."}
+                ? "Kept — in your Fabrics tab."
+                : "Added — in your Catalog tab."}
             </div>
           ) : form === "fabric" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -946,8 +945,7 @@ function Result({ run, input, onKeep, onAddGarment, onStartOver }: {
                   placeholder="e.g. Our house 3-piece" />
               </label>
               <div style={{ fontSize: 11, color: "var(--stone)", lineHeight: 1.55 }}>
-                Saved without a price and unpublished, so nothing reaches shoppers until you say
-                so. The customer&apos;s photo is not kept with it.
+                Unpublished. Customer photo not kept.
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="ph-btn" disabled={saving} onClick={() => setForm(null)}
@@ -971,8 +969,7 @@ function Result({ run, input, onKeep, onAddGarment, onStartOver }: {
                   placeholder="e.g. 12500" />
               </label>
               <div style={{ fontSize: 11, color: "var(--stone)", lineHeight: 1.55 }}>
-                Goes straight into your catalog as a stitched-to-order piece, try-on enabled.
-                The customer&apos;s photo is not kept with it.
+                Goes straight into your catalog. Customer photo not kept.
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="ph-btn" disabled={saving} onClick={() => setForm(null)}

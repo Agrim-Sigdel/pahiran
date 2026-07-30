@@ -24,6 +24,16 @@ const STEPS: [string, string, string][] = [
 
 interface ListedShop { slug: string; name: string; area: string | null; lat: number | null; lng: number | null }
 
+/* Banner tint for a shop with no catalog photos yet — hue from the slug so a
+   shop keeps its colour across visits and revalidations. Stays light in both
+   themes, exactly as the photos it stands in for would (the initial on it is
+   painted in a fixed dark by .shop-card-banner, never --ink). */
+function shopTint(slug: string): string {
+  let h = 0;
+  for (let i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) % 360;
+  return `hsl(${h} 48% 86%)`;
+}
+
 async function getListedShops(): Promise<ListedShop[]> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -171,17 +181,20 @@ export default async function Home() {
               ))}
             </div>
           ) : (
-            /* no garments to show yet — fall back to plain shop cards */
+            /* no garments to show yet — fall back to shop cards. One card, one
+               destination: the storefront, which sells the try-on itself. */
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14, maxWidth: 1040, margin: "0 auto" }}>
               {shops.map((s) => (
-                <div key={s.slug} style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "22px 20px" }}>
-                  <div className="ph-display" style={{ fontSize: 21, fontWeight: 600, color: "var(--ink)", lineHeight: 1.3 }}>{s.name}</div>
-                  {s.area && <div style={{ fontSize: 13, color: "var(--stone)", marginTop: 3 }}>{s.area}</div>}
-                  <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-                    <Link href={"/s/" + s.slug} className="btn-outline" style={{ padding: "8px 18px", fontSize: 14 }}>storefront</Link>
-                    <Link href={"/k/" + s.slug} className="btn-violet" style={{ padding: "8px 18px", fontSize: 14 }}>peeq it</Link>
+                <Link key={s.slug} href={"/s/" + s.slug} className="card shop-card">
+                  <div className="shop-card-banner ph-display" aria-hidden style={{ background: shopTint(s.slug) }}>
+                    {(s.name.trim().charAt(0) || "p").toLowerCase()}
                   </div>
-                </div>
+                  <div className="shop-card-body">
+                    <div className="ph-display" style={{ fontSize: 21, fontWeight: 600, color: "var(--ink)", lineHeight: 1.3 }}>{s.name}</div>
+                    {s.area && <div style={{ fontSize: 13, color: "var(--stone)", marginTop: 3 }}>{s.area}</div>}
+                    <span className="shop-card-go">visit the shop →</span>
+                  </div>
+                </Link>
               ))}
             </div>
           )}
@@ -201,14 +214,27 @@ export default async function Home() {
       {/* the fork — shopper stays, store owner diverts to /owner */}
       <section className="section-pad" style={{ padding: "56px 20px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, maxWidth: 880, margin: "0 auto" }}>
-          <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "34px 30px", textAlign: "center" }}>
+          {/* The shopper card was a second copy of the hero CTA and nothing
+              else. What it carries now is the trust points — which were 13px
+              fine print under the hero button, on the page whose whole ask of
+              a shopper is "hand us a photo of yourself". */}
+          <div className="card" style={{ padding: "34px 30px", textAlign: "center" }}>
             <div className="kicker" style={{ marginBottom: 10 }}>here to shop?</div>
-            <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(22px, 3vw, 28px)", color: "var(--ink)", margin: "0 0 18px" }}>
+            <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(22px, 3vw, 28px)", color: "var(--ink)", margin: "0 0 14px" }}>
               see it on you first
             </h2>
-            <a href={shops.length > 0 ? "#shops" : "#how"} className="btn-violet" style={{ padding: "13px 34px" }}>
-              {shops.length > 0 ? "browse shops" : "see how it works"}
-            </a>
+            <ul style={{ listStyle: "none", padding: 0, margin: "0 auto 20px", display: "inline-grid", gap: 7, fontSize: 13.5, color: "var(--stone)", textAlign: "left" }}>
+              {["no account needed", "your photo is never stored", "free, in नेपाली र english"].map((t) => (
+                <li key={t} style={{ display: "flex", gap: 9, alignItems: "baseline" }}>
+                  <span aria-hidden style={{ color: "var(--violet)", fontWeight: 700 }}>✓</span>{t}
+                </li>
+              ))}
+            </ul>
+            <div>
+              <a href={shops.length > 0 ? "#shops" : "#how"} className="btn-violet" style={{ padding: "13px 34px" }}>
+                {shops.length > 0 ? "browse shops" : "see how it works"}
+              </a>
+            </div>
           </div>
           <div style={{ background: "var(--slab)", color: "var(--on-slab)", borderRadius: "var(--radius-card)", padding: "34px 30px", textAlign: "center" }}>
             <div className="kicker" style={{ marginBottom: 10, color: "var(--butter)" }}>own a store?</div>
@@ -227,12 +253,13 @@ export default async function Home() {
         <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(24px, 3.6vw, 32px)", color: "var(--ink)", textAlign: "center", margin: "0 0 30px" }}>
           how it works
         </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, maxWidth: 1040, margin: "0 auto" }}>
+        {/* a stepper, not boxes — the sequence is the content (see .steps) */}
+        <div className="steps">
           {STEPS.map(([n, t, d]) => (
-            <div key={n} style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "22px 20px" }}>
-              <div className="ee-mark" style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--butter)", fontSize: 17, color: "var(--on-light)" }}>{n}</div>
-              <div className="ph-display" style={{ fontSize: 18, fontWeight: 600, color: "var(--ink)", margin: "12px 0 4px" }}>{t}</div>
-              <div style={{ fontSize: 14.5, color: "var(--stone)", lineHeight: 1.6 }}>{d}</div>
+            <div key={n} className="step">
+              <div className="ee-mark step-dot">{n}</div>
+              <div className="ph-display step-title">{t}</div>
+              <div className="step-desc">{d}</div>
             </div>
           ))}
         </div>
@@ -267,6 +294,8 @@ function FeedCard({ g }: { g: FeedItem }) {
           trying something on. */}
       <Link className="feed-img" href={"/s/" + g.shop.slug + "/" + encodeURIComponent(g.id)}>
         <GarmentImage src={g.image_url} alt={g.name} sizes="(max-width: 640px) 50vw, (max-width: 920px) 33vw, 260px" />
+        {/* the one claim that makes this card different from any store's */}
+        <span className="feed-badge">tries on</span>
         <span className="feed-cta">view</span>
       </Link>
       <div className="feed-meta">
@@ -277,6 +306,7 @@ function FeedCard({ g }: { g: FeedItem }) {
           <span className="nm">{g.name}</span>
           <span className="pr">{npr(g.price_npr)}</span>
         </div>
+        {g.category && <div className="feed-cat">{g.category}</div>}
       </div>
     </div>
   );

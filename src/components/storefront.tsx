@@ -292,8 +292,8 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
             </div>
             <p style={{ color: "var(--stone)", fontSize: 14, lineHeight: 1.6, maxWidth: 300, margin: 0 }}>
               {sentKind === "enquiry"
-                ? "We opened WhatsApp with your order — send that message to start the chat. The shop has the order either way, and will confirm payment and delivery."
-                : "The shop will reach out on your number to confirm price, payment and delivery."}
+                ? "Send the opened WhatsApp message."
+                : "The shop will call you."}
             </p>
             {sentRef && (
               <div style={{ fontSize: 12, color: "var(--stone)" }}>

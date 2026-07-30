@@ -9,7 +9,7 @@ import ColorList from "@/components/ColorList";
 import Dropdown from "@/components/Dropdown";
 import EeMark from "@/components/EeMark";
 import Icon from "@/components/Icon";
-import Dialog, { confirmAsync } from "@/components/Dialog";
+import { confirmAsync } from "@/components/Dialog";
 import { COVERAGES, staleReason } from "@/lib/types";
 import type { Composition, Fabric, FabricColor, Style, StyleCoverage, StyleFamily } from "@/lib/types";
 
@@ -50,16 +50,11 @@ interface Props {
   fabric: Fabric;
   styles: Style[];
   compositions: Composition[];
-  onClose: () => void;
+  /** The cut form is a page of its own now, one level deeper in the
+      breadcrumbs — so the studio asks the dashboard to open it rather than
+      stacking a dialog on itself, the same shape as onRephoto. */
+  onEditCut: (form: { mode: "new" | "edit" | "copy"; style?: Style }) => void;
   onCompose: (styleIds: string[]) => Promise<void>;
-  onCreateStyle: (s: {
-    name: string;
-    family: StyleFamily;
-    hint: string;
-    coverage: StyleCoverage;
-    refImage: string | null;
-  }) => Promise<void>;
-  onUpdateStyle: (s: Style) => Promise<void>;
   /** True while a stitch is running anywhere. It's one at a time, and the job
       outlives this dialog — so the studio is told, it doesn't own it. */
   composing: boolean;
@@ -81,23 +76,17 @@ interface Props {
 }
 
 export default function FabricStudio({
-  fabric, styles, compositions, onClose, onCompose, onCreateStyle, onUpdateStyle,
+  fabric, styles, compositions, onEditCut, onCompose,
   composing, onPublish, onPrice, onNote, onRemove, onCorrect, onFixColor, onRephoto,
 }: Props) {
   const [picked, setPicked] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [zoomCloth, setZoomCloth] = useState(false);
-  /* Renamed from a local `busy`: the stitch no longer belongs to this modal.
-     It runs at the page, survives this dialog closing, and can be minimised
-     out of the way — so whether one is running is something the studio is
-     told, not something it owns. */
+  /* Renamed from a local `busy`: the stitch no longer belongs to this page.
+     It runs at the page above, survives the studio closing, and can be
+     minimised out of the way — so whether one is running is something the
+     studio is told, not something it owns. */
   const busy = composing;
-  /* One form, three jobs. "copy" exists because a library cut cannot be
-     edited — it belongs to every shop — so wanting to change one really means
-     wanting your own version of it. */
-  const [cutForm, setCutForm] = useState<
-    { mode: "new" | "edit" | "copy"; style?: Style } | null
-  >(null);
 
   // Only cuts that belong to this cloth's family — a lehenga silhouette has
   // nothing to say about a suit length.
@@ -225,13 +214,11 @@ export default function FabricStudio({
   const run = () => stitch(picked.slice(0, limit));
 
   return (
-    /* Freely closable now, mid-stitch included. The job runs at the page and
-       keeps its own progress on screen, so closing this abandons nothing — it
-       used to be held open only because the overlay lived in here. */
-    <Dialog onClose={onClose} hideHeader width={760}
-      ariaLabel={"Cuts for " + fabric.name}
-      scrimStyle={{ alignItems: "flex-start", overflowY: "auto" }}
-      panelStyle={{ margin: "24px 0", padding: "26px 26px 30px" }}>
+    /* A page under the dashboard's breadcrumbs now, not a dialog — back and
+       the trail live in the header above, and leaving mid-stitch abandons
+       nothing: the job runs at the page and keeps its own progress on
+       screen. */
+    <div className="panel" style={{ padding: "26px 26px 30px" }}>
       <>
 
         {/* ── the cloth ── */}
@@ -260,8 +247,6 @@ export default function FabricStudio({
               {fabricPrice(fabric.price, fabric.unit)}
             </div>
           </div>
-          <button className="ph-btn" onClick={onClose}
-            style={{ color: "var(--stone)", fontSize: 12, padding: "4px 8px" }}>close</button>
         </div>
 
         {/* ── is this the colour? ──
@@ -278,8 +263,8 @@ export default function FabricStudio({
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 12, color: "var(--stone)", lineHeight: 1.5 }}>
                   {fabric.colors.length === 0
-                    ? <>No colours on this cloth — the previews go on the photo alone.</>
-                    : <>Colour, as you&apos;ve set it: <b style={{ color: "var(--ink)" }}>{fabric.color}</b>. The stitching follows this over the photo.</>}
+                    ? <>No colours set.</>
+                    : <>Colour: <b style={{ color: "var(--ink)" }}>{fabric.color}</b></>}
                 </span>
                 <button className="ph-btn" onClick={() => { setColors(fabric.colors); setColourFix(true); }}
                   style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3, padding: "4px 2px", minHeight: 28 }}>
@@ -291,16 +276,12 @@ export default function FabricStudio({
                 <div style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.5, fontWeight: 600, marginBottom: 5 }}>
                   {fabric.colors.length === 0
                     ? "What colour is this cloth?"
-                    : "Is this the colour of your cloth?"}
+                    : "Is this the colour?"}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--stone)", lineHeight: 1.6, marginBottom: 9 }}>
                   {fabric.colors.length === 0
-                    ? <>We couldn&apos;t read a colour off this photo, so the previews below were made
-                        from the picture alone. Setting them — or retaking the photo — gives the next
-                        one something to go on.</>
-                    : <>We read <b style={{ color: "var(--ink)" }}>{fabric.color}</b> off this photo,
-                        and the previews below were stitched from that. Hold the bolt up against
-                        them.</>}
+                    ? <>None read off the photo.</>
+                    : <>Read off the photo: <b style={{ color: "var(--ink)" }}>{fabric.color}</b>.</>}
                 </div>
                 <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
                   {fabric.colors.length > 0 && (
@@ -325,10 +306,7 @@ export default function FabricStudio({
                     sheen and the shade of every thread in it. */}
                 <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "10px 11px" }}>
                   <div style={{ fontSize: 11.5, color: "var(--stone)", lineHeight: 1.55, marginBottom: 8 }}>
-                    Is it the <b style={{ color: "var(--ink)" }}>photo</b> that&apos;s off? A bolt shot
-                    under a tube light comes out warm in every preview made from it, and a crop with
-                    counter in it stitches the counter&apos;s colour into the cloth. Fixing the
-                    picture fixes all of them at once.
+                    Fix the <b style={{ color: "var(--ink)" }}>photo</b>, fix everything.
                   </div>
                   <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
                     <button className="ph-btn" onClick={() => onRephoto("replace")}
@@ -342,9 +320,7 @@ export default function FabricStudio({
                   </div>
                 </div>
                 <div style={{ fontSize: 11.5, color: "var(--stone)", lineHeight: 1.55 }}>
-                  Or set what the cloth really is, and roughly how much of it each colour covers — a
-                  border is a small share, not half the garment. This corrects the bolt for every
-                  cut, and from here on the stitching follows your words over the photo.
+                  Or set the colours yourself.
                 </div>
                 {/* Sampling works off the fabric's photo, which is exactly what
                     is being called wrong — so it isn't offered here. */}
@@ -366,32 +342,25 @@ export default function FabricStudio({
 
         {!fabric.note && (
           <div style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", padding: "10px 13px", marginBottom: 18, fontSize: 12, color: "var(--stone)", lineHeight: 1.6 }}>
-            No note on this cloth yet. Editing the fabric to say where a border sits, or how
-            heavily it drapes, makes every render below noticeably more accurate.
+            No note yet — add one.
           </div>
         )}
 
         {/* ── pick the cuts ── */}
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
           <div className="ph-display" style={{ fontSize: 17, color: "var(--ink)" }}>stitch this into</div>
-          <button className="ph-btn" onClick={() => setCutForm({ mode: "new" })}
+          <button className="ph-btn" onClick={() => onEditCut({ mode: "new" })}
             style={{ fontSize: 12, color: "var(--ink)", fontWeight: 500, textDecoration: "underline", textUnderlineOffset: 3 }}>
             + add your own cut
           </button>
         </div>
         <div style={{ fontSize: 12, color: "var(--stone)", marginBottom: 12, lineHeight: 1.6 }}>
-          {checked
-            ? <>Pick only the cuts you&apos;d actually stitch in this cloth — each one is a render, and
-                each render is a promise your tailor has to keep. {PICK_LIMIT} at a time, so you see
-                what came out before you order more of it.</>
-            : <>Start with one. We&apos;ve read this cloth off its photo and never seen it stitched, so
-                the first picture is where you tell us what we got wrong — the colour especially.
-                Once you&apos;ve been through it, they go {PICK_LIMIT} at a time.</>}
+          {checked ? <>Up to {PICK_LIMIT} at a time.</> : <>Start with one.</>}
         </div>
 
         {cuts.length === 0 ? (
           <div style={{ color: "var(--stone)", fontSize: 13, padding: "18px 0" }}>
-            No cuts for {familyLabel(fabric.family)} yet — add one to get started.
+            No cuts for {familyLabel(fabric.family)} yet.
           </div>
         ) : (
           /* A list rather than a wall of chips. A shop with thirty cuts had
@@ -408,9 +377,7 @@ export default function FabricStudio({
               disabled={busy || picked.length >= limit}
               onChange={(id) => toggle(id)}
               placeholder={picked.length >= limit
-                ? (limit === 1
-                    ? "One cut first — drop it below to pick another"
-                    : `${limit} picked — that's the limit`)
+                ? (limit === 1 ? "One cut first" : `${limit} picked — the limit`)
                 : "Choose a cut…"}
               options={cuts.map((c) => {
                 const isDone = done(c.id);
@@ -422,7 +389,7 @@ export default function FabricStudio({
                      comes back half an outfit short. */
                   meta: (c.coverage === "set" ? "set" : c.coverage) + (c.shopId ? " · yours" : ""),
                   note: isDone
-                    ? "Already stitched — say what's wrong with it below to stitch it again"
+                    ? "Already stitched"
                     : picked.includes(c.id) ? "Picked" : undefined,
                 };
               })} />
@@ -450,7 +417,7 @@ export default function FabricStudio({
                         {mine && <span style={{ fontSize: 9.5, letterSpacing: ".08em", opacity: 0.75 }}>YOURS</span>}
                       </span>
                       <button type="button" className="ph-btn"
-                        onClick={() => setCutForm({ mode: mine ? "edit" : "copy", style: c })}
+                        onClick={() => onEditCut({ mode: mine ? "edit" : "copy", style: c })}
                         title={mine ? "Change this cut" : "Library cut — take a copy you can change"}
                         aria-label={mine ? "Change " + c.name : "Copy " + c.name}
                         style={{ padding: "0 8px", fontSize: 11, border: "none", background: "none", color: "var(--card)", cursor: "pointer" }}>
@@ -511,8 +478,7 @@ export default function FabricStudio({
               stitched previews
             </div>
             <div style={{ fontSize: 12, color: "var(--stone)", marginBottom: 13, lineHeight: 1.6 }}>
-              Check each one before publishing. Shoppers only see what you publish — and these
-              are previews, not photographs, so pattern placement is close, not exact.
+              Publish only what looks right.
             </div>
             <div className="studio-grid">
               {compositions.map((c) => (
@@ -529,8 +495,7 @@ export default function FabricStudio({
 
         {compositions.length === 0 && !busy && (
           <div style={{ marginTop: 22, padding: "22px 18px", background: "var(--paper)", border: "1px dashed var(--line)", borderRadius: "var(--radius-sm)", textAlign: "center", color: "var(--stone)", fontSize: 12.5, lineHeight: 1.7 }}>
-            Nothing stitched from this cloth yet.<br />
-            Pick a cut or two above — three is usually plenty to start.
+            Nothing stitched yet.
           </div>
         )}
 
@@ -556,26 +521,8 @@ export default function FabricStudio({
           } />
       )}
 
-      {cutForm && (
-        <CutModal
-          family={fabric.family}
-          mode={cutForm.mode}
-          initial={cutForm.style}
-          onClose={() => setCutForm(null)}
-          onSave={async (s) => {
-            /* A copy saves as a brand-new shop cut, so the library one is left
-               exactly as every other shop still sees it. */
-            if (cutForm.mode === "edit" && cutForm.style) {
-              await onUpdateStyle({ ...cutForm.style, ...s });
-            } else {
-              await onCreateStyle(s);
-            }
-            setCutForm(null);
-          }}
-        />
-      )}
       </>
-    </Dialog>
+    </div>
   );
 }
 
@@ -871,8 +818,8 @@ function RenderCard({
                       aria-label="What came out wrong"
                       onChange={(e) => setFault(e.target.value)}
                       placeholder={faultScope === "cloth"
-                        ? "e.g. the zari border comes out on both edges — it's only on one"
-                        : "e.g. the lapel is too wide, and the hem sits short"}
+                        ? "e.g. border on both edges"
+                        : "e.g. lapel too wide"}
                       style={{ width: "100%", padding: "7px 9px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 12, background: "var(--card)", minHeight: 52, resize: "vertical", fontFamily: "inherit" }} />
                     {/* The sentence that used to sit here — "every preview of
                         this cloth will be marked for re-stitching" — was the
@@ -917,7 +864,7 @@ function RenderCard({
                 piece — that's the cut's own top/bottom/set, and try-on reads
                 that to know where the garment goes. */}
             <textarea
-              value={note} maxLength={300} placeholder="Note for this cloth in this cut (optional)" aria-label="Note for this cloth in this cut (optional)"
+              value={note} maxLength={300} placeholder="Note (optional)" aria-label="Note for this cloth in this cut (optional)"
               onChange={(e) => setNote(e.target.value)}
               onBlur={() => { if (note.trim() !== c.note.trim()) onNote(c.id, note.trim()); }}
               style={{ width: "100%", padding: "7px 9px", borderRadius: "var(--radius-btn)", border: "1px solid " + (stale ? "var(--warn)" : "var(--line)"), fontSize: 12, background: "var(--card)", marginBottom: 8, minHeight: 46, resize: "vertical", fontFamily: "inherit" }}
@@ -932,18 +879,17 @@ function RenderCard({
             {stale && (
               <div style={{ fontSize: 11, color: "var(--stone)", lineHeight: 1.5, marginBottom: 8 }}>
                 {why === "photo"
-                  ? "This was stitched from the old photo of the cloth."
+                  ? "Stitched from the old photo."
                   : why === "cut"
-                  ? "The cut has been changed since this was made, so this picture shows the old one."
+                  ? "The cut has changed."
                   : why === "fix"
-                  ? "You've said what came out wrong."
+                  ? "A fix was asked for."
                   : why === "colour"
-                  ? "You've set this cloth's colours since this was made, and this was made from the photo."
+                  ? "Colours set since this render."
                   : why === "cloth"
-                  ? "You've corrected something about this cloth."
-                  : "This picture was made before that note."}
-                {" Pick this cut again at the top to stitch a new one — " +
-                  creditCost(1).replace("Uses", "uses")}
+                  ? "The cloth was corrected."
+                  : "Made before that note."}
+                {" Re-pick above to re-stitch."}
               </div>
             )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -1031,7 +977,7 @@ export function ImageZoom({ src, alt, onClose, actions }: {
 
    Exported for the dashboard's designs tab, which opens it without a fabric in
    hand — `pickFamily` adds the family choice the fabric would otherwise carry. */
-export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }: {
+export function CutPage({ family, pickFamily, mode, initial, onClose, onSave, setLeaveGuard }: {
   family: StyleFamily;
   pickFamily?: boolean;
   mode: "new" | "edit" | "copy";
@@ -1044,6 +990,8 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
     coverage: StyleCoverage;
     refImage: string | null;
   }) => Promise<void>;
+  /** Registers the dirty check every way off this page runs through. */
+  setLeaveGuard: (fn: (() => Promise<boolean>) | null) => void;
 }) {
   const [fam, setFam] = useState<StyleFamily>(initial?.family ?? family);
   /* A copy opens on the original's wording so the vendor tweaks rather than
@@ -1070,6 +1018,28 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
 
   const describable = Boolean(image || hint.trim());
   const canSave = Boolean(name.trim() && describable && !busy);
+
+  /* As a dialog this discarded typed work on a backdrop-tap without asking;
+     as a page, back and every crumb run through this first. Compared against
+     what the form opened with, so a copy's pre-filled wording only counts
+     once the vendor has actually changed something. */
+  const dirty =
+    name !== (mode === "copy" && initial ? initial.name + " (ours)" : initial?.name ?? "")
+    || hint !== (initial?.hint ?? "")
+    || coverage !== (initial?.coverage ?? "set")
+    || image !== (initial?.refImage ?? null)
+    || fam !== (initial?.family ?? family);
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+  useEffect(() => {
+    setLeaveGuard(async () => !dirtyRef.current || confirmAsync({
+      title: "Discard changes?",
+      body: "This cut isn't saved yet. Discard what you've filled in?",
+      confirmLabel: "Discard", cancelLabel: "Keep editing", destructive: true,
+    }));
+    return () => setLeaveGuard(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const save = async () => {
     setBusy(true);
     setError(null);
@@ -1082,33 +1052,44 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
   };
 
   return (
-    <Dialog onClose={onClose} hideHeader width={420}
-      ariaLabel={mode === "edit" ? "Change this cut" : mode === "copy" ? "Make it your own" : "Add your own cut"}
-      panelStyle={{ padding: "28px 26px" }}>
-      <>
-        <div className="ph-display" style={{ fontSize: 24, color: "var(--ink)", marginBottom: 4 }}>
-          {mode === "edit" ? "change this cut" : mode === "copy" ? "make it your own" : "add your own cut"}
+    /* The page header above already says which of the three jobs this is —
+       the trail ends in "change this cut" / "make it your own" / "add your
+       own cut" — so the panel starts straight at the explanation. */
+    <div className="panel" style={{ padding: "28px 26px" }}>
+      <div className="page-split">
+      <div>
+        {/* A button, not a clickable div — this opens a file picker, so it has
+            to be reachable and operable from the keyboard. */}
+        <button type="button" onClick={() => fileRef.current?.click()}
+          aria-label={image ? "Replace the photo of this cut" : "Add a photo of this cut"}
+          style={{ width: "100%", border: "1.5px dashed " + (image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-sm)", height: "clamp(260px, 38vw, 400px)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 6, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 13.5, textAlign: "center", lineHeight: 1.6, padding: 0 }}>
+          {image ? <img src={image} alt="Cut reference" style={{ height: "100%", maxWidth: "100%", objectFit: "contain" }} />
+            : <span style={{ padding: 12 }}>Photo of this cut<br /><span style={{ fontSize: 11.5 }}>Any cloth, any colour</span></span>}
+        </button>
+        <div style={{ fontSize: 11, color: "var(--stone)", lineHeight: 1.55 }}>
+          Only the shape is copied.
         </div>
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
+      </div>
+
+      <div>
         <div style={{ fontSize: 12.5, color: "var(--stone)", marginBottom: mode === "new" ? 18 : 12, lineHeight: 1.6 }}>
           {mode === "copy"
-            ? `“${initial?.name}” is a peeq library cut, shared by every shop, so it can't be changed directly. This saves your own version of it — the original stays where it is.`
-            : pickFamily
-            ? "Show us a photo of one you've stitched, describe it in words, or both — whatever you have."
-            : `For ${familyLabel(fam)}. Show us a photo of one you've stitched, describe it in words, or both — whatever you have.`}
+            ? "Saves your own editable copy."
+            : "A photo, words, or both."}
         </div>
         {/* Editing the wording or the pieces changes what this cut means, and
             anything already stitched from it was made under the old meaning. */}
         {mode === "edit" && (
           <div style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", padding: "10px 13px", marginBottom: 16, fontSize: 12, color: "var(--stone)", lineHeight: 1.6 }}>
-            Anything already stitched from this cut will be marked as needing a re-stitch —
-            those pictures were made from the old wording. Renaming it alone is free.
+            Edits mark renders for re-stitching.
           </div>
         )}
 
         {/* Opened from the fabric studio the family is the cloth's and fixed;
             opened from the designs tab there is no cloth, so it's asked here. */}
         {pickFamily && mode === "new" && (
-          <label className="field" style={{ marginBottom: 14 }}>Which family is this cut for?
+          <label className="field" style={{ marginBottom: 14 }}>Which family?
             <select value={fam} onChange={(e) => setFam(e.target.value as StyleFamily)}
               style={{ width: "100%", padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)", fontSize: 13.5 }}>
               {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
@@ -1154,28 +1135,14 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
           {COVERAGES.find((c) => c.id === coverage)?.note}
         </div>
 
-        {/* A button, not a clickable div — this opens a file picker, so it has
-            to be reachable and operable from the keyboard. */}
-        <button type="button" onClick={() => fileRef.current?.click()}
-          aria-label={image ? "Replace the photo of this cut" : "Add a photo of this cut"}
-          style={{ width: "100%", border: "1.5px dashed " + (image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-sm)", height: 150, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 6, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 13.5, textAlign: "center", lineHeight: 1.6, padding: 0 }}>
-          {image ? <img src={image} alt="Cut reference" style={{ height: "100%", objectFit: "contain" }} />
-            : <span style={{ padding: 12 }}>Photo of this cut<br /><span style={{ fontSize: 11.5 }}>A stitched sample or a mannequin — any cloth, any colour</span></span>}
-        </button>
-        <div style={{ fontSize: 11, color: "var(--stone)", marginBottom: 14, lineHeight: 1.55 }}>
-          We copy the shape from this photo, never its colour or fabric — those always come
-          from the cloth you&apos;re stitching.
-        </div>
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
-
         <label className="field">Describe the cut
           <textarea value={hint} maxLength={400} onChange={(e) => setHint(e.target.value)}
-            placeholder="e.g. single-breasted, one-button peak lapel, double side vents, tapered trousers" />
+            placeholder="e.g. one-button peak lapel" />
         </label>
 
         {!describable && (
           <div style={{ fontSize: 11.5, color: "var(--stone)", marginTop: 8, lineHeight: 1.55 }}>
-            Add a photo or a description — we need at least one to know what to stitch.
+            Add a photo or description.
           </div>
         )}
         {error && <div style={{ fontSize: 12.5, color: "var(--warn)", marginTop: 8 }}>{error}</div>}
@@ -1188,14 +1155,15 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
             {busy ? "saving…" : mode === "edit" ? "save changes" : mode === "copy" ? "save my version" : "save cut"}
           </button>
         </div>
+      </div>
+      </div>
 
-        {cropping && (
-          <ImageCropper src={cropping} title="Crop to the cut"
-            hint="Keep the stitched piece and leave the rest of the shop out. Only its shape is copied — never its colour or cloth."
-            onCancel={() => setCropping(null)}
-            onDone={(dataUrl) => { setCropping(null); setImage(dataUrl); }} />
-        )}
-      </>
-    </Dialog>
+      {cropping && (
+        <ImageCropper src={cropping} title="Crop to the cut"
+          hint="Keep the stitched piece and leave the rest of the shop out. Only its shape is copied — never its colour or cloth."
+          onCancel={() => setCropping(null)}
+          onDone={(dataUrl) => { setCropping(null); setImage(dataUrl); }} />
+      )}
+    </div>
   );
 }

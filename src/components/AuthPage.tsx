@@ -31,9 +31,9 @@ const COPY: Record<"shopper" | "vendor", Copy> = {
     signinTitle: "welcome back",
     signupTitle: "create your account",
     signinBlurb: "Sign in to your looks, bag and wishlist.",
-    signupBlurb: "Save your try-ons and bag, and pick up on any device.",
+    signupBlurb: "Your looks, on every device.",
     localMode: {
-      blurb: "This install runs in local mode (no Supabase configured) — your looks and bag live in this browser.",
+      blurb: "Local mode — this browser only.",
       cta: "see your looks",
       href: "/account",
     },
@@ -43,9 +43,9 @@ const COPY: Record<"shopper" | "vendor", Copy> = {
     signinTitle: "vendor sign in",
     signupTitle: "open your shop",
     signinBlurb: "Sign in to your shop dashboard.",
-    signupBlurb: "Set up your shop dashboard — catalog, try-ons, leads.",
+    signupBlurb: "Catalog, try-ons, leads.",
     localMode: {
-      blurb: "This install runs in local mode (no Supabase configured) — your catalog lives in this browser. Head straight to the dashboard.",
+      blurb: "Local mode — this browser only.",
       cta: "open dashboard",
       href: "/dashboard",
     },

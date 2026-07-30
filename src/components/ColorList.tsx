@@ -75,8 +75,7 @@ export default function ColorList({ colors, onChange, image }: {
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {colors.length === 0 && (
         <div style={{ fontSize: 12, color: "var(--stone)", lineHeight: 1.55 }}>
-          No colours set. Add the ones this cloth actually is — the previews are
-          generated from them.
+          No colours set — add them.
         </div>
       )}
 
