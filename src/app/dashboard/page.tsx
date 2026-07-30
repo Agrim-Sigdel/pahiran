@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Dashboard from "@/components/Dashboard";
+import { StitchingOverlay } from "@/components/FabricStudio";
 import Onboarding, { slugify } from "@/components/Onboarding";
 import PendingReview from "@/components/PendingReview";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
@@ -15,13 +16,15 @@ import {
   setFabricStock, loadStyles, loadCompositions, createStyle as persistStyle,
   updateStyle as persistStyleUpdate,
   composeFabric as runCompose, setCompositionPublished, setCompositionPrice, setCompositionNote,
+  setCompositionCorrection, setFabricCorrection, setFabricColors,
   removeComposition as unpersistComposition,
   runCounter as runCounterOnServer, saveCounterRun,
 } from "@/lib/storage";
+import { colorText } from "@/lib/constants";
 import { reportError } from "@/lib/logging";
-import { toastErr, toastWarn, toastFailure } from "@/lib/toast";
+import { toast, toastOk, toastErr, toastWarn, toastFailure, dismissToast } from "@/lib/toast";
 import { getRole, markVendor } from "@/lib/account";
-import type { Composition, CounterInput, CounterRun, Fabric, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
+import type { Composition, CounterInput, CounterRun, Fabric, FabricColor, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -33,13 +36,20 @@ export default function DashboardPage() {
   const [events, setEvents] = useState<TryOnEvent[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
+  /** The one running image generation, or null. See composeFabric. */
+  const [job, setJob] = useState<{ image: string; caption: string; steps: number } | null>(null);
+  const [jobMinimized, setJobMinimized] = useState(false);
 
   useEffect(() => {
     (async () => {
       if (isSupabaseConfigured()) {
         const { data } = await supabase().auth.getSession();
         if (!data.session) {
-          router.replace("/login");
+          /* Carry the destination through the sign-in: /counter arrives here
+             as /dashboard?counter=1, and losing the query would sign the
+             vendor in only to strand them on the plain dashboard. */
+          const here = window.location.pathname + window.location.search;
+          router.replace(here === "/dashboard" ? "/login" : "/login?next=" + encodeURIComponent(here));
           return;
         }
         // shopper accounts don't get a shop provisioned — send them to /account
@@ -180,7 +190,49 @@ export default function DashboardPage() {
      composition list from the server rather than trusting an optimistic guess:
      a render can come back ready, failed, or skipped-because-already-there,
      and the vendor needs to see which. */
+  /* A stitch is a job, not a modal state.
+     It lives here rather than in the studio for three reasons that all come
+     from the same fact — it takes the better part of a minute per cut and the
+     shop is being charged for it:
+       · closing the studio must not abandon it,
+       · the vendor must be able to push it aside and keep working,
+       · and only one may run, because two at once means two bills, a slower
+         queue for both, and a progress bar that can only honestly describe
+         one of them. */
   const composeFabric = async (fabricId: string, styleIds: string[]) => {
+    if (job) throw new Error("One stitch at a time — this one's still running.");
+    const fabric = fabrics.find((f) => f.id === fabricId);
+    setJob({
+      image: fabric?.image ?? "",
+      caption:
+        (fabric?.name ?? "Cloth") + " · " + styleIds.length +
+        " cut" + (styleIds.length !== 1 ? "s" : ""),
+      steps: styleIds.length,
+    });
+    setJobMinimized(false);
+    /* It announces the start and then gets out of the way. This used to be
+       sticky (duration 0) on the argument that it stood for work still running
+       and should leave when the work did — but StitchingOverlay is rendered a
+       level up from <Dashboard> and draws for the whole job, minimising to a
+       corner bar with the cloth and a percentage. The overlay survives closing
+       the studio; the toast was never the last thing on screen, only the last
+       thing in the way. So it fades, and the bar carries the job.
+
+       Dismissed in `finally` as well, for a batch that finishes inside the
+       four seconds — dismissToast on an id that has already gone is a no-op. */
+    const notice = toast(
+      "Stitching " + styleIds.length + " cut" + (styleIds.length !== 1 ? "s" : "") + "…",
+      { placement: "top" }
+    );
+    try {
+      return await runComposeJob(fabricId, styleIds);
+    } finally {
+      dismissToast(notice);
+      setJob(null);
+    }
+  };
+
+  const runComposeJob = async (fabricId: string, styleIds: string[]) => {
     const results = await runCompose(shop.id, fabricId, styleIds);
     setCompositions(await loadCompositions(shop.id));
     const failed = results.filter((r) => r.status === "failed");
@@ -196,6 +248,17 @@ export default function DashboardPage() {
     }
     if (failed.length > 0) {
       toastWarn(failed.length + " of " + results.length + " didn't come out. Delete those and try again.");
+    }
+    /* Only what was actually made. A batch where every cut was already
+       stitched costs nothing and produces nothing, and telling the vendor
+       "3 previews ready" for three pictures that were already there is how
+       they stop believing the number. */
+    const made = results.filter((r) => r.status === "ready").length;
+    if (made > 0) {
+      toastOk(
+        made + " preview" + (made !== 1 ? "s" : "") + " ready — check them before publishing.",
+        { placement: "top" }
+      );
     }
   };
 
@@ -256,6 +319,90 @@ export default function DashboardPage() {
     }
   };
 
+  /* No approveComposition any more. It existed for one control — the verdict
+     question the studio used to open on every finished render — and that is
+     gone, so nothing can set the flag. `compositions.approved` is still
+     written to false by correctComposition below, which keeps the stored value
+     honest rather than leaving it stuck true on a render since complained
+     about; nothing reads it.
+
+     A reported fault, filed against the pairing or against the cloth. Only the
+     live value moves — the rendered_* mirrors stay where the last render left
+     them, so the card reads as needing a re-stitch until one is paid for. A
+     cloth-scoped fault marks every preview of that bolt, which is the point:
+     they were all made under the old understanding of it. */
+  const correctComposition = async (
+    id: string,
+    correction: string,
+    scope: "cut" | "cloth"
+  ) => {
+    const composition = compositions.find((c) => c.id === id);
+    const fabricId = composition?.fabricId ?? null;
+    /* Only the fields this write touches are remembered, and the rollback puts
+       only those back. Snapshotting whole arrays would be simpler and wrong:
+       a colour correction is saved from the same button press, so restoring
+       the old `fabrics` here would quietly undo a colour write that succeeded. */
+    const prevCorrection =
+      scope === "cut"
+        ? composition?.correction ?? ""
+        : fabrics.find((f) => f.id === fabricId)?.correction ?? "";
+    const prevApproved = composition?.approved ?? false;
+
+    if (scope === "cut") {
+      setCompositions((cur) =>
+        cur.map((c) => (c.id === id ? { ...c, correction, approved: false } : c))
+      );
+    } else if (fabricId) {
+      setFabrics((cur) => cur.map((f) => (f.id === fabricId ? { ...f, correction } : f)));
+    }
+    try {
+      if (scope === "cut") await setCompositionCorrection(id, correction);
+      else if (fabricId) await setFabricCorrection(fabricId, correction);
+    } catch (e) {
+      /* Rolled back, unlike the note: a correction that looks saved but isn't
+         costs a render to discover — the vendor stitches again and gets the
+         same fault back. */
+      if (scope === "cut") {
+        setCompositions((cur) =>
+          cur.map((c) =>
+            c.id === id ? { ...c, correction: prevCorrection, approved: prevApproved } : c
+          )
+        );
+      } else if (fabricId) {
+        setFabrics((cur) =>
+          cur.map((f) => (f.id === fabricId ? { ...f, correction: prevCorrection } : f))
+        );
+      }
+      toastFailure("Could not save what you reported", e);
+    }
+  };
+
+  /* The cloth's colours, corrected from the studio against a render that got
+     them wrong. Writes the fabric only, and every preview of that bolt goes
+     stale off the back of it — staleReason compares these colours against the
+     ones each render was made under.
+
+     `colorsCorrected` moves with them, because that is what the write means:
+     a vendor who has seen a garment beside the bolt has said something the
+     photo cannot say about itself, and only then is the render prompt allowed
+     to put the words above the sample. */
+  const fixFabricColor = async (fabricId: string, colors: FabricColor[]) => {
+    const before = fabrics;
+    setFabrics((cur) =>
+      cur.map((f) =>
+        f.id === fabricId
+          ? { ...f, colors, colorsCorrected: true, color: colorText(colors) }
+          : f
+      )
+    );
+    try {
+      await setFabricColors(fabricId, colors);
+    } catch (e) {
+      setFabrics(before);
+      toastFailure("Could not save that colour", e);
+    }
+  };
+
   const removeComposition = async (id: string) => {
     const before = compositions;
     setCompositions((cur) => cur.filter((c) => c.id !== id));
@@ -270,8 +417,18 @@ export default function DashboardPage() {
   /* The counter spends without writing anything, so unlike composeFabric there
      is nothing to reload afterwards — the result lives in the panel until the
      vendor decides to keep it. */
-  const runCounter = (input: CounterInput, onStitched?: (garmentUrl: string) => void): Promise<CounterRun> =>
-    runCounterOnServer(shop.id, input, onStitched);
+  /* The counter shares the one-at-a-time rule. It spends from the same
+     allowance against the same machines, and a fitting that queues behind a
+     catalog batch is a customer standing at the desk watching a bar that
+     hasn't started — better to say so and let the vendor choose. */
+  const runCounter = (input: CounterInput, onStitched?: (garmentUrl: string) => void): Promise<CounterRun> => {
+    if (job) {
+      return Promise.reject(
+        new Error("A stitch is already running. Wait for it to finish, then try this again.")
+      );
+    }
+    return runCounterOnServer(shop.id, input, onStitched);
+  };
 
   /* Keeping one does write: a fabric, a cut of the shop's own, and the
      composition joining them. All three lists move at once so the Fabrics tab
@@ -397,6 +554,12 @@ export default function DashboardPage() {
   }
 
   return (
+    <>
+    {/* Suspense because <Dashboard> reads ?tab= : the plan and settings pages
+        moved out of the tab bar into the account menu, so a toast pointing at
+        /dashboard?tab=plan is how a vendor who just hit their catalog limit
+        gets to the plans. Same shape as /login and /kiosk. */}
+    <Suspense fallback={null}>
     <Dashboard
       shop={shop} updateShop={updateShop} changeSlug={shop.slug ? changeSlug : null}
       catalog={catalog} addGarment={addGarment} editGarment={editGarment}
@@ -408,12 +571,25 @@ export default function DashboardPage() {
       composeFabric={composeFabric} createStyle={createStyle} updateStyle={updateStyle}
       publishComposition={publishComposition} priceComposition={priceComposition}
       noteComposition={noteComposition}
+      correctComposition={correctComposition}
+      fixFabricColor={fixFabricColor}
       removeComposition={removeComposition}
       runCounter={runCounter} keepCounterRun={keepCounterRun}
       counterEnabled={isSupabaseConfigured()}
       events={events} leads={leads} onLeadHandled={handleLead}
       launchKiosk={() => router.push(shop.slug ? "/k/" + shop.slug : "/kiosk")}
       signOut={signOut}
+      composing={job !== null}
     />
+    </Suspense>
+    {/* Outside <Dashboard> on purpose: the job has to keep drawing after the
+        studio that started it is closed. */}
+    {job && (
+      <StitchingOverlay image={job.image} caption={job.caption} steps={job.steps}
+        minimized={jobMinimized}
+        onMinimize={() => setJobMinimized(true)}
+        onExpand={() => setJobMinimized(false)} />
+    )}
+    </>
   );
 }

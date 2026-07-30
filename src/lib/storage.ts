@@ -7,7 +7,7 @@
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { currentAccessToken, currentUserId } from "@/lib/account";
 import { dataURLToBlob } from "@/lib/images";
-import { familyLabel } from "@/lib/constants";
+import { colorText, familyLabel } from "@/lib/constants";
 import { GLOBAL_STYLES } from "@/lib/style-library";
 import {
   type Garment,
@@ -25,6 +25,7 @@ import {
   type CounterRun,
   type Wearable,
   type GarmentRow,
+  type FabricColor,
   type FabricRow,
   type StyleRow,
   type CompositionRow,
@@ -348,7 +349,18 @@ const lsFabrics = (): Fabric[] => {
     return ids
       .map((id) => lsGet("fabric:" + id))
       .filter((v): v is string => Boolean(v))
-      .map((v) => JSON.parse(v) as Fabric);
+      .map((v) => JSON.parse(v) as Fabric)
+      /* Rows written before 20260729000100 have one free-text colour and no
+         shade. Supabase mode gets this from the migration; local mode has no
+         migrations, so it happens on read. Same landing place either way:
+         whatever the old box said becomes the main colour, unchanged. */
+      .map((f) => ({
+        ...f,
+        colors: f.colors ?? (f.color ? [{ id: f.color, hex: "", share: 1 }] : []),
+        colorsCorrected: f.colorsCorrected ?? false,
+        correction: f.correction ?? "",
+        color: colorText(f.colors ?? (f.color ? [{ id: f.color, hex: "", share: 1 }] : [])),
+      }));
   } catch {
     return [];
   }
@@ -411,7 +423,15 @@ export async function addFabric(
       price_npr: fabric.price,
       unit: fabric.unit,
       composition: fabric.composition || null,
-      color: fabric.color || null,
+      colors: fabric.colors ?? [],
+      // Derived, and written rather than computed on read: the counter's search
+      // index and three card layouts read this one column.
+      color: colorText(fabric.colors ?? []) || null,
+      /* A bolt can arrive already corrected: the add form reads the photo, and
+         a vendor who disagrees with the reading fixes it before the first save.
+         Defaulted false in the schema, so leaving this out would have silently
+         thrown away every correction made during listing. */
+      colors_corrected: fabric.colorsCorrected === true,
       note: fabric.note || null,
       in_stock: fabric.inStock,
     })
@@ -453,8 +473,23 @@ export async function updateFabric(
       price_npr: fabric.price,
       unit: fabric.unit,
       composition: fabric.composition || null,
-      color: fabric.color || null,
+      colors: fabric.colors ?? [],
+      color: colorText(fabric.colors ?? []) || null,
       note: fabric.note || null,
+      /* A new photo is a new measurement, and it arrives with the old verdict
+         still attached. Clearing it is what stops colours read off *this*
+         photo being handed to the render as the shop's correction *of* it —
+         the circularity the flag exists to prevent.
+
+         Otherwise the caller's value stands, which is how a correction made on
+         the fabric form gets stored at all. That is safe rather than a way to
+         demote one by accident: every caller seeds the flag from the fabric it
+         loaded, so an edit that never touches a colour writes back the same
+         true it was given. */
+      colors_corrected: photoChanged ? false : fabric.colorsCorrected === true,
+      /* `correction` is deliberately absent. setFabricCorrection is its only
+         writer, so editing a bolt's price in the fabric modal can never wipe
+         what the studio was told about how it renders. */
       in_stock: fabric.inStock,
     })
     .eq("id", fabric.id)
@@ -669,7 +704,7 @@ export async function removeStyle(styleId: string): Promise<void> {
    without it every render loads with a null revision, and a cut edited after
    the fact never raises CUT CHANGED in the studio. */
 const COMPOSITION_COLUMNS =
-  "id, fabric_id, style_id, image_url, status, error_note, price_npr, published, note, rendered_note, rendered_style_revision";
+  "id, fabric_id, style_id, image_url, status, error_note, price_npr, published, note, rendered_note, rendered_style_revision, approved, correction, rendered_correction, rendered_fabric_correction, rendered_colors, rendered_fabric_image";
 
 export async function loadCompositions(shopId?: string | null): Promise<Composition[]> {
   if (!isSupabaseConfigured() || !shopId) return [];
@@ -858,7 +893,14 @@ export async function saveCounterRun(
       price: 0,
       unit: "meter",
       composition: "",
+      /* Left unset on purpose. The counter is a customer standing at the desk,
+         not a cataloguing session, so it never stops to read colours off the
+         cloth. They're filled in from the photo the next time this bolt is
+         opened in the fabric modal. */
+      colors: [],
+      colorsCorrected: false,
       color: "",
+      correction: "",
       note: input.fabricNote.trim(),
       inStock: true,
     },
@@ -909,6 +951,51 @@ export async function setCompositionPrice(id: string, price: number): Promise<vo
 export async function setCompositionNote(id: string, note: string): Promise<void> {
   if (!isSupabaseConfigured()) return;
   await supabase().from("compositions").update({ note }).eq("id", id);
+}
+
+/* setCompositionApproved is gone. Its only caller was the verdict question the
+   studio opened on every finished render — "Anything else wrong with it?" —
+   and nothing sets `compositions.approved` true now that the question does not
+   exist. The column stays (it is written false by the correction below, and
+   dropping it would need a migration for a flag nothing reads), but there is
+   no writer for the true side, so a function offering one would be a lie about
+   what this app does. */
+
+/** What this preview got wrong. Same one-sided write as the note: only
+    `correction` moves, so the render reads stale until it's made again with
+    the correction in the prompt. Clearing the approval too, because a preview
+    the vendor has just complained about is not one they've signed off. */
+export async function setCompositionCorrection(id: string, correction: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  await supabase().from("compositions")
+    .update({ correction, approved: false })
+    .eq("id", id);
+}
+
+/** What renders of this *cloth* get wrong, whatever it's cut into. Marks every
+    preview of the bolt stale at once, which is the point — they were all made
+    under the old understanding of it. */
+export async function setFabricCorrection(id: string, correction: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  await supabase().from("fabrics").update({ correction }).eq("id", id);
+}
+
+/** Just the colours, for a vendor correcting them against a render that came
+    out wrong. Narrow on purpose: it's called from the studio with no fabric
+    form open, so writing the whole row would push a stale name or price back
+    over whatever else has changed. */
+export async function setFabricColors(id: string, colors: FabricColor[]): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  await supabase().from("fabrics").update({
+    colors,
+    color: colorText(colors) || null,
+    /* The only writer of this flag, and the only place it can honestly be set:
+       these colours came from a vendor looking at a render, so from here on the
+       render prompt is allowed to put them above the sample photo. Set on
+       every call rather than once, because a second correction is still a
+       correction. */
+    colors_corrected: true,
+  }).eq("id", id);
 }
 
 export async function removeComposition(id: string): Promise<void> {

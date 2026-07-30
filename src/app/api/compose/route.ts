@@ -2,6 +2,7 @@ import { serviceClient, bearer, ownsShop } from "@/lib/billing";
 import { badOrigin } from "@/lib/origin";
 import { composeGarment, openaiKey, type ComposeSource } from "@/lib/compose";
 import { consumeCompose, refundCompose } from "@/lib/plan";
+import { colorPhrase } from "@/lib/constants";
 import type { StyleCoverage } from "@/lib/types";
 
 /* Vendor-only: render a fabric in one or more cuts.
@@ -66,7 +67,7 @@ export async function POST(req: Request): Promise<Response> {
      debugging in entirely the wrong direction. */
   const { data: fabric, error: fabricErr } = await sb
     .from("fabrics")
-    .select("id, shop_id, name, family, image_url, note")
+    .select("id, shop_id, name, family, image_url, composition, note, correction, colors, colors_corrected")
     .eq("id", fabricId)
     .eq("shop_id", shopId)
     .maybeSingle();
@@ -78,6 +79,14 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
   if (!fabric) return Response.json({ error: "Unknown fabric" }, { status: 400 });
+
+  /* Read once for the whole batch — the cloth doesn't change between cuts.
+     The phrase is both what the prompt says and what staleness compares, so a
+     render is out of date on colour exactly when the sentence it was made from
+     would now read differently. Nudging a shade changes no sentence and costs
+     no render. */
+  const clothColors = (fabric.colors as { id: string; share: number }[] | null) ?? [];
+  const colorPhraseNow = colorPhrase(clothColors);
 
   /* Global cuts (shop_id null) and this shop's own are both fair game; another
      vendor's private cut is not. */
@@ -108,19 +117,39 @@ export async function POST(req: Request): Promise<Response> {
        charged like one. */
     const { data: existing } = await sb
       .from("compositions")
-      .select("id, image_url, status, note, rendered_note, rendered_style_revision")
+      /* One literal string, never concatenated: supabase-js infers the row
+         type from this argument, and anything it can't read at compile time
+         collapses the whole result to GenericStringError. */
+      .select("id, image_url, status, note, rendered_note, rendered_style_revision, correction, rendered_correction, rendered_fabric_correction, rendered_colors, rendered_fabric_image")
       .eq("shop_id", shopId)
       .eq("fabric_id", fabricId)
       .eq("style_id", style.id)
       .maybeSingle();
     const note = (existing?.note ?? "").trim();
-    /* Stale either because the vendor rewrote the note, or because the cut
-       itself has been edited since. A null revision predates the column and is
-       left alone — see 20260726000600. */
+    /* What this render is being asked to fix, if anything: what the vendor
+       said about this exact pairing, and what they said about the cloth in any
+       cut. Both are compared against what the current image was made under —
+       the same two-values-compared rule as the note. */
+    const fix = (existing?.correction ?? "").trim();
+    const clothFix = (fabric.correction ?? "").trim();
+    /* Stale because the vendor rewrote the note, reported a fault against
+       either scope, corrected the cloth's colours, or edited the cut itself. A
+       null revision predates the column and is left alone — see
+       20260726000600; a null rendered_colors is the same call, made in
+       20260729000300. */
     const revision = (style.revision as number | null) ?? 1;
     const renderedRev = existing?.rendered_style_revision as number | null | undefined;
+    const renderedColors = existing?.rendered_colors as
+      | { id: string; share: number }[]
+      | null
+      | undefined;
+    const renderedImage = (existing?.rendered_fabric_image as string | null) ?? "";
     const stale =
+      (renderedImage !== "" && renderedImage !== fabric.image_url) ||
       note !== (existing?.rendered_note ?? "").trim() ||
+      fix !== (existing?.rendered_correction ?? "").trim() ||
+      clothFix !== (existing?.rendered_fabric_correction ?? "").trim() ||
+      (Array.isArray(renderedColors) && colorPhrase(renderedColors) !== colorPhraseNow) ||
       (renderedRev !== null && renderedRev !== undefined && renderedRev !== revision);
     if (existing && existing.status === "ready" && !stale) {
       results.push({
@@ -148,8 +177,21 @@ export async function POST(req: Request): Promise<Response> {
         hint: style.prompt_hint || "",
         family: fabric.family,
         fabricNote: fabric.note || undefined,
+        /* "wool 120s", "banarasi silk" — the drape, which the sample photo
+           cannot show. Not mirrored on the composition row yet, so editing it
+           after a render does not mark that render stale: see the note on
+           rendered_colors above for the pattern this still owes. */
+        fabricComposition: fabric.composition || undefined,
+        fabricColors: colorPhraseNow || undefined,
+        /* Only true once the vendor has set the colours against a render they
+           looked at. Colours that came off the upload photo are the sample's
+           own evidence restated, and telling the model to prefer them over the
+           sample would amplify whatever the light did to it. */
+        colorsCorrected: fabric.colors_corrected === true,
         coverage: (style.coverage as StyleCoverage) || "set",
         note: note || undefined,
+        clothFix: clothFix || undefined,
+        fix: fix || undefined,
       });
 
       const bytes = Buffer.from(dataUrl.split(",")[1], "base64");
@@ -176,10 +218,19 @@ export async function POST(req: Request): Promise<Response> {
             image_url: imageUrl,
             status: "ready",
             error_note: null,
-            /* What this image was actually made from. Equal to note now, so
-               the render reads as fresh until the vendor edits the note again. */
+            /* What this image was actually made from. Equal to the live values
+               now, so the render reads as fresh until the vendor edits a note
+               or reports another fault against it. */
             rendered_note: note,
+            rendered_correction: fix,
+            rendered_fabric_correction: clothFix,
+            rendered_colors: clothColors,
+            rendered_fabric_image: fabric.image_url,
             rendered_style_revision: revision,
+            /* A brand-new image nobody has looked at yet, including one made
+               to fix the last one. The vendor signs off again or says what's
+               still wrong. */
+            approved: false,
           },
           { onConflict: "shop_id,fabric_id,style_id" }
         )

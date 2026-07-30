@@ -2,13 +2,16 @@
 
 import { useState, useRef, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { FAMILIES, npr, fabricPrice, familyLabel } from "@/lib/constants";
-import { fileToCompressedDataURL } from "@/lib/images";
+import { FAMILIES, npr, fabricPrice, familyLabel, creditCost } from "@/lib/constants";
+import { fileToDataURL } from "@/lib/images";
+import ImageCropper from "@/components/ImageCropper";
+import ColorList from "@/components/ColorList";
+import Dropdown from "@/components/Dropdown";
 import EeMark from "@/components/EeMark";
 import Icon from "@/components/Icon";
 import Dialog, { confirmAsync } from "@/components/Dialog";
 import { COVERAGES, staleReason } from "@/lib/types";
-import type { Composition, Fabric, Style, StyleCoverage, StyleFamily } from "@/lib/types";
+import type { Composition, Fabric, FabricColor, Style, StyleCoverage, StyleFamily } from "@/lib/types";
 
 /* The fabric studio: pick the cuts this cloth gets stitched into, render them,
    review them, publish them.
@@ -17,8 +20,13 @@ import type { Composition, Fabric, Style, StyleCoverage, StyleFamily } from "@/l
    combination a human chose, priced and published — which is what stops the
    catalog filling up with cuts the tailor can't actually make. */
 
-const SUGGESTED = 3; // most shops stitch a handful of cuts in any given cloth
-const MAX_BATCH = 8; // matches the server cap; past this it's noise, not catalog
+/* Two at a time, once the cloth has been checked. Not a technical limit — the
+   server takes eight — but a pace. Every cut is a render the shop pays for and
+   then has to look at, and a vendor who fires off eight sits through all of
+   them before they can say the second one was wrong. Two comes back fast
+   enough to judge, and judging is the only thing that stops the third being
+   wrong the same way. */
+const PICK_LIMIT = 2;
 
 /* Same voice as the kiosk's try-on copy — this is peeq working, and it should
    sound like peeq whichever side of the counter you're on. The verbs are the
@@ -52,19 +60,38 @@ interface Props {
     refImage: string | null;
   }) => Promise<void>;
   onUpdateStyle: (s: Style) => Promise<void>;
+  /** True while a stitch is running anywhere. It's one at a time, and the job
+      outlives this dialog — so the studio is told, it doesn't own it. */
+  composing: boolean;
   onPublish: (id: string, published: boolean) => void;
   onPrice: (id: string, price: number) => void;
   onNote: (id: string, note: string) => void;
   onRemove: (id: string) => void;
+  /** "I've looked at this and it's the cloth." */
+  /** What came out wrong. `scope` decides whether it's true of this pairing
+      only or of the cloth in every cut. */
+  onCorrect: (id: string, correction: string, scope: "cut" | "cloth") => void;
+  /** The cloth's real colours, corrected against a render that missed them. */
+  onFixColor: (fabricId: string, colors: FabricColor[]) => void;
+  /** The colour is wrong because the photo is. Hands the vendor back to the
+      fabric form, on the picture — either shooting a new one or re-cropping
+      what's there. One door for editing a bolt, rather than a second uploader
+      living in the studio. */
+  onRephoto: (mode: "replace" | "crop") => void;
 }
 
 export default function FabricStudio({
   fabric, styles, compositions, onClose, onCompose, onCreateStyle, onUpdateStyle,
-  onPublish, onPrice, onNote, onRemove,
+  composing, onPublish, onPrice, onNote, onRemove, onCorrect, onFixColor, onRephoto,
 }: Props) {
   const [picked, setPicked] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [zoomCloth, setZoomCloth] = useState(false);
+  /* Renamed from a local `busy`: the stitch no longer belongs to this modal.
+     It runs at the page, survives this dialog closing, and can be minimised
+     out of the way — so whether one is running is something the studio is
+     told, not something it owns. */
+  const busy = composing;
   /* One form, three jobs. "copy" exists because a library cut cannot be
      edited — it belongs to every shop — so wanting to change one really means
      wanting your own version of it. */
@@ -86,53 +113,141 @@ export default function FabricStudio({
   }, [compositions]);
 
   const rendered = compositions.filter((c) => c.status === "ready");
+
+  /* ── one cut first ──
+     Until this cloth has a preview the vendor has actually been through, only
+     one cut can be stitched at a time. Everything the render is built from —
+     the photo, the colours read off it, the note — is guesswork about a
+     garment nobody has seen yet, and the first picture is what turns it into
+     something a shop can judge. Finding out from that one that the cloth reads
+     orange costs a render; finding out from a batch of eight costs eight, and
+     the vendor has to sit through all of them being made before they can say
+     so.
+
+     What counts as "been through" is weaker than it was, and deliberately.
+     The gate used to require an approval — the vendor pressing "No, it's
+     right" on the verdict question each card opened. That question is gone (it
+     was asked of everyone whether or not they had anything to say, so the
+     answer became reflex), and with it the only signal that anyone had
+     actually looked. What is left is that a preview of this cloth exists and
+     is current: they have had a real render of this bolt on screen, and if it
+     were obviously wrong the studio is where they are standing.
+
+     Stale still doesn't count. Whatever was said about it hasn't been
+     rendered yet, so nothing on screen is a current picture of this cloth.
+
+     The colour still counts, and it is a fact about the bolt rather than about
+     any one picture — so it's answered on the cloth itself, and a cloth we
+     could read no colour from is not held to a question we were never able to
+     ask. */
+  const colourAnswered = fabric.colorsCorrected || fabric.colors.length === 0;
+  const cutChecked = compositions.some(
+    (c) =>
+      c.status === "ready" &&
+      !staleReason(c, styles.find((s) => s.id === c.styleId), fabric)
+  );
+  const checked = cutChecked && colourAnswered;
+  const limit = checked ? PICK_LIMIT : 1;
   /* A cut counts as done only while its render still matches its note. Edit
      the note and it becomes pickable again, which is how a re-stitch is
      asked for — no separate mode, the same button as the first time. */
   const done = (styleId: string): boolean => {
     const c = byStyle.get(styleId);
-    return !!c && c.status === "ready" && !staleReason(c, styles.find((s) => s.id === styleId));
+    return !!c && c.status === "ready"
+      && !staleReason(c, styles.find((s) => s.id === styleId), fabric);
   };
   const unrendered = cuts.filter((c) => !done(c.id));
 
+  /* At a limit of one, picking a second cut swaps rather than refuses. A
+     disabled chip would read as "this cut is unavailable", which is not what's
+     being said — any one of them can be the first, just not two. */
   const toggle = (id: string) =>
     setPicked((cur) =>
       cur.includes(id)
         ? cur.filter((x) => x !== id)
-        : cur.length >= MAX_BATCH ? cur : [...cur, id]
+        : limit === 1 ? [id]
+        : cur.length >= limit ? cur : [...cur, id]
     );
 
-  const pickSuggested = () => setPicked(unrendered.slice(0, SUGGESTED).map((c) => c.id));
+  const pickSuggested = () => setPicked(unrendered.slice(0, limit).map((c) => c.id));
 
-  const run = async () => {
-    if (picked.length === 0) return;
-    setBusy(true);
+  /* ── the colour question, asked of the cloth ──
+     It lives here rather than on each preview because a colour is a fact about
+     the bolt however it's cut: answering it eight times, once per card, is the
+     same answer eight times, and any two of them could disagree. Asked
+     directly under the fabric's photo, with the previews below in the same scroll,
+     which is the comparison being asked for — the picture we made against the
+     cloth in their hand.
+
+     Only once a preview exists. Before that there is nothing to judge the
+     reading against except the photo it was read off. */
+  const [colourFix, setColourFix] = useState(false);
+  const [colors, setColors] = useState<FabricColor[]>(fabric.colors);
+  /* The strip stays after it's answered, as a line saying what the cloth is
+     with a way back into it. An answer that can't be revised is a trap: a
+     vendor confirms the colour on the first preview, sees the third one and
+     realises it was the light, and the only door back would have been
+     replacing the photo. */
+  const anyReady = compositions.some((c) => c.status === "ready");
+  const askColour = anyReady && !fabric.colorsCorrected;
+
+  /* "Yes" and a hand-set list write the same flag, because they are the same
+     evidence: a shop that has looked at a garment beside the bolt and stood by
+     these words. Confirming leaves the words untouched, so nothing goes stale
+     — staleness compares the colours themselves, not who last said them. */
+  const confirmColours = () => onFixColor(fabric.id, fabric.colors);
+  const saveColours = () => {
+    if (JSON.stringify(colors) !== JSON.stringify(fabric.colors)) onFixColor(fabric.id, colors);
+    else confirmColours();
+    setColourFix(false);
+  };
+
+  /* One path for every stitch this modal starts, including the re-stitch on a
+     card. That button used to call onCompose directly, which meant it showed
+     no overlay, disabled nothing, and threw its errors into the void — press
+     it and the only evidence anything had happened was the picture changing a
+     minute later. */
+  const stitch = async (styleIds: string[]) => {
+    if (styleIds.length === 0 || busy) return;
     setError(null);
     try {
-      await onCompose(picked);
+      await onCompose(styleIds);
       setPicked([]);
     } catch (e: any) {
       setError(e?.message || "Could not render — please try again.");
     }
-    setBusy(false);
   };
 
+  /* Sliced rather than trusted: the limit can drop to one under a selection
+     already made — a correction saved on a card while three cuts are ticked
+     does exactly that — and the press that follows would otherwise spend three
+     renders on a cloth we've just been told we had wrong. */
+  const run = () => stitch(picked.slice(0, limit));
+
   return (
-    /* dirty while a render is in flight: closing mid-stitch would abandon
-       something the shop is being charged for */
+    /* Freely closable now, mid-stitch included. The job runs at the page and
+       keeps its own progress on screen, so closing this abandons nothing — it
+       used to be held open only because the overlay lived in here. */
     <Dialog onClose={onClose} hideHeader width={760}
       ariaLabel={"Cuts for " + fabric.name}
-      closeOnBackdrop={!busy}
-      dirty={busy}
-      dirtyMessage="A stitch is still running. Close anyway?"
       scrimStyle={{ alignItems: "flex-start", overflowY: "auto" }}
       panelStyle={{ margin: "24px 0", padding: "26px 26px 30px" }}>
       <>
 
         {/* ── the cloth ── */}
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start", marginBottom: 20 }}>
-          <img src={fabric.image} alt={fabric.name}
-            style={{ width: 96, height: 96, objectFit: "cover", borderRadius: "var(--radius-sm)", flexShrink: 0, background: "var(--paper-deep)" }} />
+          {/* Tappable, because this photo is the render. Everything below was
+              drawn from these pixels, so a vendor asking "why has it come out
+              orange" needs to see the picture full size — at 96px a tube-lit
+              bolt and a warm bolt look identical — and to be able to fix it
+              from the same place they noticed. */}
+          <button type="button" onClick={() => setZoomCloth(true)}
+            title="See this photo full size, crop or replace it"
+            aria-label="See the cloth photo full size"
+            style={{ padding: 0, border: "none", background: "none", lineHeight: 0, cursor: "zoom-in", flexShrink: 0, borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+            <img src={fabric.image} alt={fabric.name}
+              style={{ width: 96, height: 96, objectFit: "cover", display: "block", background: "var(--paper-deep)" }} />
+          </button>
           <div style={{ flex: 1, minWidth: 0 }}>
             {fabric.itemCode && (
               <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 10.5, letterSpacing: ".08em", color: "var(--stone)" }}>{fabric.itemCode}</div>
@@ -145,9 +260,109 @@ export default function FabricStudio({
               {fabricPrice(fabric.price, fabric.unit)}
             </div>
           </div>
-          <button className="ph-btn" onClick={onClose} disabled={busy}
+          <button className="ph-btn" onClick={onClose}
             style={{ color: "var(--stone)", fontSize: 12, padding: "4px 8px" }}>close</button>
         </div>
+
+        {/* ── is this the colour? ──
+            Directly under the photo it's a question about, and above the
+            previews it's answered from. */}
+        {anyReady && (
+          <div style={{
+            background: "var(--paper)", borderRadius: "var(--radius-sm)", marginBottom: 18,
+            border: "1px solid " + (askColour || colourFix ? "var(--line-strong)" : "var(--line)"),
+            padding: askColour || colourFix ? "13px 15px" : "10px 13px",
+          }}>
+            {!colourFix && !askColour ? (
+              /* Answered. One line, and the way back into it. */
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, color: "var(--stone)", lineHeight: 1.5 }}>
+                  {fabric.colors.length === 0
+                    ? <>No colours on this cloth — the previews go on the photo alone.</>
+                    : <>Colour, as you&apos;ve set it: <b style={{ color: "var(--ink)" }}>{fabric.color}</b>. The stitching follows this over the photo.</>}
+                </span>
+                <button className="ph-btn" onClick={() => { setColors(fabric.colors); setColourFix(true); }}
+                  style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3, padding: "4px 2px", minHeight: 28 }}>
+                  change
+                </button>
+              </div>
+            ) : !colourFix ? (
+              <>
+                <div style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.5, fontWeight: 600, marginBottom: 5 }}>
+                  {fabric.colors.length === 0
+                    ? "What colour is this cloth?"
+                    : "Is this the colour of your cloth?"}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--stone)", lineHeight: 1.6, marginBottom: 9 }}>
+                  {fabric.colors.length === 0
+                    ? <>We couldn&apos;t read a colour off this photo, so the previews below were made
+                        from the picture alone. Setting them — or retaking the photo — gives the next
+                        one something to go on.</>
+                    : <>We read <b style={{ color: "var(--ink)" }}>{fabric.color}</b> off this photo,
+                        and the previews below were stitched from that. Hold the bolt up against
+                        them.</>}
+                </div>
+                <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                  {fabric.colors.length > 0 && (
+                    <button className="ph-btn" onClick={confirmColours}
+                      style={{ padding: "8px 14px", minHeight: 36, fontSize: 12, fontWeight: 600, borderRadius: "var(--radius-btn)", background: "var(--ink)", color: "var(--card)" }}>
+                      Yes, that&apos;s it
+                    </button>
+                  )}
+                  <button className="ph-btn" onClick={() => { setColors(fabric.colors); setColourFix(true); }}
+                    style={{ padding: "8px 14px", minHeight: 36, fontSize: 12, fontWeight: 600, borderRadius: "var(--radius-btn)", border: "1px solid var(--line-strong)", color: "var(--ink)" }}>
+                    {fabric.colors.length === 0 ? "Set the colours" : "No — set it right"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+                {/* The photo first, because when the colour is wrong the photo
+                    is usually why. Every preview of this bolt is drawn from
+                    those pixels, so a warm-lit or counter-heavy picture is a
+                    fault at the source — correcting the words underneath it
+                    leaves a picture that is still wrong about the weave, the
+                    sheen and the shade of every thread in it. */}
+                <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "10px 11px" }}>
+                  <div style={{ fontSize: 11.5, color: "var(--stone)", lineHeight: 1.55, marginBottom: 8 }}>
+                    Is it the <b style={{ color: "var(--ink)" }}>photo</b> that&apos;s off? A bolt shot
+                    under a tube light comes out warm in every preview made from it, and a crop with
+                    counter in it stitches the counter&apos;s colour into the cloth. Fixing the
+                    picture fixes all of them at once.
+                  </div>
+                  <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                    <button className="ph-btn" onClick={() => onRephoto("replace")}
+                      style={{ padding: "7px 11px", minHeight: 32, fontSize: 11.5, fontWeight: 600, borderRadius: "var(--radius-btn)", border: "1px solid var(--line-strong)", color: "var(--ink)" }}>
+                      shoot it again
+                    </button>
+                    <button className="ph-btn" onClick={() => onRephoto("crop")}
+                      style={{ padding: "7px 11px", minHeight: 32, fontSize: 11.5, fontWeight: 600, borderRadius: "var(--radius-btn)", border: "1px solid var(--line-strong)", color: "var(--ink)" }}>
+                      re-crop this one
+                    </button>
+                  </div>
+                </div>
+                <div style={{ fontSize: 11.5, color: "var(--stone)", lineHeight: 1.55 }}>
+                  Or set what the cloth really is, and roughly how much of it each colour covers — a
+                  border is a small share, not half the garment. This corrects the bolt for every
+                  cut, and from here on the stitching follows your words over the photo.
+                </div>
+                {/* Sampling works off the fabric's photo, which is exactly what
+                    is being called wrong — so it isn't offered here. */}
+                <ColorList colors={colors} onChange={setColors} image={null} />
+                <div style={{ display: "flex", gap: 7 }}>
+                  <button className="ph-btn" onClick={saveColours}
+                    style={{ padding: "8px 14px", minHeight: 36, fontSize: 12, fontWeight: 600, borderRadius: "var(--radius-btn)", background: "var(--ink)", color: "var(--card)" }}>
+                    Save the colour
+                  </button>
+                  <button className="ph-btn" onClick={() => { setColors(fabric.colors); setColourFix(false); }}
+                    style={{ padding: "8px 14px", minHeight: 36, fontSize: 12, fontWeight: 600, borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", color: "var(--stone)" }}>
+                    Back
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {!fabric.note && (
           <div style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", padding: "10px 13px", marginBottom: 18, fontSize: 12, color: "var(--stone)", lineHeight: 1.6 }}>
@@ -159,14 +374,19 @@ export default function FabricStudio({
         {/* ── pick the cuts ── */}
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
           <div className="ph-display" style={{ fontSize: 17, color: "var(--ink)" }}>stitch this into</div>
-          <button className="ph-btn" onClick={() => setCutForm({ mode: "new" })} disabled={busy}
+          <button className="ph-btn" onClick={() => setCutForm({ mode: "new" })}
             style={{ fontSize: 12, color: "var(--ink)", fontWeight: 500, textDecoration: "underline", textUnderlineOffset: 3 }}>
             + add your own cut
           </button>
         </div>
         <div style={{ fontSize: 12, color: "var(--stone)", marginBottom: 12, lineHeight: 1.6 }}>
-          Pick only the cuts you'd actually stitch in this cloth — each one is a render, and
-          each render is a promise your tailor has to keep.
+          {checked
+            ? <>Pick only the cuts you&apos;d actually stitch in this cloth — each one is a render, and
+                each render is a promise your tailor has to keep. {PICK_LIMIT} at a time, so you see
+                what came out before you order more of it.</>
+            : <>Start with one. We&apos;ve read this cloth off its photo and never seen it stitched, so
+                the first picture is where you tell us what we got wrong — the colour especially.
+                Once you&apos;ve been through it, they go {PICK_LIMIT} at a time.</>}
         </div>
 
         {cuts.length === 0 ? (
@@ -174,74 +394,110 @@ export default function FabricStudio({
             No cuts for {familyLabel(fabric.family)} yet — add one to get started.
           </div>
         ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
-            {cuts.map((c) => {
-              const isDone = done(c.id);
-              const on = picked.includes(c.id);
-              /* Which pieces this cut makes, said on the chip. Without it the
-                 vendor cannot tell "Kurtha" the top from "Kurtha" the set
-                 until a render comes back half an outfit short. */
-              const cov = COVERAGES.find((x) => x.id === c.coverage);
-              const mine = !!c.shopId;
-              /* Two buttons side by side rather than one inside the other —
-                 picking a cut and changing it are different acts, and a button
-                 cannot legally contain a button. */
-              return (
-                <span key={c.id} style={{
-                  display: "inline-flex", alignItems: "stretch", borderRadius: "var(--radius-btn)",
-                  border: "1px solid " + (on ? "var(--ink)" : "var(--line)"), overflow: "hidden",
-                  opacity: isDone ? 0.65 : 1,
-                }}>
-                  <button type="button" className="ph-btn" disabled={busy || isDone}
-                    onClick={() => toggle(c.id)}
-                    title={isDone ? "Already stitched below" : c.hint || c.name}
-                    style={{
-                      padding: "8px 13px", fontSize: 12, fontWeight: 500, border: "none",
-                      background: isDone ? "var(--paper-deep)" : on ? "var(--ink)" : "var(--paper)",
-                      color: isDone ? "var(--stone)" : on ? "var(--card)" : "var(--ink)",
-                      cursor: isDone ? "default" : "pointer",
-                      display: "inline-flex", alignItems: "center", gap: 6,
+          /* A list rather than a wall of chips. A shop with thirty cuts had
+             thirty buttons here, all the same size and most of them wrong for
+             this bolt, and the two that mattered were somewhere in the middle
+             of it. The dropdown holds the whole library and gives back one at a
+             time; what's picked is what's on screen as a chip. */
+          <div style={{ marginBottom: 14, display: "flex", flexDirection: "column", gap: 9 }}>
+            {/* Ours rather than a native <select>, because these rows carry more
+                than a name: what the cut makes, whose it is, and why some of
+                them can't be picked right now. An <option> holds one string, so
+                all four used to arrive as one run-on line of grey. */}
+            <Dropdown value="" ariaLabel="Add a cut to stitch this cloth into"
+              disabled={busy || picked.length >= limit}
+              onChange={(id) => toggle(id)}
+              placeholder={picked.length >= limit
+                ? (limit === 1
+                    ? "One cut first — drop it below to pick another"
+                    : `${limit} picked — that's the limit`)
+                : "Choose a cut…"}
+              options={cuts.map((c) => {
+                const isDone = done(c.id);
+                return {
+                  value: c.id,
+                  label: c.name,
+                  /* Which pieces this cut makes. Without it the vendor cannot
+                     tell "Kurtha" the top from "Kurtha" the set until a render
+                     comes back half an outfit short. */
+                  meta: (c.coverage === "set" ? "set" : c.coverage) + (c.shopId ? " · yours" : ""),
+                  note: isDone
+                    ? "Already stitched — say what's wrong with it below to stitch it again"
+                    : picked.includes(c.id) ? "Picked" : undefined,
+                };
+              })} />
+
+            {picked.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                {picked.map((id) => {
+                  const c = cuts.find((x) => x.id === id);
+                  if (!c) return null;
+                  const mine = !!c.shopId;
+                  /* Three separate acts on one chip — drop it, change it, and
+                     read it — so three controls rather than one that guesses.
+                     A button cannot legally contain a button either. */
+                  return (
+                    <span key={id} style={{
+                      display: "inline-flex", alignItems: "stretch", borderRadius: "var(--radius-btn)",
+                      border: "1px solid var(--ink)", background: "var(--ink)", color: "var(--card)",
+                      overflow: "hidden",
                     }}>
-                    {c.name}
-                    {cov && (
-                      <span style={{ fontSize: 9.5, letterSpacing: ".06em", opacity: 0.7, textTransform: "uppercase" }}>
-                        {c.coverage === "set" ? "set" : c.coverage}
+                      <span style={{ padding: "8px 4px 8px 13px", fontSize: 12, fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        {c.name}
+                        <span style={{ fontSize: 9.5, letterSpacing: ".06em", opacity: 0.7, textTransform: "uppercase" }}>
+                          {c.coverage === "set" ? "set" : c.coverage}
+                        </span>
+                        {mine && <span style={{ fontSize: 9.5, letterSpacing: ".08em", opacity: 0.75 }}>YOURS</span>}
                       </span>
-                    )}
-                    {mine && <span style={{ fontSize: 9.5, letterSpacing: ".08em", opacity: 0.75 }}>YOURS</span>}
-                    {isDone && <Icon name="check" />}
-                  </button>
-                  <button type="button" className="ph-btn" disabled={busy}
-                    onClick={() => setCutForm({ mode: mine ? "edit" : "copy", style: c })}
-                    title={mine ? "Change this cut" : "Library cut — take a copy you can change"}
-                    aria-label={mine ? "Change " + c.name : "Copy " + c.name}
-                    style={{
-                      padding: "0 9px", fontSize: 11, border: "none",
-                      borderLeft: "1px solid " + (on ? "rgba(255,255,255,.3)" : "var(--line)"),
-                      background: isDone ? "var(--paper-deep)" : on ? "var(--ink)" : "var(--paper)",
-                      color: on ? "var(--card)" : "var(--stone)", cursor: "pointer",
-                    }}>
-                    <Icon name={mine ? "edit" : "copy"} />
-                  </button>
-                </span>
-              );
-            })}
+                      <button type="button" className="ph-btn"
+                        onClick={() => setCutForm({ mode: mine ? "edit" : "copy", style: c })}
+                        title={mine ? "Change this cut" : "Library cut — take a copy you can change"}
+                        aria-label={mine ? "Change " + c.name : "Copy " + c.name}
+                        style={{ padding: "0 8px", fontSize: 11, border: "none", background: "none", color: "var(--card)", cursor: "pointer" }}>
+                        <Icon name={mine ? "edit" : "copy"} />
+                      </button>
+                      <button type="button" className="ph-btn" onClick={() => toggle(id)}
+                        aria-label={"Remove " + c.name}
+                        style={{ padding: "0 9px", fontSize: 11, border: "none", borderLeft: "1px solid rgba(255,255,255,.3)", background: "none", color: "var(--card)", cursor: "pointer" }}>
+                        <Icon name="close" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
           <button className="ph-btn btn-solid" disabled={busy || picked.length === 0} onClick={run}
             style={{ padding: "11px 22px", fontSize: 12, opacity: busy || picked.length === 0 ? 0.5 : 1 }}>
-            {busy ? "stitching…" : picked.length ? `stitch ${picked.length} cut${picked.length !== 1 ? "s" : ""}` : "stitch"}
+            {busy ? "stitching…"
+              : !checked ? (picked.length ? "stitch this one first" : "stitch one first")
+              : picked.length ? `stitch ${picked.length} cut${picked.length !== 1 ? "s" : ""}` : "stitch"}
           </button>
-          {unrendered.length > 0 && !busy && (
+          {checked && unrendered.length > 0 && !busy && (
             <button className="ph-btn" onClick={pickSuggested}
               style={{ fontSize: 12, color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3 }}>
-              pick {Math.min(SUGGESTED, unrendered.length)} for me
+              pick {Math.min(limit, unrendered.length)} for me
             </button>
           )}
-          {picked.length >= MAX_BATCH && (
-            <span style={{ fontSize: 11.5, color: "var(--stone)" }}>{MAX_BATCH} at a time is the limit.</span>
+          {/* The bill, before the press rather than after it. `limit` and not
+              `picked.length`: run() slices the selection down to it, so a
+              vendor with three ticked under a limit of one is spending one and
+              the line has to say one. */}
+          {checked && picked.length > 0 && !busy && (
+            <span style={{ fontSize: 11.5, color: "var(--stone)", lineHeight: 1.5 }}>
+              {creditCost(Math.min(picked.length, limit))}
+              {picked.length >= PICK_LIMIT && " " + PICK_LIMIT + " at a time is the limit."}
+            </span>
+          )}
+          {!checked && rendered.length > 0 && (
+            <span style={{ fontSize: 11.5, color: "var(--stone)", lineHeight: 1.5 }}>
+              {!colourAnswered
+                ? "Answer the colour question above and check a preview below — then they go two at a time."
+                : "Check a preview below and they go two at a time."}
+            </span>
           )}
         </div>
         {error && (
@@ -262,9 +518,10 @@ export default function FabricStudio({
               {compositions.map((c) => (
                 <RenderCard key={c.id} composition={c}
                   style={styles.find((s) => s.id === c.styleId)}
+                  fabric={fabric}
                   busy={busy}
                   onPublish={onPublish} onPrice={onPrice} onNote={onNote} onRemove={onRemove}
-                  onRestitch={c.styleId ? () => onCompose([c.styleId as string]) : undefined} />
+                  onCorrect={onCorrect} />
               ))}
             </div>
           </>
@@ -283,9 +540,20 @@ export default function FabricStudio({
           </div>
         )}
 
-      {busy && (
-        <StitchingOverlay image={fabric.image} steps={picked.length}
-          caption={fabric.name + " · " + picked.length + " cut" + (picked.length !== 1 ? "s" : "")} />
+      {zoomCloth && (
+        <ImageZoom src={fabric.image} alt={fabric.name} onClose={() => setZoomCloth(false)}
+          actions={
+            <>
+              <button className="ph-btn" onClick={() => onRephoto("crop")}
+                style={{ padding: "9px 14px", minHeight: 38, fontSize: 12, fontWeight: 600, borderRadius: "var(--radius-btn)", background: "rgba(255,255,255,.16)", color: "#fff" }}>
+                crop again
+              </button>
+              <button className="ph-btn" onClick={() => onRephoto("replace")}
+                style={{ padding: "9px 14px", minHeight: 38, fontSize: 12, fontWeight: 600, borderRadius: "var(--radius-btn)", background: "rgba(255,255,255,.16)", color: "#fff" }}>
+                retake photo
+              </button>
+            </>
+          } />
       )}
 
       {cutForm && (
@@ -322,6 +590,7 @@ export default function FabricStudio({
    and deserves the same wait; it passes its own copy and its own step count. */
 export function StitchingOverlay({
   image, caption, steps, messages = STITCH_MESSAGES, footer = STITCH_FOOTER, preview,
+  minimized = false, onMinimize, onExpand,
 }: {
   image: string;
   caption: string;
@@ -332,6 +601,14 @@ export function StitchingOverlay({
   /** A finished intermediate render to show in the clear while the next step
       runs — the counter passes the stitched piece here during the fitting. */
   preview?: string;
+  /* Minimising is a change of size, not a teardown. Both forms are this one
+     component precisely so the timers below keep running across the toggle —
+     unmounting the overlay and mounting a separate bar would restart the
+     clock, and a progress bar that jumps back to 4% reads as a render that
+     failed and started over. */
+  minimized?: boolean;
+  onMinimize?: () => void;
+  onExpand?: () => void;
 }) {
   const [msg, setMsg] = useState(0);
   const [progress, setProgress] = useState(4);
@@ -366,9 +643,44 @@ export function StitchingOverlay({
     return () => clearInterval(timer);
   }, [tau, SLOW_AFTER]);
 
+  /* Out of the way but still running: a bar in the corner with the cloth, the
+     percentage and a way back. Nothing about the job changes — only how much
+     of the screen it is entitled to while the vendor gets on with pricing the
+     last batch. */
+  if (minimized) {
+    return (
+      <div style={{ position: "fixed", right: 16, bottom: 16, zIndex: "var(--z-dialog)", maxWidth: "min(92vw, 330px)", background: "var(--stage)", color: "#fff", borderRadius: "var(--radius-md)", boxShadow: "0 14px 40px rgba(0,0,0,.4)", overflow: "hidden" }}>
+        <button type="button" onClick={onExpand} aria-label="Show the stitch in progress"
+          style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 13px", background: "none", border: "none", color: "inherit", cursor: "pointer", textAlign: "left" }}>
+          <img src={image} alt="" style={{ width: 34, height: 34, borderRadius: "var(--radius-xs)", objectFit: "cover", flexShrink: 0 }} />
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {messages[msg % messages.length]}
+            </span>
+            <span style={{ display: "block", fontSize: 11, color: "rgba(255,255,255,.6)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {progress}% · {caption}
+            </span>
+          </span>
+          {/* A word, not an icon: the set has no expand glyph, and "open"
+              there is an external-link arrow that would promise a new tab. */}
+          <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,.75)", flexShrink: 0 }}>show</span>
+        </button>
+        <div style={{ height: 3, background: "rgba(255,255,255,.2)" }}>
+          <div style={{ height: "100%", width: progress + "%", background: "#fff", transition: "width .3s linear" }} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div onClick={(e) => e.stopPropagation()}
       style={{ position: "fixed", inset: 0, zIndex: "var(--z-dialog)", background: "var(--stage)", overflow: "hidden" }}>
+      {onMinimize && (
+        <button type="button" onClick={onMinimize} className="ph-btn"
+          style={{ position: "absolute", top: 14, right: 14, zIndex: 1, display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(255,255,255,.16)", color: "#fff", fontSize: 12, fontWeight: 600, padding: "9px 14px", borderRadius: "var(--radius-pill)" }}>
+          keep working
+        </button>
+      )}
 
       {/* the cloth itself, dimmed — the thing being worked on, not decoration */}
       <img src={image} alt="" aria-hidden
@@ -411,24 +723,79 @@ export function StitchingOverlay({
   );
 }
 
+/* Where the vendor is in the card's question: asking, or writing down the
+   answer. The colour half of the check lives up at the cloth, not here. */
+/* One step now. There used to be a "rest" step in front of this one that
+   opened itself on every finished render — "Anything else wrong with it?", two
+   buttons, on all eight cards of a batch. It was asked whether or not the
+   vendor had anything to say, which is how a question stops being read: the
+   fast answer was always "No — it's right", and a form that trains people to
+   dismiss it unread is worse at catching faults than no form. Saying something
+   is wrong is now something you go and do, not something you get asked. */
+type CheckStep = "fault";
+
 /* ── one render ── */
-function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRemove, onRestitch }: {
+function RenderCard({
+  composition, style, fabric, busy,
+  onPublish, onPrice, onNote, onRemove, onCorrect,
+}: {
   composition: Composition;
   style?: Style;
+  fabric: Fabric;
   busy: boolean;
   onPublish: (id: string, published: boolean) => void;
   onPrice: (id: string, price: number) => void;
   onNote: (id: string, note: string) => void;
   onRemove: (id: string) => void;
-  onRestitch?: () => void;
+  onCorrect: (id: string, correction: string, scope: "cut" | "cloth") => void;
 }) {
   const c = composition;
   const [price, setPrice] = useState(String(c.price || ""));
   const [note, setNote] = useState(c.note);
   const [zoom, setZoom] = useState(false);
   const styleName = style?.name ?? "Cut";
-  const why = staleReason(c, style);
+  const why = staleReason(c, style, fabric);
   const stale = why !== null;
+
+  /* ── reporting a fault, when there is one ──
+     The colour is asked once, of the cloth, under its photo at the top of the
+     studio: it is a fact about the bolt however it's cut, and asked per card it
+     would be the same question eight times with eight chances to answer it
+     differently. What's left here is everything a picture can get wrong on its
+     own — the cut, the length, where the pattern fell — and all of it can only
+     be words.
+
+     Opened by the vendor, never by us. `step` has no auto-open behind it any
+     more, so a finished render is just a finished render. */
+  const [step, setStep] = useState<CheckStep | null>(null);
+  const open = step;
+
+  const [faultScope, setFaultScope] = useState<"cut" | "cloth">("cut");
+  const [fault, setFault] = useState("");
+
+  /* The scope is chosen before the text, not after, so the box can show what
+     that scope already says — otherwise "save" silently replaces an earlier
+     complaint and the render goes back to making the fault already reported. */
+  const scopeText = (s: "cut" | "cloth") => (s === "cut" ? c.correction : fabric.correction);
+  const pickScope = (s: "cut" | "cloth") => {
+    setFaultScope(s);
+    setFault(scopeText(s));
+  };
+
+  const saveFault = () => {
+    const text = fault.trim();
+    // Unchanged means nothing to re-stitch for — closing is the honest no-op.
+    if (text !== scopeText(faultScope).trim()) onCorrect(c.id, text, faultScope);
+    setStep(null);
+  };
+
+  /** Opens the form with whatever was already said at that scope, so saving
+      adds to a complaint rather than quietly replacing it. */
+  const reportFault = () => {
+    setFaultScope("cut");
+    setFault(c.correction);
+    setStep("fault");
+  };
 
   return (
     <div style={{ background: "var(--card)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid " + (c.published ? "var(--ink)" : "var(--line)") }}>
@@ -451,18 +818,95 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
             STYLE PREVIEW
           </span>
         )}
-        {/* The note moved on from what made this picture. Said on the image
-            itself, because that image is now the thing that's wrong. */}
+        {/* What made this picture has moved on. Said on the image itself,
+            because that image is now the thing that's wrong. */}
         {stale && (
           <span style={{ position: "absolute", top: 10, right: 10, background: "var(--warn)", color: "var(--on-accent)", fontSize: 9.5, fontWeight: 600, letterSpacing: ".08em", padding: "4px 9px", borderRadius: "var(--radius-xs)" }}>
-            {why === "cut" ? "CUT CHANGED" : "NOTE CHANGED"}
+            {why === "photo" ? "NEW CLOTH PHOTO"
+              : why === "cut" ? "CUT CHANGED"
+              : why === "fix" ? "FIX ASKED FOR"
+              : why === "colour" ? "COLOUR SET"
+              : why === "cloth" ? "CLOTH CORRECTED"
+              : "NOTE CHANGED"}
           </span>
         )}
+        {/* No CHECKED badge any more. It could only be earned by answering the
+            verdict question that used to open here, and with that gone the
+            badge would have marked nothing — every card unbadged forever. */}
       </div>
       <div style={{ padding: "12px 13px 13px" }}>
         <div style={{ fontWeight: 500, fontSize: 11.5, letterSpacing: ".1em", marginBottom: 8 }}>{styleName}</div>
         {c.status === "ready" && (
           <>
+            {open && (
+              <div style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", padding: "9px 10px", marginBottom: 8 }}>
+                {open === "fault" && (
+                  <>
+                    <div style={{ fontSize: 11.5, color: "var(--ink)", lineHeight: 1.5, marginBottom: 7 }}>
+                      What&apos;s wrong?
+                    </div>
+                    {/* The buttons say what they do, so the group's label is
+                        for screen readers only — reading "Just this cut" out of
+                        nowhere is the one way to meet these without the
+                        surrounding page to explain them. */}
+                    <div role="group" aria-label="What this applies to"
+                      style={{ display: "flex", gap: 6, marginBottom: 7 }}>
+                      {([["cut", "Just this cut"], ["cloth", "This cloth, any cut"]] as const).map(([s, label]) => (
+                        <button key={s} className="ph-btn" onClick={() => pickScope(s)} aria-pressed={faultScope === s}
+                          style={{
+                            flex: 1, padding: "7px 8px", minHeight: 32, fontSize: 11, fontWeight: 600, borderRadius: "var(--radius-btn)",
+                            background: faultScope === s ? "var(--ink)" : "var(--card)",
+                            color: faultScope === s ? "var(--card)" : "var(--ink)",
+                            border: "1px solid " + (faultScope === s ? "var(--ink)" : "var(--line)"),
+                          }}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Neither placeholder mentions colour any more — that
+                        question has its own step and its own control, and an
+                        example here would send the one fault we can have shown
+                        to us back into a sentence. */}
+                    <textarea value={fault} maxLength={300} autoFocus
+                      aria-label="What came out wrong"
+                      onChange={(e) => setFault(e.target.value)}
+                      placeholder={faultScope === "cloth"
+                        ? "e.g. the zari border comes out on both edges — it's only on one"
+                        : "e.g. the lapel is too wide, and the hem sits short"}
+                      style={{ width: "100%", padding: "7px 9px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", fontSize: 12, background: "var(--card)", minHeight: 52, resize: "vertical", fontFamily: "inherit" }} />
+                    {/* The sentence that used to sit here — "every preview of
+                        this cloth will be marked for re-stitching" — was the
+                        two buttons above said a second time in longer words.
+                        The badge appears on the cards the moment this saves,
+                        which teaches it better than a caption nobody reads
+                        twice. */}
+                    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                      <button className="ph-btn" onClick={saveFault}
+                        style={{ padding: "7px 12px", minHeight: 32, fontSize: 11.5, fontWeight: 600, borderRadius: "var(--radius-btn)", background: "var(--ink)", color: "var(--card)" }}>
+                        Save
+                      </button>
+                      <button className="ph-btn" onClick={() => setStep(null)}
+                        style={{ padding: "7px 12px", minHeight: 32, fontSize: 11.5, fontWeight: 600, borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", color: "var(--stone)" }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* The whole way in now, and open on every finished render rather
+                than only on one already signed off. A picture can turn out to
+                be wrong at any point — they publish it, see it on the
+                storefront, look again — and a stale one can be wrong for a
+                second reason besides the one that made it stale. */}
+            {!open && (
+              <button className="ph-btn" onClick={reportFault}
+                style={{ marginBottom: 8, fontSize: 11, fontWeight: 600, color: "var(--stone)", textDecoration: "underline", textUnderlineOffset: 3, padding: "4px 2px", minHeight: 28 }}>
+                something&apos;s off with this →
+              </button>
+            )}
+
             <input
               value={price} inputMode="numeric" placeholder="Price (NPR)" aria-label="Price in NPR for this cut"
               onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))}
@@ -478,17 +922,28 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
               onBlur={() => { if (note.trim() !== c.note.trim()) onNote(c.id, note.trim()); }}
               style={{ width: "100%", padding: "7px 9px", borderRadius: "var(--radius-btn)", border: "1px solid " + (stale ? "var(--warn)" : "var(--line)"), fontSize: 12, background: "var(--card)", marginBottom: 8, minHeight: 46, resize: "vertical", fontFamily: "inherit" }}
             />
+            {/* Why this picture is out of date, and where to do something about
+                it. The "stitch again" button that used to sit here was a second
+                door to the one above: a stale cut stops counting as done, which
+                puts it straight back in the cut list at the top of the studio,
+                already the way every other stitch is started. Two buttons for
+                one act meant two places to read a limit from, and only one of
+                them actually enforced it. */}
             {stale && (
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: "var(--stone)", lineHeight: 1.5, marginBottom: 6 }}>
-                  {why === "cut"
-                    ? "The cut has been changed since this was made, so this picture shows the old one. Stitch it again to catch up — that costs one render."
-                    : "This picture was made before that note. Stitch it again to apply it — that costs one render."}
-                </div>
-                <button className="ph-btn" disabled={busy || !onRestitch} onClick={onRestitch}
-                  style={{ fontSize: 11, padding: "6px 12px", fontWeight: 500, borderRadius: "var(--radius-btn)", border: "1px solid var(--ink)", color: "var(--ink)", opacity: busy ? 0.5 : 1 }}>
-                  {busy ? "stitching…" : "stitch again"}
-                </button>
+              <div style={{ fontSize: 11, color: "var(--stone)", lineHeight: 1.5, marginBottom: 8 }}>
+                {why === "photo"
+                  ? "This was stitched from the old photo of the cloth."
+                  : why === "cut"
+                  ? "The cut has been changed since this was made, so this picture shows the old one."
+                  : why === "fix"
+                  ? "You've said what came out wrong."
+                  : why === "colour"
+                  ? "You've set this cloth's colours since this was made, and this was made from the photo."
+                  : why === "cloth"
+                  ? "You've corrected something about this cloth."
+                  : "This picture was made before that note."}
+                {" Pick this cut again at the top to stitch a new one — " +
+                  creditCost(1).replace("Uses", "uses")}
               </div>
             )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -531,7 +986,15 @@ function RenderCard({ composition, style, busy, onPublish, onPrice, onNote, onRe
    Portalled to <body>: rendered in place it would sit inside the studio
    modal's .fade-up dialog, whose transform animation cages position: fixed.
    Exported for the counter, which zooms its recent fitting the same way. */
-export function ImageZoom({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+export function ImageZoom({ src, alt, onClose, actions }: {
+  src: string;
+  alt: string;
+  onClose: () => void;
+  /** What can be done to this picture while it's up. The cloth photo has two
+      — crop it again, shoot it again — because full size is where a vendor
+      finally sees what the render was working from. */
+  actions?: React.ReactNode;
+}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -546,7 +1009,15 @@ export function ImageZoom({ src, alt, onClose }: { src: string; alt: string; onC
         <Icon name="close" />
       </button>
       <img src={src} alt={alt} className="fade-up"
-        style={{ maxWidth: "94%", maxHeight: "94%", objectFit: "contain", borderRadius: "var(--radius-md)", boxShadow: "0 22px 64px rgba(0,0,0,.5)" }} />
+        style={{ maxWidth: "94%", maxHeight: actions ? "80%" : "94%", objectFit: "contain", borderRadius: "var(--radius-md)", boxShadow: "0 22px 64px rgba(0,0,0,.5)" }} />
+      {/* Stops the scrim's click-to-close: a tap on "crop again" is not a tap
+          on the backdrop, and closing underneath the action would fire both. */}
+      {actions && (
+        <div onClick={(e) => e.stopPropagation()}
+          style={{ position: "absolute", bottom: 22, display: "flex", gap: 9, flexWrap: "wrap", justifyContent: "center", cursor: "default" }}>
+          {actions}
+        </div>
+      )}
     </div>,
     document.body
   );
@@ -587,10 +1058,12 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [cropping, setCropping] = useState<string | null>(null);
+
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
-    try { setImage(await fileToCompressedDataURL(file)); }
+    try { setCropping(await fileToDataURL(file)); }
     catch { setError("Could not read that image. Try a JPG or PNG."); }
     setBusy(false);
   };
@@ -637,7 +1110,7 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
         {pickFamily && mode === "new" && (
           <label className="field" style={{ marginBottom: 14 }}>Which family is this cut for?
             <select value={fam} onChange={(e) => setFam(e.target.value as StyleFamily)}
-              style={{ width: "100%", padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13.5 }}>
+              style={{ width: "100%", padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)", fontSize: 13.5 }}>
               {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
             </select>
           </label>
@@ -715,6 +1188,13 @@ export function CutModal({ family, pickFamily, mode, initial, onClose, onSave }:
             {busy ? "saving…" : mode === "edit" ? "save changes" : mode === "copy" ? "save my version" : "save cut"}
           </button>
         </div>
+
+        {cropping && (
+          <ImageCropper src={cropping} title="Crop to the cut"
+            hint="Keep the stitched piece and leave the rest of the shop out. Only its shape is copied — never its colour or cloth."
+            onCancel={() => setCropping(null)}
+            onDone={(dataUrl) => { setCropping(null); setImage(dataUrl); }} />
+        )}
       </>
     </Dialog>
   );

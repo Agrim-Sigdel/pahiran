@@ -16,24 +16,33 @@ export default function Toaster() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   useEffect(() => subscribeToasts(setToasts), []);
 
+  /* Two stacks, one list. Both are live regions so a message announces
+     wherever it lands, and both render always — a live region created at the
+     same moment as its first message is usually missed. */
+  const stack = (where: "top" | "bottom") => (
+    <div className={"toast-wrap" + (where === "top" ? " top" : "")}
+      aria-live="polite" aria-atomic="false">
+      {toasts.filter((t) => t.placement === where).map((t) => (
+        <div key={t.id} className={`toast ${t.tone === "info" ? "" : t.tone}`}>
+          <div className="toast-body">{t.message}</div>
+          {t.action && (
+            <button type="button" className="toast-act"
+              onClick={() => { t.action!.onClick(); dismissToast(t.id); }}>
+              {t.action.label}
+            </button>
+          )}
+          <button type="button" className="toast-x" onClick={() => dismissToast(t.id)} aria-label="Dismiss">
+            <Icon name="close" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <>
-      <div className="toast-wrap" aria-live="polite" aria-atomic="false">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.tone === "info" ? "" : t.tone}`}>
-            <div className="toast-body">{t.message}</div>
-            {t.action && (
-              <button type="button" className="toast-act"
-                onClick={() => { t.action!.onClick(); dismissToast(t.id); }}>
-                {t.action.label}
-              </button>
-            )}
-            <button type="button" className="toast-x" onClick={() => dismissToast(t.id)} aria-label="Dismiss">
-              <Icon name="close" />
-            </button>
-          </div>
-        ))}
-      </div>
+      {stack("top")}
+      {stack("bottom")}
       <ConfirmHost />
     </>
   );

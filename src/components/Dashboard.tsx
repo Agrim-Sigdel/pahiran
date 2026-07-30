@@ -1,9 +1,16 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
-import { CATEGORIES, SIZES, FAMILIES, FABRIC_UNITS, npr, fabricPrice, familyLabel } from "@/lib/constants";
-import { fileToCompressedDataURL } from "@/lib/images";
+import {
+  CATEGORIES, SIZES, FAMILIES, FABRIC_UNITS,
+  npr, fabricPrice, familyLabel, colorHex, colorLabel, colorText,
+} from "@/lib/constants";
+import { fileToDataURL } from "@/lib/images";
+import ImageCropper from "@/components/ImageCropper";
+import ColorList from "@/components/ColorList";
+import { readFabricColors, type ColorReading } from "@/lib/color-detect";
 import { OverviewTab, LeadsTab, garmentTryCounts, groupLeads } from "@/components/Analytics";
 import LocationPicker from "@/components/LocationPicker";
 import PlanTab from "@/components/PlanTab";
@@ -14,9 +21,23 @@ import AccountMenu from "@/components/AccountMenu";
 import Dialog, { confirmAsync } from "@/components/Dialog";
 import { toastErr, toastWarn } from "@/lib/toast";
 import { COVERAGES } from "@/lib/types";
-import type { Composition, CounterInput, CounterRun, Fabric, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
+import type { Composition, CounterInput, CounterRun, Fabric, FabricColor, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
 
-type Tab = "overview" | "leads" | "catalog" | "fabrics" | "designs" | "counter" | "settings" | "plan";
+/* Only "leads", "catalog" and "fabrics" are in the tab bar. "overview" is the
+   root the bar sits under, "plan" and "settings" are pages reached from the
+   account menu (see PAGES), and the counter is an action rather than a place,
+   so it isn't a tab at all any more.
+
+   The bar carried eight entries at once — five on a catalog-only shop — in a
+   horizontally-scrolling strip, which on a phone meant half the product was
+   off the right edge of a nav with no affordance saying so. */
+type Tab = "overview" | "leads" | "catalog" | "fabrics" | "settings" | "plan";
+
+/* Set-up-once surfaces: rarely opened, but a toast or a bookmark has to be
+   able to send a vendor straight to one, so they carry a ?tab= of their own. */
+const PAGES = { plan: "Plan & billing", settings: "Shop settings" } as const;
+type Page = keyof typeof PAGES;
+const isPage = (t: string | null): t is Page => t === "plan" || t === "settings";
 
 /* One row of actions on every catalog card. 11px text in 4×5px padding gave
    a ~20×24px target on a surface the marketing tells vendors to run from a
@@ -48,6 +69,8 @@ interface DashboardProps {
   publishComposition: (id: string, published: boolean) => void;
   priceComposition: (id: string, price: number) => void;
   noteComposition: (id: string, note: string) => void;
+  correctComposition: (id: string, correction: string, scope: "cut" | "cloth") => void;
+  fixFabricColor: (fabricId: string, colors: FabricColor[]) => void;
   removeComposition: (id: string) => void;
   /* The counter: a cloth and a customer that aren't catalog rows yet.
      `onStitched` fires when the piece exists, halfway through the run. */
@@ -64,6 +87,9 @@ interface DashboardProps {
   loading: boolean;
   launchKiosk: () => void;
   signOut: (() => void) | null;
+  /** True while the one running image generation is in flight, wherever it was
+      started from — stitching is one at a time. */
+  composing: boolean;
 }
 
 export default function Dashboard({
@@ -71,17 +97,52 @@ export default function Dashboard({
   toggleStock, fabrics, addFabric, editFabric, removeFabric, toggleFabricStock,
   styles, compositions, composeFabric, createStyle, updateStyle,
   publishComposition, priceComposition, noteComposition, removeComposition,
+  correctComposition, fixFabricColor,
   runCounter, keepCounterRun, counterEnabled,
-  events, leads, onLeadHandled, loading, launchKiosk, signOut,
+  events, leads, onLeadHandled, loading, launchKiosk, signOut, composing,
 }: DashboardProps) {
+  const router = useRouter();
+  const search = useSearchParams();
+  const urlTab = search.get("tab");
+  const urlCounter = search.get("counter");
+
   const [tab, setTab] = useState<Tab>("overview");
+  /* Where "back" goes from Plan or Shop settings: the tab they were reading
+     when they opened it, not a fixed home. */
+  const [returnTab, setReturnTab] = useState<Tab>("overview");
+  /* Bolts or cuts, inside the Fabrics tab. */
+  const [fabricView, setFabricView] = useState<"bolts" | "cuts">("bolts");
+  const [showCounter, setShowCounter] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Garment | null>(null);
   const [showFabricForm, setShowFabricForm] = useState(false);
   const [editingFabric, setEditingFabric] = useState<Fabric | null>(null);
-  const [studioFabric, setStudioFabric] = useState<Fabric | null>(null);
+  /* The id, not the row. A cloth-scoped correction reported inside the studio
+     writes to the fabric, and a captured object would go on holding the old
+     text — so the render it just marked for re-stitching would still read as
+     current, and the vendor's report would look like it did nothing. Deriving
+     it also closes the studio by itself if the bolt is deleted underneath. */
+  const [studioFabricId, setStudioFabricId] = useState<string | null>(null);
+  /* A trip out of the studio to fix the fabric's photo, and the way back. The
+     studio closes rather than stacking a second dialog on itself, and both
+     leaving the form and saving it land the vendor back on the previews they
+     were checking — the photo was only ever a detour inside that job. */
+  const [photoFix, setPhotoFix] = useState<
+    { fabricId: string; mode: "replace" | "crop" } | null
+  >(null);
+  const photoFixFabric = useMemo(
+    () => fabrics.find((f) => f.id === photoFix?.fabricId) ?? null,
+    [fabrics, photoFix]
+  );
+  const studioFabric = useMemo(
+    () => fabrics.find((f) => f.id === studioFabricId) ?? null,
+    [fabrics, studioFabricId]
+  );
+  /* One family filter across both halves of the Fabrics tab. They used to be
+     two states behind two tabs; now that the same select sits in the same
+     place in both views, having it silently reset to All when you flipped
+     from the kurta bolts to the kurta cuts would read as a bug. */
   const [familyFilter, setFamilyFilter] = useState("All");
-  const [cutFamilyFilter, setCutFamilyFilter] = useState("All");
   /* Same three jobs as the studio's form: new cut, edit a shop cut, copy a
      library cut into one the shop owns. */
   const [cutForm, setCutForm] = useState<{ mode: "new" | "edit" | "copy"; style?: Style } | null>(null);
@@ -117,13 +178,13 @@ export default function Dashboard({
     [fabrics, familyFilter]
   );
 
-  /* The designs tab: every cut, the shop's own first within each family so
+  /* The cuts view: every cut, the shop's own first within each family so
      their tailoring sits above the library's. */
   const visibleCuts = useMemo(() => {
-    const list = cutFamilyFilter === "All" ? styles : styles.filter((s) => s.family === cutFamilyFilter);
+    const list = familyFilter === "All" ? styles : styles.filter((s) => s.family === familyFilter);
     return [...list].sort((a, b) =>
       Number(!!b.shopId) - Number(!!a.shopId) || a.sort - b.sort || a.name.localeCompare(b.name));
-  }, [styles, cutFamilyFilter]);
+  }, [styles, familyFilter]);
   const yourCutCount = useMemo(() => visibleCuts.filter((s) => s.shopId).length, [visibleCuts]);
 
   /* Only ready renders count on the card — a failed or in-flight one isn't a
@@ -138,28 +199,62 @@ export default function Dashboard({
   }, [compositions]);
 
   /* Made-to-order is a tailoring flow, so it follows the same entitlement as
-     the kiosk: a catalog-only shop never sees it. */
+     the kiosk: a catalog-only shop never sees it. Cuts ride inside Fabrics,
+     the counter is a header button and the overview is the root this bar sits
+     under — so this is the whole bar: three entries on a tailor's shop, two on
+     a catalog-only one, and no sideways scroll on a phone for either. */
   const TABS: { key: Tab; label: string; badge?: number }[] = [
-    { key: "overview", label: "Overview" },
     { key: "leads", label: "Orders", badge: openLeads || undefined },
     { key: "catalog", label: "Catalog" },
-    ...(shop.type === "apparel"
-      ? [{ key: "fabrics" as Tab, label: "Fabrics" }, { key: "designs" as Tab, label: "Designs" }, { key: "counter" as Tab, label: "Counter" }]
-      : []),
-    { key: "plan", label: "Plan" },
-    { key: "settings", label: "Settings" },
+    ...(shop.type === "apparel" ? [{ key: "fabrics" as Tab, label: "Fabrics" }] : []),
   ];
+
+  /* Plan and Shop settings are addressable; the bar tabs are view state. So
+     opening a page writes ?tab=, and going back to the bar clears it —
+     otherwise a vendor who read the plans, carried on into the catalog and
+     reloaded would land back on the plans. */
+  const openPage = (p: Page) => {
+    if (!isPage(tab)) setReturnTab(tab);
+    setTab(p);
+    router.replace("/dashboard?tab=" + p, { scroll: false });
+  };
+  const goTab = (t: Tab) => {
+    setTab(t);
+    if (urlTab) router.replace("/dashboard", { scroll: false });
+  };
+
+  /* The catalog- and fabric-limit toasts have always pushed /dashboard?tab=plan
+     to send a vendor to the plans. Nothing read it: the tab was local state and
+     the query string went nowhere, so "see plans" changed the address bar and
+     left the vendor exactly where they were. Now that the Plan page has no tab
+     of its own, that link is the main way in — so it has to work. */
+  useEffect(() => { if (isPage(urlTab)) setTab(urlTab); }, [urlTab]);
+
+  /* A printed access card lands on /dashboard?counter=1: the counter opens
+     itself, then the flag is cleared so a reload doesn't reopen it. */
+  useEffect(() => {
+    if (urlCounter && shop.type === "apparel") {
+      setShowCounter(true);
+      router.replace("/dashboard", { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCounter]);
 
   return (
     <div id="main" style={{ maxWidth: 1080, margin: "0 auto", padding: "0 min(26px, 4vw) 50px" }}>
       {/* header */}
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22px 0 16px", flexWrap: "wrap", gap: 12 }}>
-        <div>
+        {/* The wordmark is the way home now that the overview has no tab of
+            its own — the gesture every site on the web already trained a
+            vendor to expect, so the account menu isn't the only road back. */}
+        <button className="ph-btn" onClick={() => goTab("overview")}
+          aria-label="Overview" title="Overview"
+          style={{ padding: 0, background: "none", border: "none", textAlign: "left", cursor: "pointer" }}>
           <div className="wordmark" style={{ fontSize: 22 }}>p<span className="ee" style={{ color: "var(--butter-deep)" }}>ee</span>q</div>
           <div style={{ fontSize: 12, color: "var(--stone)", letterSpacing: ".12em", marginTop: 3 }}>
             {[shop.name, shop.area].filter(Boolean).join(" · ") || "Vendor dashboard"}
           </div>
-        </div>
+        </button>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           {/* Every apparel shop has a storefront, so every apparel shop gets a
               link to it. This used to render only in the non-apparel branch,
@@ -171,6 +266,18 @@ export default function Dashboard({
               <Icon name="open" /> view storefront
             </a>
           )}
+          {/* The counter is a thing you DO — three photographs and a fitting,
+              for the customer standing in front of you right now — not a place
+              with contents to come back to. It sat in the tab bar next to
+              Catalog and Fabrics, which are places, and it kept a permanent
+              slot for a flow that starts from zero every time. It belongs
+              beside "launch kiosk": the other button that starts something. */}
+          {shop.type === "apparel" && (
+            <button className="ph-btn" onClick={() => setShowCounter(true)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "9px 16px" }}>
+              <Icon name="scissors" /> counter
+            </button>
+          )}
           {/* The kiosk is the try-on flow, so a catalog-only shop has no use
               for it — their storefront link is the thing to share. */}
           {shop.type === "apparel" && (
@@ -179,7 +286,7 @@ export default function Dashboard({
               onClick={() => {
                 if (catalog.length === 0) {
                   toastWarn("Add at least one garment first — the kiosk needs something to show shoppers.");
-                  setTab("catalog");
+                  goTab("catalog");
                   return;
                 }
                 launchKiosk();
@@ -188,8 +295,19 @@ export default function Dashboard({
           {/* Sign out lived here as 12px grey text immediately left of the
               primary CTA. It is an account action, so it belongs in the
               account menu every other page in the product already has — and
-              the dashboard was the only page without one. */}
-          <AccountMenu />
+              the dashboard was the only page without one. Overview, Plan and
+              Shop settings now sit in the same menu. Overview takes the slot
+              the dead "Dashboard" self-link used to hold, which is what let it
+              out of the tab bar: it is where a vendor lands, not somewhere
+              they navigate to between jobs. */}
+          <AccountMenu
+            extraItems={[
+              { label: "Overview", onSelect: () => goTab("overview") },
+              ...(Object.keys(PAGES) as Page[]).map((p) => ({
+                label: PAGES[p], onSelect: () => openPage(p),
+              })),
+            ]}
+          />
           {!signOut && null}
         </div>
       </header>
@@ -197,12 +315,25 @@ export default function Dashboard({
       {/* tabs */}
       <div className="tabs">
         {TABS.map((t) => (
-          <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
+          <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => goTab(t.key)}>
             {t.label}
             {t.badge ? <span className="badge">{t.badge}</span> : null}
           </button>
         ))}
       </div>
+
+      {/* On a page, no tab in the bar is lit — so the page says its own name
+          and offers the way back to the tab the vendor left. Tapping any tab
+          works too; this is just the one that doesn't ask them to choose. */}
+      {isPage(tab) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "-4px 0 2px", flexWrap: "wrap" }}>
+          <button className="ph-btn" onClick={() => goTab(returnTab)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
+            <Icon name="back" /> back
+          </button>
+          <span className="ph-display" style={{ fontSize: 20, color: "var(--ink)" }}>{PAGES[tab].toLowerCase()}</span>
+        </div>
+      )}
 
       {loading ? (
         <div style={{ color: "var(--stone)", padding: 40, textAlign: "center" }}>Loading your shop…</div>
@@ -210,12 +341,22 @@ export default function Dashboard({
         <>
           {tab === "overview" && (
             <div className="fade-up">
+              {/* Named, because the overview is the one view no tab in the bar
+                  lights up for — it is what the bar sits under, not an entry
+                  in it. Without this the landing screen is three stat tiles
+                  and a chart under a nav where nothing is selected. */}
+              <div className="cat-bar">
+                <div>
+                  <span className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>overview</span>
+                  <span style={{ color: "var(--stone)", marginLeft: 10, fontSize: 13 }}>how your shop is doing</span>
+                </div>
+              </div>
               {/* --warn. This was `var(--camel)`, a legacy alias of the
                   body-text grey, so an "alert" drawn in it was the same colour
                   as the paragraph under it: the one row on the page meaning
                   "people are waiting for a phone call" read as decoration. */}
               {openLeads > 0 && (
-                <button className="ph-btn" onClick={() => setTab("leads")}
+                <button className="ph-btn" onClick={() => goTab("leads")}
                   style={{ width: "100%", textAlign: "left", background: "var(--warn-bg)", border: "1px solid var(--warn)", borderRadius: "var(--radius-card)", padding: "12px 16px", marginBottom: 14, fontSize: 13.5, color: "var(--ink)" }}>
                   <b style={{ color: "var(--warn)" }}>{openLeads} order{openLeads !== 1 ? "s" : ""} to call back</b> — tap to view
                 </button>
@@ -247,7 +388,7 @@ export default function Dashboard({
                     style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13 }}
                   />
                   <select value={filter} onChange={(e) => setFilter(e.target.value)}
-                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13 }}>
+                    className="ph-select" style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)", fontSize: 13 }}>
                     <option>All</option>
                     {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                   </select>
@@ -347,26 +488,51 @@ export default function Dashboard({
             </div>
           )}
 
+          {/* Fabrics and cuts are the two halves of one job — a bolt is only
+              worth listing once there is a cut to stitch it into, and the
+              fabric card's "Cuts" button already crossed between them — so
+              they share a tab and a family filter, and the switch below picks
+              the half. Two top-level tabs for this was two names for one
+              workspace. */}
           {tab === "fabrics" && (
             <div className="fade-up">
               <div className="cat-bar">
-                <div>
-                  <span className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>fabrics</span>
-                  <span style={{ color: "var(--stone)", marginLeft: 10, fontSize: 13 }}>{fabrics.length} fabric{fabrics.length !== 1 ? "s" : ""}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minWidth: 0 }}>
+                  <div className="subtabs">
+                    <button className={fabricView === "bolts" ? "on" : ""}
+                      aria-pressed={fabricView === "bolts"}
+                      onClick={() => setFabricView("bolts")}>Bolts</button>
+                    <button className={fabricView === "cuts" ? "on" : ""}
+                      aria-pressed={fabricView === "cuts"}
+                      onClick={() => setFabricView("cuts")}>Cuts</button>
+                  </div>
+                  <span style={{ color: "var(--stone)", fontSize: 13 }}>
+                    {fabricView === "bolts"
+                      ? `${fabrics.length} fabric${fabrics.length !== 1 ? "s" : ""}`
+                      : `${visibleCuts.length} cut${visibleCuts.length !== 1 ? "s" : ""}${yourCutCount > 0 ? ` · ${yourCutCount} yours` : ""}`}
+                  </span>
                 </div>
                 <div className="cat-tools">
                   <select value={familyFilter} onChange={(e) => setFamilyFilter(e.target.value)}
-                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13 }}>
+                    aria-label={fabricView === "bolts" ? "Filter fabrics by family" : "Filter cuts by family"}
+                    className="ph-select" style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)", fontSize: 13 }}>
                     <option>All</option>
                     {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
                   </select>
-                  <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => setShowFabricForm(true)}>
-                    + add fabric
-                  </button>
+                  {fabricView === "bolts" ? (
+                    <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => setShowFabricForm(true)}>
+                      + add fabric
+                    </button>
+                  ) : (
+                    <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }}
+                      onClick={() => setCutForm({ mode: "new" })}>
+                      + add your own cut
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {visibleFabrics.length === 0 ? (
+              {fabricView === "bolts" && (visibleFabrics.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--stone)" }}>
                   <div style={{ fontSize: 14, marginBottom: 6 }}>
                     {fabrics.length > 0 ? "No fabrics in that family." : "No fabrics yet."}
@@ -414,7 +580,7 @@ export default function Dashboard({
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 6, flexWrap: "wrap" }}>
                           <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: 13.5 }}>{fabricPrice(f.price, f.unit)}</span>
                           <span style={{ display: "flex", gap: 2 }}>
-                            <button className="ph-btn" onClick={() => setStudioFabric(f)} style={{ ...cardAction, fontWeight: 700 }}>
+                            <button className="ph-btn" onClick={() => setStudioFabricId(f.id)} style={{ ...cardAction, fontWeight: 700 }}>
                               Cuts
                             </button>
                             <button className="ph-btn" onClick={() => setEditingFabric(f)} style={cardAction}>
@@ -432,81 +598,54 @@ export default function Dashboard({
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          )}
+              ))}
 
-          {tab === "designs" && (
-            <div className="fade-up">
-              <div className="cat-bar">
-                <div>
-                  <span className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>designs</span>
-                  <span style={{ color: "var(--stone)", marginLeft: 10, fontSize: 13 }}>
-                    {visibleCuts.length} cut{visibleCuts.length !== 1 ? "s" : ""}
-                    {yourCutCount > 0 ? ` · ${yourCutCount} yours` : ""}
-                  </span>
-                </div>
-                <div className="cat-tools">
-                  <select value={cutFamilyFilter} onChange={(e) => setCutFamilyFilter(e.target.value)}
-                    style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13 }}>
-                    <option>All</option>
-                    {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-                  </select>
-                  <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }}
-                    onClick={() => setCutForm({ mode: "new" })}>
-                    + add your own cut
-                  </button>
-                </div>
-              </div>
+              {fabricView === "cuts" && (
+                <>
+                  <div style={{ fontSize: 12.5, color: "var(--stone)", margin: "-2px 0 18px", lineHeight: 1.65 }}>
+                    Every cut a cloth can be stitched into. Library cuts come with peeq and are
+                    shared by every shop; cuts marked yours belong to your shop alone, and only
+                    you can change them.
+                  </div>
 
-              <div style={{ fontSize: 12.5, color: "var(--stone)", margin: "-2px 0 18px", lineHeight: 1.65 }}>
-                Every cut a cloth can be stitched into. Library cuts come with peeq and are
-                shared by every shop; cuts marked yours belong to your shop alone, and only
-                you can change them.
-              </div>
-
-              {visibleCuts.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--stone)" }}>
-                  <div style={{ fontSize: 14, marginBottom: 18 }}>No cuts in that family yet.</div>
-                  <button className="ph-btn btn-solid" style={{ padding: "11px 22px", fontSize: 12 }}
-                    onClick={() => setCutForm({ mode: "new" })}>+ add your own cut</button>
-                </div>
-              ) : (
-                FAMILIES.filter((f) => cutFamilyFilter === "All" || f.id === cutFamilyFilter).map((f) => {
-                  const familyCuts = visibleCuts.filter((s) => s.family === f.id);
-                  if (familyCuts.length === 0) return null;
-                  /* Two different shapes of card, so two rows: putting a tall
-                     wireframe next to a three-line description in one grid
-                     leaves the text cards mostly white space. */
-                  const withImage = familyCuts.filter((c) => c.refImage);
-                  const textOnly = familyCuts.filter((c) => !c.refImage);
-                  const edit = (c: Style) => setCutForm({ mode: c.shopId ? "edit" : "copy", style: c });
-                  return (
-                    <div key={f.id} style={{ marginBottom: 30 }}>
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: 10 }}>
-                        <span className="ph-display" style={{ fontSize: 16, color: "var(--ink)" }}>{f.label.toLowerCase()}</span>
-                        <span style={{ fontSize: 11.5, color: "var(--stone)" }}>{familyCuts.length}</span>
-                      </div>
-                      {withImage.length > 0 && (
-                        <div className="card-grid" style={{ marginBottom: textOnly.length ? 12 : 0 }}>
-                          {withImage.map((c) => <CutCard key={c.id} cut={c} onEdit={() => edit(c)} />)}
-                        </div>
-                      )}
-                      {textOnly.length > 0 && (
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 12 }}>
-                          {textOnly.map((c) => <TextCutCard key={c.id} cut={c} onEdit={() => edit(c)} />)}
-                        </div>
-                      )}
+                  {visibleCuts.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--stone)" }}>
+                      <div style={{ fontSize: 14, marginBottom: 18 }}>No cuts in that family yet.</div>
+                      <button className="ph-btn btn-solid" style={{ padding: "11px 22px", fontSize: 12 }}
+                        onClick={() => setCutForm({ mode: "new" })}>+ add your own cut</button>
                     </div>
-                  );
-                })
+                  ) : (
+                    FAMILIES.filter((f) => familyFilter === "All" || f.id === familyFilter).map((f) => {
+                      const familyCuts = visibleCuts.filter((s) => s.family === f.id);
+                      if (familyCuts.length === 0) return null;
+                      /* Two different shapes of card, so two rows: putting a tall
+                         wireframe next to a three-line description in one grid
+                         leaves the text cards mostly white space. */
+                      const withImage = familyCuts.filter((c) => c.refImage);
+                      const textOnly = familyCuts.filter((c) => !c.refImage);
+                      const edit = (c: Style) => setCutForm({ mode: c.shopId ? "edit" : "copy", style: c });
+                      return (
+                        <div key={f.id} style={{ marginBottom: 30 }}>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: 10 }}>
+                            <span className="ph-display" style={{ fontSize: 16, color: "var(--ink)" }}>{f.label.toLowerCase()}</span>
+                            <span style={{ fontSize: 11.5, color: "var(--stone)" }}>{familyCuts.length}</span>
+                          </div>
+                          {withImage.length > 0 && (
+                            <div className="card-grid" style={{ marginBottom: textOnly.length ? 12 : 0 }}>
+                              {withImage.map((c) => <CutCard key={c.id} cut={c} onEdit={() => edit(c)} />)}
+                            </div>
+                          )}
+                          {textOnly.length > 0 && (
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 12 }}>
+                              {textOnly.map((c) => <TextCutCard key={c.id} cut={c} onEdit={() => edit(c)} />)}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </>
               )}
-            </div>
-          )}
-
-          {tab === "counter" && (
-            <div className="fade-up">
-              <CounterTryOn onRun={runCounter} onKeep={keepCounterRun} enabled={counterEnabled} styles={styles} fabrics={fabrics} onAddGarment={addGarment} />
             </div>
           )}
 
@@ -552,14 +691,33 @@ export default function Dashboard({
           fabric={studioFabric}
           styles={styles}
           compositions={compositions.filter((c) => c.fabricId === studioFabric.id)}
-          onClose={() => setStudioFabric(null)}
+          onClose={() => setStudioFabricId(null)}
           onCompose={(styleIds) => composeFabric(studioFabric.id, styleIds)}
           onCreateStyle={createStyle}
           onUpdateStyle={updateStyle}
           onPublish={publishComposition}
           onPrice={priceComposition}
           onNote={noteComposition}
+          onCorrect={correctComposition}
+          onFixColor={fixFabricColor}
+          onRephoto={(mode) => {
+            setPhotoFix({ fabricId: studioFabric.id, mode });
+            setStudioFabricId(null);
+          }}
+          composing={composing}
           onRemove={removeComposition}
+        />
+      )}
+      {photoFix && photoFixFabric && (
+        <FabricModal
+          initial={photoFixFabric}
+          photoIntent={photoFix.mode}
+          onClose={() => { setStudioFabricId(photoFix.fabricId); setPhotoFix(null); }}
+          onSave={(f) => {
+            editFabric({ ...photoFixFabric, ...f });
+            setStudioFabricId(photoFix.fabricId);
+            setPhotoFix(null);
+          }}
         />
       )}
       {cutForm && (
@@ -580,6 +738,32 @@ export default function Dashboard({
             setCutForm(null);
           }}
         />
+      )}
+      {/* Full-screen rather than a centred modal: the counter is three photo
+          uploads and a fitting to study, which is a screen's worth of work —
+          and it keeps the room it had as a tab. closeOnBackdrop is off because
+          by step three there are three uploaded photographs in here, and a
+          stray tap on the edge would bin all of them. */}
+      {showCounter && (
+        <Dialog variant="full" hideHeader closeOnBackdrop={false}
+          ariaLabel="At the counter" onClose={() => setShowCounter(false)}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "14px min(26px, 4vw)", background: "var(--card)", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
+            <div>
+              <span className="ph-display" style={{ fontSize: 20, color: "var(--ink)" }}>at the counter</span>
+              <span style={{ fontSize: 12, color: "var(--stone)", marginLeft: 10 }}>one cloth, one customer, right now</span>
+            </div>
+            <button className="ph-btn" onClick={() => setShowCounter(false)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
+              <Icon name="close" /> close
+            </button>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px min(26px, 4vw) 44px" }}>
+            <div style={{ maxWidth: 1080, margin: "0 auto" }}>
+              <CounterTryOn onRun={runCounter} onKeep={keepCounterRun} enabled={counterEnabled}
+                styles={styles} fabrics={fabrics} onAddGarment={addGarment} />
+            </div>
+          </div>
+        </Dialog>
       )}
       {showTagSheet && (
         <TagSheetModal
@@ -864,12 +1048,13 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
   const [sizes, setSizes] = useState<string[]>(initial?.sizes ?? []);
   const [busy, setBusy] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [cropping, setCropping] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
-    try { setImage(await fileToCompressedDataURL(file)); }
+    try { setCropping(await fileToDataURL(file)); }
     catch { toastErr("Could not read that image. Try a JPG or PNG."); }
     setBusy(false);
   };
@@ -887,7 +1072,9 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
     !(priceNum > 0) && "a price",
   ].filter(Boolean) as string[];
   const canSave = missing.length === 0 && !busy;
-  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-field)", border: "1px solid var(--line)", fontSize: 15, background: "var(--card)", color: "var(--ink)" };
+  /* backgroundColor, not the `background` shorthand: the shorthand resets
+     background-image, and that's where the select's own chevron lives. */
+  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-field)", border: "1px solid var(--line)", fontSize: 15, backgroundColor: "var(--card)", color: "var(--ink)" };
   const dirty = initial
     ? name !== initial.name || category !== initial.category || String(initial.price || "") !== price
       || image !== initial.image || sizes.join() !== initial.sizes.join()
@@ -917,7 +1104,7 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
       {/* Real labels. Every field here was placeholder-only, so the moment a
           vendor typed anything the form became six unlabelled boxes. */}
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <label className="field">Garment name <span className="req">*</span>
+        <label className="field"><span>Garment name <span className="req">*</span></span>
           <input style={input} value={name} maxLength={80} data-autofocus
             onChange={(e) => setName(e.target.value)} placeholder="e.g. Red Banarasi Silk Sari" />
         </label>
@@ -927,7 +1114,7 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
               {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
             </select>
           </label>
-          <label className="field" style={{ flex: 1 }}>Price (NPR) <span className="req">*</span>
+          <label className="field" style={{ flex: 1 }}><span>Price (NPR) <span className="req">*</span></span>
             <input style={{ ...input, borderColor: touched && !(priceNum > 0) ? "var(--danger)" : "var(--line)" }}
               value={price} maxLength={8} inputMode="numeric"
               aria-invalid={touched && !(priceNum > 0)}
@@ -956,7 +1143,7 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
           out with no explanation anywhere on the form. */}
       {missing.length > 0 && (
         <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--stone)" }}>
-          Still needs {missing.join(", ").replace(/, ([^,]*)$/, " and $1")}.
+          Still needs {andList(missing)}.
         </div>
       )}
 
@@ -979,6 +1166,12 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
           {initial ? "save changes" : "save to catalog"}
         </button>
       </div>
+      {cropping && (
+        <ImageCropper src={cropping} title="Crop the photo"
+          hint="Keep the garment and leave the room out — this is the picture shoppers see, and the one try-on puts on them."
+          onCancel={() => setCropping(null)}
+          onDone={(dataUrl) => { setCropping(null); setImage(dataUrl); }} />
+      )}
       {initial && onRemove && (
         <button className="ph-btn"
           onClick={async () => {
@@ -997,37 +1190,234 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
   );
 }
 
+/** "a main colour, a second colour and any extra detail" */
+const andList = (xs: string[]): string =>
+  xs.join(", ").replace(/, ([^,]*)$/, " and $1");
+
+/* ── the colours, read off the photo and shown — and now correctable here ──
+
+   This started as a readout on purpose. The argument was that a vendor on this
+   form has nothing to judge the reading against except the photo it was
+   measured from, the two agree by construction, and so any "correction" made
+   here would be the measurement wearing the shop's name — which is exactly what
+   `colorsCorrected` exists to keep out of the render prompt.
+
+   The flaw in that was assuming the photo is all the vendor has. They are
+   standing at the counter with the bolt in their hands. A maroon shot under a
+   tube light reads orange in this list and they can see that from where they
+   are sitting, and making them list the bolt, stitch a cut, wait on a render
+   and only then be allowed to say "it's maroon" was several minutes of the
+   app's time spent not believing them.
+
+   So the chips stay the resting state — most readings are right, and a form
+   that opens six controls for a question already answered is a worse form —
+   and one tap opens the list underneath them, with the wheel, the palette and
+   the photo to sample from. An edit here is the shop's word, and it sets
+   `colorsCorrected` the same way one made in the studio does. */
+function ColorReadout({ reading, colors, onChange, corrected, image, onRecrop }: {
+  reading: ColorReading | null;
+  colors: FabricColor[];
+  onChange: (colors: FabricColor[]) => void;
+  /** These are the shop's own rather than the photo's — set here or in the
+      studio, either way the render follows them over the picture. */
+  corrected: boolean;
+  /** The fabric's own photo, so the picker has something to sample from. */
+  image: string | null;
+  /** The other thing a vendor can do about these colours, and the one this
+      form doesn't otherwise offer. The reading is taken from the middle of the
+      frame, so counter, shelf or shopping bag left in the crop is counter
+      measured as cloth — and the fix is a tighter crop, not a new photo. (A
+      new photo is already one tap away: the picture at the top of this form is
+      itself the button for that.) */
+  onRecrop: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  const dot = (fill: string) => (
+    <span aria-hidden style={{
+      width: 14, height: 14, borderRadius: "50%", background: fill,
+      border: "1px solid var(--line-strong)", flexShrink: 0,
+    }} />
+  );
+
+  /* Only ever a caveat about what a photo genuinely cannot settle, and only
+     while the reading is all we have. Once the vendor has corrected the
+     colours themselves, the photo's doubts about itself are beside the
+     point. */
+  const doubt = !corrected && reading?.reason ? reading.reason : null;
+
+  return (
+    <div className="field">
+      {/* Label left, the way out right. Sitting on the label's own line rather
+          than under the swatches because it belongs to the whole readout: it
+          is the answer to "these are wrong" for the one cause the vendor can't
+          fix by dragging a wheel — a crop with the counter still in it, which
+          gets averaged into the cloth's colours like any other pixels.
+
+          Nothing to re-crop before a photo exists, so it waits for one. */}
+      <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        Colours
+        {image && (
+          <button type="button" className="ph-btn" onClick={onRecrop}
+            title="Crop this photo tighter — anything but cloth in the frame is measured as cloth"
+            style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3, padding: "4px 2px", minHeight: 28 }}>
+            re-crop
+          </button>
+        )}
+      </span>
+
+      {editing || colors.length === 0 ? (
+        <>
+          <ColorList colors={colors} onChange={onChange} image={image} />
+          <span className="hint">
+            {colors.length === 0
+              ? reading
+                ? "We couldn't pick colours out of this photo — set them yourself, or leave them and the previews will go on the photo alone."
+                : "Read off the photo when you add one, or set them yourself now."
+              : "Tap a swatch for the wheel, and set roughly how much of the cloth each colour covers — a border is a small share, not half the garment."}
+          </span>
+        </>
+      ) : (
+        <>
+          {/* The chips are the button. A separate "edit" link beside them would
+              be the smaller target and the less obvious one: the thing the
+              vendor wants to change is right there, and on a phone it is what
+              their thumb goes to anyway. */}
+          <button type="button" onClick={() => setEditing(true)}
+            aria-label="Change these colours and their shares"
+            style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 14, fontWeight: 400, color: "var(--ink)", minHeight: 24, background: "none", border: "none", padding: "2px 0", margin: 0, textAlign: "left", cursor: "pointer" }}>
+            {colors.map((c, i) => (
+              <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {dot(c.hex || colorHex(c.id) || "var(--line)")}
+                {colorLabel(c.id)}
+                <span style={{ color: "var(--stone)", fontSize: 12.5 }}>{Math.round(c.share * 100)}%</span>
+              </span>
+            ))}
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3 }}>
+              change
+            </span>
+          </button>
+          <span className="hint">
+            {corrected
+              ? "Set by you — the previews follow these over the photo."
+              : "Measured from the photo. If the light has shifted them, correct them here against the cloth in your hands — the previews will follow your words instead."}
+          </span>
+        </>
+      )}
+
+      {doubt && (
+        <span className="hint" style={{ color: "var(--warn)" }}>{doubt}</span>
+      )}
+    </div>
+  );
+}
+
 /* ── Fabric modal ──
    Deliberately not a GarmentModal variant. A fabric has no sizes (it's cut to
    the person) and no category, but it does have a family, a unit, and a weave
    — and price without a unit is meaningless on a bolt. Sharing one component
    would mean a prop soup of mutually-exclusive fields. */
-function FabricModal({ initial, onClose, onSave, onRemove }: {
+function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
   initial?: Fabric;
   onClose: () => void;
   onSave: (f: Omit<Fabric, "id" | "itemCode">) => void;
   onRemove?: () => void;
+  /** Opened from the studio because the picture is what's wrong. "crop" goes
+      straight into the cropper on the photo that's already there; "replace"
+      opens here with the photo called out, and the vendor taps it themselves —
+      a file dialog fired on mount has no user gesture behind it and browsers
+      are right to block it. */
+  photoIntent?: "replace" | "crop";
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [family, setFamily] = useState<StyleFamily>(initial?.family ?? FAMILIES[0].id);
   const [price, setPrice] = useState(initial ? String(initial.price || "") : "");
   const [unit, setUnit] = useState<Fabric["unit"]>(initial?.unit ?? "meter");
   const [composition, setComposition] = useState(initial?.composition ?? "");
-  const [color, setColor] = useState(initial?.color ?? "");
+  const [colors, setColors] = useState<FabricColor[]>(initial?.colors ?? []);
   const [note, setNote] = useState(initial?.note ?? "");
   const [image, setImage] = useState<string | null>(initial?.image ?? null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [touched, setTouched] = useState(false);
+  /* Open from the start when there's already something in there — a bolt whose
+     colours and weave are filled in shouldn't hide them behind a closed panel
+     the vendor has to discover before they can edit them. */
+  const [showOptional, setShowOptional] = useState(
+    Boolean(initial && (initial.composition || initial.colors.length || initial.note))
+  );
+  /** What the photo says about its own colours. Drives the question the
+      colours section leads with; never applied without an answer. */
+  const [reading, setReading] = useState<ColorReading | null>(null);
+  /* Whether the colours below came from a person or from the pixels, which is
+     the whole of what `colorsCorrected` means. A reading applied on open is the
+     app measuring its own photo; a vendor moving the wheel is the shop saying
+     what the cloth is, and only the second may outrank the sample image in the
+     render prompt. Tracked as a gesture rather than by diffing against the
+     reading, because setting a colour back to exactly what was measured is
+     still the vendor vouching for it. */
+  const [colorsTouched, setColorsTouched] = useState(false);
+
+  /* The photo goes through the cropper before it becomes the fabric's image.
+     It matters more here than anywhere else in the app: this picture is the
+     one the render model is told to stitch from and the one the colour reader
+     measures, so counter and background in the frame are counter and
+     background in the catalog. */
+  const [cropping, setCropping] = useState<string | null>(
+    photoIntent === "crop" && initial?.image ? initial.image : null
+  );
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
-    try { setImage(await fileToCompressedDataURL(file)); }
+    try { setCropping(await fileToDataURL(file)); }
     catch { toastErr("Could not read that image. Try a JPG or PNG."); }
     setBusy(false);
   };
+
+  const acceptCrop = async (dataUrl: string) => {
+    setCropping(null);
+    setImage(dataUrl);
+    /* Reading it costs nothing — it's a canvas, not a model — so it never
+       gates the upload; a failed read simply comes back empty. Applied rather
+       than offered: a new photo is a new measurement, and it replaces whatever
+       the old one said about a cloth that is being re-photographed. Any
+       correction made against the old photo goes with it — updateFabric clears
+       colors_corrected whenever the picture changes. */
+    const r = await readFabricColors(dataUrl);
+    setReading(r);
+    /* Only when there is something to replace them with. A read that comes
+       back empty knows nothing about this cloth, and writing it in anyway would
+       clear a set of colours — possibly ones the vendor typed by hand — on the
+       strength of a canvas that failed. That matters more now that re-cropping
+       is a button next to the colours rather than a trip through the studio:
+       the vendor tightening a crop is not asking to lose their maroon. */
+    if (r.colors.length) {
+      setColors(r.colors.map((c) => ({ id: c.id, hex: c.hex, share: c.share })));
+      setColorsTouched(false);
+    }
+  };
+
+  /* A bolt listed before colours existed gets read the moment it's opened —
+     otherwise every fabric already in a shop's catalog stays colourless
+     forever and nothing downstream ever benefits. Only when it's genuinely
+     blank: a bolt whose colours are set, and especially one the vendor has
+     corrected against a render, is never re-measured behind their back. */
+  const [readApplied, setReadApplied] = useState(false);
+  useEffect(() => {
+    if (!initial?.image || initial.colors.length) return;
+    let live = true;
+    readFabricColors(initial.image).then((r) => {
+      if (!live) return;
+      setReading(r);
+      if (r.colors.length) {
+        setColors(r.colors.map((c) => ({ id: c.id, hex: c.hex, share: c.share })));
+        setReadApplied(true);
+      }
+    });
+    return () => { live = false; };
+  }, [initial?.image, initial?.colors.length]);
 
   const priceNum = Number(price || 0);
   const missing = [
@@ -1035,101 +1425,195 @@ function FabricModal({ initial, onClose, onSave, onRemove }: {
     !image && "a photo",
     !(priceNum > 0) && "a price",
   ].filter(Boolean) as string[];
+  /* Optional, but the part a photo can't say — so a blank one is worth one
+     question on the way out, not a blocked save. A vendor with a queue at the
+     counter always gets the bolt listed.
+
+     Colours are not on this list any more. They're measured rather than typed,
+     so there is nothing here for the vendor to have skipped, and a warning
+     about a field they cannot fill in is a warning that teaches them to click
+     through the next one. */
+  const soft = [!note.trim() && "any extra detail"].filter(Boolean) as string[];
+  /* Says what's in the folded panel without opening it — otherwise "optional"
+     is the only clue that a bolt's colours are set, and the vendor opens it
+     every time to check. */
+  const optionalSummary =
+    [composition.trim(), colorText(colors), note.trim() && "a note"]
+      .filter(Boolean)
+      .join(" · ") || "colours, weave, detail";
   const canSave = missing.length === 0 && !busy;
-  const input: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: "var(--radius-field)", border: "1px solid var(--line)", fontSize: 15, background: "var(--card)", color: "var(--ink)" };
+  /* Colours only count as unsaved work when the vendor's own edits put them
+     there. A reading applied to an old colourless bolt on open is the app's
+     doing, not theirs — counting it would greet anyone who opened a legacy
+     fabric and closed it again with "discard what you've filled in?", about a
+     field they never touched. */
   const dirty = initial
     ? name !== initial.name || family !== initial.family || String(initial.price || "") !== price
       || unit !== initial.unit || composition !== (initial.composition ?? "")
-      || color !== (initial.color ?? "") || note !== (initial.note ?? "") || image !== initial.image
-    : Boolean(name.trim() || image || price || composition || color || note);
+      || ((colorsTouched || !readApplied) && JSON.stringify(colors) !== JSON.stringify(initial.colors ?? []))
+      || note !== (initial.note ?? "") || image !== initial.image
+    : Boolean(name.trim() || image || price || composition || note);
+
+  const save = async () => {
+    setTouched(true);
+    if (!canSave) return;
+    if (soft.length > 0) {
+      const ok = await confirmAsync({
+        title: "Save without " + andList(soft) + "?",
+        /* Says what actually happens to the field rather than praising it. It
+           is read straight into the prompt that generates this cloth's
+           previews, so skipping it isn't leaving a form incomplete — it's
+           handing the render less to work from. */
+        body: "Where a border sits, how the cloth drapes, what the pattern is — we read that "
+          + "alongside the photo when generating this cloth's previews, and a photo can't show "
+          + "it. You can add it later, but anything stitched before then won't have used it.",
+        confirmLabel: "Save anyway", cancelLabel: "Let me add it",
+      });
+      if (!ok) return;
+    }
+    onSave({
+      name: name.trim(), family, image: image!,
+      price: priceNum, unit,
+      composition: composition.trim(),
+      colors,
+      /* True the moment the vendor sets a colour by hand, here or in the
+         studio: both are the shop saying what the cloth is rather than the
+         canvas reporting what the photo was. Otherwise carried, so fixing a
+         typo in the price never demotes a correction — and cleared outright by
+         updateFabric when the photo itself changes, because a correction made
+         against the old picture says nothing about the new one. */
+      colorsCorrected: colorsTouched || (initial?.colorsCorrected ?? false),
+      color: colorText(colors),
+      note: note.trim(),
+      correction: initial?.correction ?? "",
+      inStock: initial?.inStock ?? true,
+    });
+  };
 
   return (
+    /* 430 rather than 400: the colour row carries a well, a list and a button
+       side by side, and at 400 the list is narrower than the words in it. */
     <Dialog onClose={onClose} title={initial ? "edit fabric" : "add a fabric"} hideHeader
-      width={400} dirty={dirty}
+      width={430} dirty={dirty}
       dirtyMessage="This fabric isn't saved yet. Discard what you've filled in?"
       panelStyle={{ padding: "28px 26px" }}>
       <div className="ph-display" style={{ fontSize: 24, color: "var(--ink)", marginBottom: 18 }}>
         {initial ? "edit fabric" : "add a fabric"}
       </div>
 
+      {/* Sent here from the studio by a preview whose colour came out wrong.
+          The picture is the thing to change, so it's said before the vendor
+          reaches the form and the box below is drawn as the thing to press. */}
+      {photoIntent === "replace" && (
+        <div style={{ background: "var(--warn-bg)", border: "1px solid var(--warn)", borderRadius: "var(--radius-field)", padding: "11px 13px", marginBottom: 14, fontSize: 12.5, color: "var(--ink)", lineHeight: 1.6 }}>
+          Tap the picture below to shoot or upload a new one — daylight if you can, and fill the
+          frame with the weave. Everything else about this bolt stays as it is, and every preview
+          made from the old photo will be marked for re-stitching.
+        </div>
+      )}
+
       <button type="button" onClick={() => fileRef.current?.click()}
         aria-label={image ? "Change the fabric photo" : "Upload a fabric photo"}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
-        style={{ width: "100%", border: "1.5px dashed " + (image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-lg)", height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
+        style={{ width: "100%", border: "1.5px dashed " + (photoIntent === "replace" ? "var(--warn)" : image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-lg)", height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
         {busy ? <span>Processing photo…</span>
           : image ? <img src={image} alt="Fabric preview" style={{ height: "100%", objectFit: "contain" }} />
           : <div style={{ padding: 12 }}>Tap to upload a fabric photo<br /><span style={{ fontSize: 12 }}>Lay it flat in daylight — fill the frame with the weave</span></div>}
       </button>
       <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <label className="field">Fabric name <span className="req">*</span>
-          <input style={input} value={name} maxLength={80} data-autofocus
+      {/* No inline styles on any of these: `.field input/select/textarea` in
+          globals.css already gives every control on the form one padding, one
+          radius and one type size. Restating them here is what let the colour
+          row drift 2px out of line with every other control. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <label className="field"><span>Fabric name <span className="req">*</span></span>
+          <input value={name} maxLength={80} data-autofocus
             onChange={(e) => setName(e.target.value)} placeholder="e.g. Navy Italian Wool" />
         </label>
         <label className="field">Stitched into
-          <select value={family} onChange={(e) => setFamily(e.target.value as StyleFamily)} style={input}>
+          <select value={family} onChange={(e) => setFamily(e.target.value as StyleFamily)}>
             {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
           </select>
         </label>
         <div style={{ display: "flex", gap: 10 }}>
-          <label className="field" style={{ flex: 1 }}>Price (NPR) <span className="req">*</span>
-            <input style={{ ...input, borderColor: touched && !(priceNum > 0) ? "var(--danger)" : "var(--line)" }}
-              value={price} maxLength={8} inputMode="numeric" aria-invalid={touched && !(priceNum > 0)}
+          <label className="field" style={{ flex: 1 }}><span>Price (NPR) <span className="req">*</span></span>
+            {/* The red border comes from the aria-invalid rule, so the state a
+                screen reader hears and the state the eye sees are one thing. */}
+            <input value={price} maxLength={8} inputMode="numeric"
+              aria-invalid={touched && !(priceNum > 0)}
               onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, "").slice(0, 8))} placeholder="1800" />
           </label>
           <label className="field" style={{ flex: 1 }}>Sold by
-            <select value={unit} onChange={(e) => setUnit(e.target.value as Fabric["unit"])} style={input}>
+            <select value={unit} onChange={(e) => setUnit(e.target.value as Fabric["unit"])}>
               {FABRIC_UNITS.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
             </select>
           </label>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <label className="field" style={{ flex: 1 }}>Weave
-            <input style={input} value={composition} maxLength={40}
-              onChange={(e) => setComposition(e.target.value)} placeholder="e.g. wool 120s" />
-          </label>
-          <label className="field" style={{ flex: 1 }}>Colour
-            <input style={input} value={color} maxLength={30}
-              onChange={(e) => setColor(e.target.value)} placeholder="e.g. navy" />
-          </label>
-        </div>
-        <label className="field">Anything we should know about this cloth?
-          <textarea style={{ ...input, minHeight: 68, resize: "vertical", fontFamily: "inherit" }}
-            value={note} maxLength={300} onChange={(e) => setNote(e.target.value)}
-            placeholder="e.g. gold border runs along one edge only — it goes on the pallu" />
-          <span className="hint">
-            Optional, but this is the part a photo can't show. Where a border sits or how
-            heavily a cloth drapes is what makes the stitched preview right.
-          </span>
-        </label>
+        {/* Everything below is optional, so it folds away behind one line: a
+            bolt gets listed with a photo, a name and a price, and the vendor
+            with a customer waiting is not made to scroll past six fields they
+            were always going to skip.
+
+            It opens itself when the photo reading arrives, because that's a
+            question about this cloth that we asked and that deserves an
+            answer — hiding it behind a closed panel would be asking nobody. */}
+        <details className="opt-block" open={showOptional}
+          onToggle={(e) => setShowOptional(e.currentTarget.open)}>
+          <summary>
+            Optional customisation
+            <span className="sub">{optionalSummary}</span>
+          </summary>
+          <div className="opt-body">
+            <label className="field">Weave
+              <input value={composition} maxLength={40}
+                onChange={(e) => setComposition(e.target.value)} placeholder="e.g. wool 120s" />
+            </label>
+
+            {/* Measured and shown, and correctable on the spot. These words are
+                what the render prompt reads, what the storefront filters on and
+                what the counter finds when a customer says "the maroon one" —
+                so the vendor holding the bolt gets to overrule the camera
+                without waiting for a preview to prove them right. */}
+            <ColorReadout reading={reading} colors={colors} image={image}
+              onChange={(next) => { setColorsTouched(true); setColors(next); }}
+              corrected={colorsTouched || (initial?.colorsCorrected ?? false)}
+              onRecrop={() => { if (image) setCropping(image); }} />
+
+            <label className="field">Anything else we should know?
+              <textarea value={note} maxLength={300} onChange={(e) => setNote(e.target.value)}
+                placeholder="e.g. banarasi brocade with zari buttas — gold border on one edge only, goes on the pallu" />
+              <span className="hint">
+                Optional, but it&apos;s the part a photo can&apos;t show — the pattern, where a
+                border sits, how it drapes.
+              </span>
+            </label>
+          </div>
+        </details>
       </div>
 
       {missing.length > 0 && (
-        <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--stone)" }}>
-          Still needs {missing.join(", ").replace(/, ([^,]*)$/, " and $1")}.
+        <div style={{ marginTop: 14, fontSize: 12.5, color: "var(--stone)" }}>
+          Still needs {andList(missing)}.
         </div>
       )}
 
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
         <button className="ph-btn" onClick={onClose}
           style={{ flex: 1, color: "var(--ink)", padding: 13, fontSize: 13, letterSpacing: ".06em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 600 }}>cancel</button>
-        <button className="ph-btn" aria-disabled={!canSave}
-          onClick={() => {
-            setTouched(true);
-            if (!canSave) return;
-            onSave({
-              name: name.trim(), family, image: image!,
-              price: priceNum, unit,
-              composition: composition.trim(), color: color.trim(), note: note.trim(),
-              inStock: initial?.inStock ?? true,
-            });
-          }}
+        <button className="ph-btn" aria-disabled={!canSave} onClick={save}
           style={{ flex: 2, background: canSave ? "var(--ink)" : "var(--line)", color: canSave ? "var(--card)" : "var(--stone)", padding: 13, fontSize: 13, letterSpacing: ".06em", borderRadius: "var(--radius-btn)", fontWeight: 600, cursor: canSave ? "pointer" : "not-allowed" }}>
           {initial ? "save changes" : "save fabric"}
         </button>
       </div>
+      {cropping && (
+        <ImageCropper src={cropping} title="Keep just the cloth"
+          hint="Drag the box onto the weave and leave the counter out. Everything inside it is what gets stitched from — and what we read the colour off."
+          confirmLabel="use this crop"
+          onCancel={() => setCropping(null)} onDone={acceptCrop} />
+      )}
+
       {initial && onRemove && (
         <button className="ph-btn"
           onClick={async () => {

@@ -319,7 +319,8 @@ export default function StorefrontClient({
               as a heading above a list of three rather than one of four. */}
           <label htmlFor={sortId} className="sr-only">Sort the collection</label>
           <select id={sortId} value={sort} onChange={(e) => setSort(e.target.value as Sort)}
-            style={{ padding: "11px 16px", borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)", fontSize: 14, fontWeight: 500, cursor: "pointer" }}>
+            className="ph-select"
+            style={{ padding: "11px 16px", borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", backgroundColor: "var(--card)", color: "var(--ink)", fontSize: 14, fontWeight: 500, cursor: "pointer" }}>
             <option value="new">Newest first</option>
             <option value="price-asc">Price: low to high</option>
             <option value="price-desc">Price: high to low</option>
