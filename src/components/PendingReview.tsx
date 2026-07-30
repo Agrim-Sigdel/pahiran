@@ -31,19 +31,19 @@ const COPY: Record<string, { tone: string; toneBg: string; title: string; body: 
     tone: "var(--warn)",
     toneBg: "var(--warn-bg)",
     title: "verification pending",
-    body: "We review every new vendor before the shop goes live. Nothing more is needed from you — we'll give you a call to confirm, usually within a day.",
+    body: "We'll call within a day.",
   },
   rejected: {
     tone: "var(--danger)",
     toneBg: "var(--danger-bg)",
     title: "shop not approved",
-    body: "Your shop isn't visible to shoppers and can't run try-ons. We'll call you to explain — you can ask us to review it again on that call.",
+    body: "We'll call you to explain.",
   },
   suspended: {
     tone: "var(--danger)",
     toneBg: "var(--danger-bg)",
     title: "shop suspended",
-    body: "Your storefront is hidden and try-ons are paused. Your catalog is safe — we'll call you to sort this out.",
+    body: "Catalog safe — we'll call you.",
   },
 };
 
@@ -157,11 +157,11 @@ export default function PendingReview({ shop, signOut, updateShop }: {
 
         <p style={{ fontSize: 12.5, color: "var(--stone)", lineHeight: 1.6, margin: "18px 0 0" }}>
           {shop.whatsapp
-            ? `We'll call you on ${shop.whatsapp}. Keep it reachable over the next day.`
-            : "Add a number above and we'll call you — or write to us and we'll take it from there."}
+            ? `We'll call ${shop.whatsapp}.`
+            : "Add a number — we'll call."}
           {" "}
           <a href={mailHref} style={{ color: "var(--violet)", fontWeight: 600 }}>email us</a> if
-          anything above is wrong.
+          anything is wrong.
         </p>
 
         {signOut && (

@@ -24,7 +24,7 @@ const en = {
   headline1: "try it on,",
   headline2: "without trying it on",
   attractSub: (n: number) =>
-    `Take one photo, then browse ${n} piece${n !== 1 ? "s" : ""} from this shop and see them on you.`,
+    `one photo — ${n} piece${n !== 1 ? "s" : ""} on you`,
   tapToBegin: "peeq it",
   seeItOnYou: "see it on you",
   continueSaved: "continue with my saved photo",
@@ -39,20 +39,20 @@ const en = {
   agreeTakePhoto: "agree & take photo",
   agreeUpload: "upload instead",
 
-  uploadTitle: "add a full-body photo of you",
-  uploadHint: "A clear, front-facing photo where you're fully visible — head to toe — works best.",
+  uploadTitle: "add a full-body photo",
+  uploadHint: "Head to toe, facing forward.",
   uploadCta: "upload my photo",
   useCameraInstead: "or take one with the camera",
 
-  standBack: "stand back so we can see you fully",
-  waistUpNote: "use a waist-up photo, not a close-up selfie",
+  standBack: "stand back — full body",
+  waistUpNote: "waist-up, not a selfie",
   cameraUnavailable: "Camera isn't available here.",
   tapAnywhere: "Tap anywhere in this box",
-  uploadInstead: "to upload a full-body photo instead.",
+  uploadInstead: "to upload a photo instead.",
   startingCamera: "opening our eyes…",
   rememberPhoto: "Remember my photo on this device for 7 days",
-  rememberedNote: "Kept for you — delete it anytime from the consent screen.",
-  notSavedNote: "Your photo stays on this screen — it is never saved.",
+  rememberedNote: "Delete it anytime.",
+  notSavedNote: "Your photo is never saved.",
   couldNotReadPhoto: "Could not read that photo.",
   /* The dashed box is the universal drop target, so it now actually accepts a
      drop — before, dropping a photo on it navigated the browser to the file. */
@@ -74,7 +74,7 @@ const en = {
      a credit with no way out. */
   genAria: (g: string) => `Making your try-on of ${g}. This usually takes about a minute.`,
   genCancel: "stop waiting",
-  genCancelled: "stopped — pick anything to try again.",
+  genCancelled: "stopped — pick anything.",
 
   pickAPiece: "pick a piece below",
   /* v2 puts the rack beside the stage in landscape, so "below" isn't true */
@@ -84,7 +84,7 @@ const en = {
      and the shopper a minute of waiting, and the tiles sit close together —
      so nothing reaches the API until someone means it. */
   confirmTryTitle: "try this on?",
-  confirmTryBody: (g: string) => `We'll make one photo of you wearing ${g}. Takes about a minute.`,
+  confirmTryBody: (g: string) => `${g} on you — about a minute.`,
   confirmTryYes: "yes, peeq it",
   sizes: "sizes:",
   /* Shown on pieces the shop stitches rather than stocks — a rendered fabric
@@ -92,11 +92,11 @@ const en = {
      something hanging in the back, and the tile is where that has to land. */
   madeToOrder: "MADE TO ORDER",
   yourMeasurements: "your measurements",
-  aiResultNote: "AI try-on · ask staff to see it in person",
+  aiResultNote: "AI try-on · ask staff",
   holdToCompare: "hold to compare",
   /* Hold-to-compare was pointer-only, so a keyboard user had no way to see
      their original photo at all. Space/Enter toggles it instead of holding. */
-  compareHint: "press and hold — or use Enter to toggle",
+  compareHint: "hold — or press Enter",
   showOriginalLabel: "show my original photo",
   showLookLabel: "show the try-on again",
   originalPhoto: "your photo",
@@ -115,14 +115,14 @@ const en = {
      picture and calling it a preview looked like a bad result rather than no
      result — shoppers judged the piece on it. */
   tryonFailedTitle: "something went wrong",
-  tryonFailedBody: "We couldn't create your try-on just now. Please try again in a moment.",
+  tryonFailedBody: "Try again in a moment.",
   tryAgain: "try again",
   retakePhoto: "retake my photo",
   browseRack: "browse other pieces",
 
   findMySize: "find my size",
   mySizeTitle: "find your size",
-  mySizePrivacy: "For sizing only. Stays on this device — never sent to the shop.",
+  mySizePrivacy: "Sizing only — never sent.",
   heightCmLabel: "height (cm)",
   weightKgLabel: "weight (kg) — optional",
   forWhomLabel: "who is it for? (optional)",
@@ -137,13 +137,13 @@ const en = {
   errHeightRange: (lo: number, hi: number) => `Enter your height in cm, between ${lo} and ${hi}.`,
   errWeightRange: (lo: number, hi: number) => `Enter your weight in kg between ${lo} and ${hi}, or leave it blank.`,
   yourSize: "your size",
-  sizeRoughNote: "rough — add weight to sharpen it",
+  sizeRoughNote: "rough — add weight",
   sizeNearestNote: (s: string) => `closest in stock: ${s}`,
   sizeFree: "free size · one size fits most",
   recommendedForYou: "recommended for you",
 
   tellShop: "tell the shop",
-  leadNote: (g: string, p: string) => `${g} · ${p}. Leave your name and number so the shop can reach you.`,
+  leadNote: (g: string, p: string) => `${g} · ${p}. Name and number, please.`,
   yourName: "your name",
   phoneNumber: "phone number",
   errName: "Please enter your name (at least 2 characters).",
@@ -154,7 +154,7 @@ const en = {
   sendToShop: "send to the shop",
   shopKnows: "sent to the shop",
   shopKnowsDesc: (name: string, size: string) =>
-    `${name}${size ? " · size " + size : ""} is on the shop's list. They'll text you — or chat now to arrange pickup or delivery.`,
+    `${name}${size ? " · size " + size : ""} — on the shop's list.`,
   keepBrowsing: "keep browsing",
   chatWhatsApp: "chat on WhatsApp",
 
@@ -162,7 +162,7 @@ const en = {
   myLooksSub: "private to you",
   deleteAll: "delete all",
   close: "close",
-  nothingSaved: "nothing here yet — tap “save look” after a try-on to keep it here.",
+  nothingSaved: "nothing saved yet.",
   share: "share",
   del: "delete",
   confirmDeleteAll: "Delete all saved looks and your remembered photo from this device?",
@@ -176,12 +176,11 @@ const en = {
      until now the only way to set it was appending ?shared=1 to the URL — a
      privacy-critical switch with no interface at all. */
   sharedBadge: "shop tablet",
-  sharedOnNote: "Shared tablet: nothing is remembered between shoppers.",
+  sharedOnNote: "Nothing remembered between shoppers.",
   sharedTurnOn: "using a shop tablet?",
   sharedTurnOnCta: "turn on shared mode",
   sharedTurnOff: "turn off shared mode",
-  sharedExplain:
-    "On a shared tablet peeq never remembers a photo, never keeps saved looks and never prefills a name or number — and it clears everything when a shopper walks away.",
+  sharedExplain: "Remembers nothing between shoppers.",
 };
 
 const ne: typeof en = {
@@ -197,7 +196,7 @@ const ne: typeof en = {
   headline1: "नलगाईकनै,",
   headline2: "लगाएर हेर्नुहोस्",
   attractSub: (n: number) =>
-    `एउटा फोटो खिच्नुहोस्, अनि यस पसलका ${n} वटा लुगा आफूमा लगाएर हेर्नुहोस्।`,
+    `एउटा फोटो — ${n} वटा लुगा आफूमा`,
   tapToBegin: "हेरौँ त कस्तो देखिन्छ",
   seeItOnYou: "आफूमा हेर्नुहोस्",
   continueSaved: "सेभ गरेको फोटोसँग जारी राख्नुहोस्",
@@ -209,20 +208,20 @@ const ne: typeof en = {
   agreeTakePhoto: "मन्जुर, फोटो खिच्नुहोस्",
   agreeUpload: "अपलोड गर्नुहोस्",
 
-  uploadTitle: "आफ्नो पूरा शरीर देखिने फोटो हाल्नुहोस्",
-  uploadHint: "टाउकोदेखि खुट्टासम्म पूरै देखिने, अगाडिबाट खिचेको सफा फोटो सबैभन्दा राम्रो हुन्छ।",
+  uploadTitle: "पूरा शरीरको फोटो हाल्नुहोस्",
+  uploadHint: "टाउकोदेखि खुट्टासम्म, अगाडिबाट।",
   uploadCta: "मेरो फोटो अपलोड गर्नुहोस्",
   useCameraInstead: "वा क्यामेराले खिच्नुहोस्",
 
-  standBack: "पूरै देखिने गरी अलि पर उभिनुहोस्",
-  waistUpNote: "कम्मरदेखि माथिको फोटो, नजिकको सेल्फी होइन",
+  standBack: "पूरै देखिने गरी उभिनुहोस्",
+  waistUpNote: "कम्मरमाथिको फोटो, सेल्फी होइन",
   cameraUnavailable: "यहाँ क्यामेरा उपलब्ध छैन।",
   tapAnywhere: "यो बाकसभित्र जहाँसुकै ट्याप गर्नुहोस्",
-  uploadInstead: "र पूरा शरीर देखिने फोटो अपलोड गर्नुहोस्।",
+  uploadInstead: "र फोटो अपलोड गर्नुहोस्।",
   startingCamera: "आँखा खुल्दैछ…",
   rememberPhoto: "मेरो फोटो यो डिभाइसमा ७ दिनसम्म सम्झनुहोस्",
-  rememberedNote: "तपाईंका लागि राखिन्छ — जहिले पनि मेटाउन सकिन्छ।",
-  notSavedNote: "तपाईंको फोटो यही स्क्रिनमा मात्र रहन्छ — कहिल्यै सेभ हुँदैन।",
+  rememberedNote: "जहिले पनि मेटाउन सकिन्छ।",
+  notSavedNote: "तपाईंको फोटो कहिल्यै सेभ हुँदैन।",
   couldNotReadPhoto: "फोटो पढ्न सकिएन।",
   dropHere: "वा फोटो यहाँ तान्नुहोस्",
   dropNow: "यहाँ छाड्नुहोस्",
@@ -234,20 +233,20 @@ const ne: typeof en = {
   genReady: "ल, हेरौँ त!",
   genAria: (g: string) => `${g} तपाईंमा कस्तो देखिन्छ, बन्दैछ। एक मिनेट जति लाग्छ।`,
   genCancel: "पर्खनु पर्दैन",
-  genCancelled: "रोकियो — फेरि कुनै पनि लुगा छान्नुहोस्।",
+  genCancelled: "रोकियो — फेरि छान्नुहोस्।",
 
   pickAPiece: "तलबाट एउटा लुगा छान्नुहोस्",
   pickAny: "कुनै पनि लुगा छान्नुहोस्, आफूमा हेर्नुहोस्",
 
   confirmTryTitle: "यो लगाएर हेर्ने?",
-  confirmTryBody: (g: string) => `${g} तपाईंलाई कस्तो लाग्छ, एउटा फोटो बनाइन्छ। एक मिनेट जति लाग्छ।`,
+  confirmTryBody: (g: string) => `${g} तपाईंमा — एक मिनेट जति।`,
   confirmTryYes: "हो, हेरौँ",
   sizes: "साइज:",
   madeToOrder: "अर्डरमा सिलाइने",
   yourMeasurements: "तपाईंको नाप",
-  aiResultNote: "AI ट्राई-अन · सक्कली हेर्न स्टाफलाई भन्नुहोस्",
+  aiResultNote: "AI ट्राई-अन · स्टाफलाई सोध्नुहोस्",
   holdToCompare: "तुलना गर्न थिचिराख्नुहोस्",
-  compareHint: "थिचिराख्नुहोस् — वा Enter थिच्नुहोस्",
+  compareHint: "थिचिराख्नुहोस् — वा Enter",
   showOriginalLabel: "मेरो सक्कली फोटो देखाउनुहोस्",
   showLookLabel: "ट्राई-अन फेरि देखाउनुहोस्",
   originalPhoto: "तपाईंको फोटो",
@@ -263,14 +262,14 @@ const ne: typeof en = {
   savingLook: "सेभ हुँदैछ…",
   saveImage: "फोटो सेभ गर्नुहोस्",
   tryonFailedTitle: "केही गडबड भयो",
-  tryonFailedBody: "अहिले ट्राई-अन बनाउन सकिएन। कृपया केही बेरमा फेरि प्रयास गर्नुहोस्।",
+  tryonFailedBody: "केही बेरमा फेरि प्रयास गर्नुहोस्।",
   tryAgain: "फेरि प्रयास गर्नुहोस्",
   retakePhoto: "फेरि फोटो खिच्नुहोस्",
   browseRack: "अरू लुगा हेर्नुहोस्",
 
   findMySize: "मेरो साइज पत्ता लगाउनुहोस्",
   mySizeTitle: "आफ्नो साइज पत्ता लगाउनुहोस्",
-  mySizePrivacy: "साइजका लागि मात्र। यही डिभाइसमा रहन्छ — पसललाई कहिल्यै पठाइँदैन।",
+  mySizePrivacy: "साइजका लागि मात्र — पठाइँदैन।",
   heightCmLabel: "उचाइ (से.मि.)",
   weightKgLabel: "तौल (के.जी.) — वैकल्पिक",
   forWhomLabel: "कसका लागि? (वैकल्पिक)",
@@ -282,13 +281,13 @@ const ne: typeof en = {
   errHeightRange: (lo: number, hi: number) => `उचाइ से.मि.मा ${lo} देखि ${hi} बीच लेख्नुहोस्।`,
   errWeightRange: (lo: number, hi: number) => `तौल के.जी.मा ${lo} देखि ${hi} बीच लेख्नुहोस्, वा खाली छोड्नुहोस्।`,
   yourSize: "तपाईंको साइज",
-  sizeRoughNote: "अन्दाजी — राम्रो नतिजाका लागि तौल थप्नुहोस्",
+  sizeRoughNote: "अन्दाजी — तौल थप्नुहोस्",
   sizeNearestNote: (s: string) => `स्टकमा नजिकको: ${s}`,
   sizeFree: "फ्री साइज · सबैलाई मिल्ने",
   recommendedForYou: "तपाईंका लागि सिफारिस",
 
   tellShop: "पसललाई भन्नुहोस्",
-  leadNote: (g: string, p: string) => `${g} · ${p}। पसलले सम्पर्क गर्न सकोस् भनेर आफ्नो नाम र नम्बर लेख्नुहोस्।`,
+  leadNote: (g: string, p: string) => `${g} · ${p}। नाम र नम्बर लेख्नुहोस्।`,
   yourName: "तपाईंको नाम",
   phoneNumber: "फोन नम्बर",
   errName: "कृपया आफ्नो नाम लेख्नुहोस् (कम्तीमा २ अक्षर)।",
@@ -299,7 +298,7 @@ const ne: typeof en = {
   sendToShop: "पसललाई पठाउनुहोस्",
   shopKnows: "पसलमा पुग्यो",
   shopKnowsDesc: (name: string, size: string) =>
-    `${name}${size ? " · साइज " + size : ""} पसलको सूचीमा सेभ भयो। पिकअप वा डेलिभरीका लागि अहिल्यै कुरा गर्नुहोस्।`,
+    `${name}${size ? " · साइज " + size : ""} — पसलको सूचीमा।`,
   keepBrowsing: "हेर्दै गर्नुहोस्",
   chatWhatsApp: "WhatsApp मा कुरा गर्नुहोस्",
 
@@ -307,7 +306,7 @@ const ne: typeof en = {
   myLooksSub: "तपाईंले मात्र देख्न सक्ने",
   deleteAll: "सबै मेटाउनुहोस्",
   close: "बन्द गर्नुहोस्",
-  nothingSaved: "अहिलेसम्म केही सेभ छैन — ट्राई-अनपछि “लुक सेभ गर्नुहोस्” ट्याप गर्नुहोस्।",
+  nothingSaved: "अहिलेसम्म केही सेभ छैन।",
   share: "सेयर",
   del: "मेटाउनुहोस्",
   confirmDeleteAll: "यस डिभाइसबाट सबै सेभ गरिएका लुक र सम्झिएको फोटो मेटाउने?",
@@ -316,12 +315,11 @@ const ne: typeof en = {
   privacyLink: "तपाईंको फोटो कसरी प्रयोग हुन्छ",
 
   sharedBadge: "पसलको ट्याब्लेट",
-  sharedOnNote: "साझा ट्याब्लेट: एक ग्राहकको कुनै कुरा अर्कोका लागि रहँदैन।",
+  sharedOnNote: "ग्राहकबीच केही रहँदैन।",
   sharedTurnOn: "पसलको ट्याब्लेट प्रयोग गर्दै?",
   sharedTurnOnCta: "साझा मोड सुरु गर्नुहोस्",
   sharedTurnOff: "साझा मोड बन्द गर्नुहोस्",
-  sharedExplain:
-    "साझा ट्याब्लेटमा peeq ले फोटो सम्झँदैन, सेभ गरेका लुक राख्दैन, नाम वा नम्बर पहिल्यै भर्दैन — र ग्राहक गएपछि सबै मेटाउँछ।",
+  sharedExplain: "ग्राहकबीच केही सम्झिँदैन।",
 };
 
 export type Strings = typeof en;

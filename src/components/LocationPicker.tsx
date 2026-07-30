@@ -83,7 +83,7 @@ export default function LocationPicker({ lat, lng, onChange }: {
 
   const useMyLocation = () => {
     if (!navigator.geolocation) {
-      setStatus("Location isn't available in this browser — tap the map instead.");
+      setStatus("Tap the map instead.");
       return;
     }
     setStatus("finding you…");
@@ -93,7 +93,7 @@ export default function LocationPicker({ lat, lng, onChange }: {
         mapRef.current?.setView([pos.coords.latitude, pos.coords.longitude], 17);
         placeRef.current?.(pos.coords.latitude, pos.coords.longitude);
       },
-      () => setStatus("Could not get your location — search or tap the map instead."),
+      () => setStatus("Tap the map instead."),
       { enableHighAccuracy: true, timeout: 10000 }
     );
   };
@@ -114,7 +114,7 @@ export default function LocationPicker({ lat, lng, onChange }: {
         mapRef.current?.setView([Number(results[0].lat), Number(results[0].lon)], 16);
         setStatus("Now tap your exact shop spot on the map.");
       } else {
-        setStatus("No match — try a nearby landmark, or tap the map.");
+        setStatus("No match — tap the map.");
       }
     } catch {
       setStatus("Search failed — tap the map instead.");

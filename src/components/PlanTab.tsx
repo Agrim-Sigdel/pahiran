@@ -40,8 +40,7 @@ export default function PlanTab({ shop }: { shop: Shop }) {
       <div className="panel">
         <div className="panel-head"><span className="title">Plan &amp; usage</span></div>
         <p style={{ color: "var(--stone)", fontSize: 14, lineHeight: 1.6, maxWidth: 520 }}>
-          Plans and try-on limits apply once this shop runs in cloud mode (Supabase connected and
-          deployed). In local mode there are no limits — everything is on this device.
+          No limits in local mode.
         </p>
       </div>
     );
@@ -61,7 +60,7 @@ export default function PlanTab({ shop }: { shop: Shop }) {
         kind: "plan",
         plan: { id: plan.id, name: plan.name, priceNpr: plan.priceNpr },
       });
-      setNotice(`Upgrade request sent for ${plan.name}. We'll be in touch to set it up.`);
+      setNotice(`Upgrade request sent for ${plan.name}.`);
     } catch (e) {
       setFailed(`We couldn't send your ${plan.name} request. Nothing has changed — try again, or email ${ADMIN_EMAIL}.`);
       toastFailure("Could not send your upgrade request", e);
@@ -80,7 +79,7 @@ export default function PlanTab({ shop }: { shop: Shop }) {
         kind: "credits",
         currentPlanName: sub.plan.name,
       });
-      setNotice("Credit top-up request sent. We'll top you up shortly.");
+      setNotice("Top-up request sent.");
     } catch (e) {
       setFailed(`We couldn't send your top-up request. Nothing has changed — try again, or email ${ADMIN_EMAIL}.`);
       toastFailure("Could not send your top-up request", e);
@@ -102,9 +101,7 @@ export default function PlanTab({ shop }: { shop: Shop }) {
       {notice && (
         <div role="status" style={{ background: "var(--ok-bg)", border: "1px solid var(--ok)", borderRadius: "var(--radius-card)", padding: "12px 16px", fontSize: 13.5, color: "var(--ink)", display: "flex", alignItems: "flex-start", gap: 10 }}>
           <span style={{ color: "var(--ok)", flexShrink: 0 }}><Icon name="check" /></span>
-          <span style={{ flex: 1 }}>
-            {notice} <span style={{ color: "var(--stone)" }}>Didn't see an email open? Write to {ADMIN_EMAIL}.</span>
-          </span>
+          <span style={{ flex: 1 }}>{notice}</span>
           <button className="ph-btn" onClick={() => setNotice("")} aria-label="Dismiss"
             style={{ color: "var(--stone)", flexShrink: 0, padding: 2 }}><Icon name="close" /></button>
         </div>
@@ -175,8 +172,7 @@ export default function PlanTab({ shop }: { shop: Shop }) {
           })}
         </div>
         <p style={{ fontSize: 12.5, color: "var(--stone)", marginTop: 14, lineHeight: 1.6 }}>
-          A studio finish uses one try-on and one studio slot. Cached repeats are free. Requesting an
-          upgrade or top-up emails us — we'll set you up and start a fresh 30-day period.
+          Requests reach us by email.
         </p>
         {/* The grid only ever offered plans ABOVE the current one
             (`p.sort > sub.plan.sort`), so a paying vendor could move up and
@@ -185,12 +181,11 @@ export default function PlanTab({ shop }: { shop: Shop }) {
             down is the same channel as the way up — it just has to exist. */}
         {paidPlan && (
           <p style={{ fontSize: 12.5, color: "var(--stone)", marginTop: 10, lineHeight: 1.6 }}>
-            Want to move down a plan, or stop?{" "}
+            Downgrade or stop?{" "}
             <a href={`mailto:${ADMIN_EMAIL}?subject=${encodeURIComponent(`Change my plan — ${shop.name || shop.slug || shop.id}`)}`}
               style={{ color: "var(--violet)", fontWeight: 600 }}>
               email us
-            </a>{" "}
-            and we'll change it from the next period. Your catalog and storefront stay exactly as they are.
+            </a>.
           </p>
         )}
       </div>

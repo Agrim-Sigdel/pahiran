@@ -65,8 +65,7 @@ export default function Onboarding({ shop, onComplete }: {
         <div className="wordmark" style={{ fontSize: 18, marginBottom: 18 }}>p<span className="ee" style={{ color: "var(--butter-deep)" }}>ee</span>q</div>
         <div className="ph-display" style={{ fontSize: 26, color: "var(--ink)", marginBottom: 6 }}>set up your shop</div>
         <p style={{ fontSize: 13.5, color: "var(--stone)", lineHeight: 1.6, margin: "0 0 20px" }}>
-          Your shop name becomes your kiosk and storefront link. We review every new
-          vendor and will give you a call to confirm before your shop goes live.
+          We&apos;ll call before going live.
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -96,8 +95,8 @@ export default function Onboarding({ shop, onComplete }: {
             </select>
             <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--stone)", marginTop: 6, display: "block", lineHeight: 1.5 }}>
               {typeForCategory(category) === "apparel"
-                ? "You'll get the catalog, kiosk and AI try-on."
-                : "You'll get the catalog, kiosk and QR tags. AI try-on only works on worn clothing, so it isn't part of this plan."}
+                ? "Catalog, kiosk, AI try-on."
+                : "Catalog, kiosk, QR tags."}
             </span>
           </label>
 
@@ -108,12 +107,12 @@ export default function Onboarding({ shop, onComplete }: {
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
             {errors.whatsapp && <span style={{ ...fieldErrorStyle, fontWeight: 400, letterSpacing: 0, textTransform: "none", marginTop: 4, display: "block" }}>{errors.whatsapp}</span>}
             <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--stone)", marginTop: 4, display: "block" }}>
-              Orders arrive here, and it's the number we'll call to verify your shop.
+              Orders and verification calls here.
             </span>
           </label>
-          <div className="field">Pin your shop on the map
+          <div className="field">Pin on the map
             <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--stone)", margin: "2px 0 8px", display: "block" }}>
-              Optional — helps shoppers find you. Tap the map or use your location.
+              Optional — tap to place.
             </span>
             <LocationPicker lat={pin.lat} lng={pin.lng} onChange={(lat, lng) => setPin({ lat, lng })} />
           </div>
@@ -129,12 +128,7 @@ export default function Onboarding({ shop, onComplete }: {
           <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", fontSize: 13.5, color: "var(--ink)", lineHeight: 1.5 }}>
             <input type="checkbox" checked={listed} style={{ marginTop: 3, accentColor: "var(--ink)" }}
               onChange={(e) => setListed(e.target.checked)} />
-            <span>
-              Show my shop on the peeq landing page
-              <span style={{ display: "block", fontSize: 12, color: "var(--stone)" }}>
-                Shoppers can find and browse your storefront and kiosk.
-              </span>
-            </span>
+            <span>Show my shop on peeq</span>
           </label>
 
           {error && <div style={{ fontSize: 13, color: "var(--danger)" }}>{error}</div>}

@@ -14,12 +14,12 @@ import { readFabricColors, type ColorReading } from "@/lib/color-detect";
 import { OverviewTab, LeadsTab, garmentTryCounts, groupLeads } from "@/components/Analytics";
 import LocationPicker from "@/components/LocationPicker";
 import PlanTab from "@/components/PlanTab";
-import FabricStudio, { CutModal } from "@/components/FabricStudio";
+import FabricStudio, { CutPage } from "@/components/FabricStudio";
 import ProShot from "@/components/ProShot";
 import CounterTryOn from "@/components/CounterTryOn";
 import Icon from "@/components/Icon";
 import AccountMenu from "@/components/AccountMenu";
-import Dialog, { confirmAsync } from "@/components/Dialog";
+import { confirmAsync } from "@/components/Dialog";
 import { toastErr, toastWarn } from "@/lib/toast";
 import { COVERAGES } from "@/lib/types";
 import type { Composition, CounterInput, CounterRun, Fabric, FabricColor, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
@@ -39,6 +39,43 @@ type Tab = "overview" | "leads" | "catalog" | "fabrics" | "settings" | "plan";
 const PAGES = { plan: "Plan & billing", settings: "Shop settings" } as const;
 type Page = keyof typeof PAGES;
 const isPage = (t: string | null): t is Page => t === "plan" || t === "settings";
+
+/* ── every former modal is a page now ──
+   One header for all of them, the shape Plan & billing established: a back
+   button, then the trail — "catalog / edit garment" — with every segment
+   before the last a way back up. No "dashboard" root: back and the wordmark
+   already cover it. The last segment is the page saying its own name, so
+   pages don't repeat it as a heading inside their panel. */
+type Crumb = { label: string; go?: () => void };
+
+function PageHeader({ crumbs, sub, onBack }: { crumbs: Crumb[]; sub?: string; onBack: () => void }) {
+  const last = crumbs[crumbs.length - 1];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "-4px 0 2px", flexWrap: "wrap" }}>
+      <button className="ph-btn" onClick={onBack}
+        style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
+        <Icon name="back" /> back
+      </button>
+      <nav aria-label="Breadcrumb" style={{ minWidth: 0 }}>
+        <ol style={{ listStyle: "none", display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 7, margin: 0, padding: 0 }}>
+          {crumbs.slice(0, -1).map((c, i) => (
+            <li key={i} style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
+              <button className="ph-btn" onClick={c.go}
+                style={{ fontSize: 13, fontWeight: 600, color: "var(--stone)", padding: "2px 1px" }}>
+                {c.label}
+              </button>
+              <span aria-hidden style={{ color: "var(--stone)", fontSize: 13, opacity: 0.6 }}>/</span>
+            </li>
+          ))}
+          <li aria-current="page" className="ph-display" style={{ fontSize: 20, color: "var(--ink)" }}>
+            {last.label}
+          </li>
+        </ol>
+      </nav>
+      {sub && <span style={{ color: "var(--stone)", fontSize: 13 }}>{sub}</span>}
+    </div>
+  );
+}
 
 /* One row of actions on every catalog card. 11px text in 4×5px padding gave
    a ~20×24px target on a surface the marketing tells vendors to run from a
@@ -210,19 +247,47 @@ export default function Dashboard({
     ...(shop.type === "apparel" ? [{ key: "fabrics" as Tab, label: "Fabrics" }] : []),
   ];
 
+  /* A page holding a half-typed form registers a guard here, and every way
+     off it — back, a crumb, a tab, the wordmark, the counter button — runs
+     through `guarded` first. This is the job the Dialog's `dirty` prop used
+     to do on backdrop-click: a stray tap must not silently bin typed work. */
+  const leaveGuard = useRef<(() => Promise<boolean>) | null>(null);
+  const setLeaveGuard = (fn: (() => Promise<boolean>) | null) => { leaveGuard.current = fn; };
+  const guarded = async (go: () => void) => {
+    if (leaveGuard.current && !(await leaveGuard.current())) return;
+    leaveGuard.current = null;
+    go();
+  };
+
+  /* Where the scroll was when a page opened, so closing it lands the vendor
+     back on the card they were reading — the one thing an overlay gave for
+     free that a page has to do by hand. */
+  const savedScroll = useRef(0);
+  const openView = (open: () => void) => { savedScroll.current = window.scrollY; open(); };
+
+  const closePages = () => {
+    setShowForm(false); setEditing(null);
+    setShowFabricForm(false); setEditingFabric(null);
+    setStudioFabricId(null); setPhotoFix(null); setCutForm(null);
+    setQrGarment(null); setShowTagSheet(false); setShowCounter(false);
+  };
+
   /* Plan and Shop settings are addressable; the bar tabs are view state. So
      opening a page writes ?tab=, and going back to the bar clears it —
      otherwise a vendor who read the plans, carried on into the catalog and
      reloaded would land back on the plans. */
-  const openPage = (p: Page) => {
+  const openPage = (p: Page) => guarded(() => {
     if (!isPage(tab)) setReturnTab(tab);
+    savedScroll.current = window.scrollY;
+    closePages();
     setTab(p);
     router.replace("/dashboard?tab=" + p, { scroll: false });
-  };
-  const goTab = (t: Tab) => {
+  });
+  const goTab = (t: Tab) => guarded(() => {
+    closePages();
     setTab(t);
     if (urlTab) router.replace("/dashboard", { scroll: false });
-  };
+  });
 
   /* The catalog- and fabric-limit toasts have always pushed /dashboard?tab=plan
      to send a vendor to the plans. Nothing read it: the tab was local state and
@@ -240,6 +305,93 @@ export default function Dashboard({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlCounter]);
+
+  /* Which page is on screen, deepest first: a photo fix sits on top of the
+     studio, a cut form on top of wherever it was opened from. A page renders
+     in place of the tab content, under the same header and tab bar — the
+     shape Plan & billing already had. */
+  type View = "photoFix" | "cut" | "studio" | "garment" | "fabricForm" | "qr" | "tags" | "counter" | Page;
+  const page: View | null =
+    photoFix && photoFixFabric ? "photoFix"
+    : cutForm ? "cut"
+    : studioFabric ? "studio"
+    : showForm || editing ? "garment"
+    : showFabricForm || editingFabric ? "fabricForm"
+    : qrGarment ? "qr"
+    : showTagSheet ? "tags"
+    : showCounter ? "counter"
+    : isPage(tab) ? tab
+    : null;
+
+  /* Opening a page starts it at the top; closing one puts the scroll back
+     where the vendor left the list. Only on transitions — never on mount, so
+     a reload keeps whatever position the browser restored. */
+  const prevPage = useRef<View | null>(null);
+  useEffect(() => {
+    if (page === prevPage.current) return;
+    const wasOpen = prevPage.current !== null;
+    prevPage.current = page;
+    if (page) window.scrollTo(0, 0);
+    else if (wasOpen) window.scrollTo(0, savedScroll.current);
+  }, [page]);
+
+  /* The trail above each page. Every segment before the last is a way back
+     up; "back" is the same move as tapping the second-to-last crumb. */
+  const backToStudio = () => {
+    if (photoFix) { setStudioFabricId(photoFix.fabricId); setPhotoFix(null); }
+  };
+  const crumbs: Crumb[] = [];
+  let onBack: () => void = () => goTab(returnTab);
+  if (page) {
+    const catalogCrumb: Crumb = { label: "catalog", go: () => goTab("catalog") };
+    const fabricsCrumb: Crumb = { label: "fabrics", go: () => goTab("fabrics") };
+    switch (page) {
+      case "garment":
+        crumbs.push(catalogCrumb, { label: editing ? "edit garment" : "add a garment" });
+        onBack = () => guarded(() => { setShowForm(false); setEditing(null); });
+        break;
+      case "fabricForm":
+        crumbs.push(fabricsCrumb, { label: editingFabric ? "edit fabric" : "add a fabric" });
+        onBack = () => guarded(() => { setShowFabricForm(false); setEditingFabric(null); });
+        break;
+      case "photoFix":
+        crumbs.push(fabricsCrumb,
+          { label: photoFixFabric!.name.toLowerCase() + " cuts", go: () => guarded(backToStudio) },
+          { label: "fix the photo" });
+        onBack = () => guarded(backToStudio);
+        break;
+      case "studio":
+        crumbs.push(fabricsCrumb, { label: studioFabric!.name.toLowerCase() + " cuts" });
+        onBack = () => guarded(() => setStudioFabricId(null));
+        break;
+      case "cut":
+        crumbs.push(fabricsCrumb);
+        if (studioFabric) {
+          crumbs.push({ label: studioFabric.name.toLowerCase() + " cuts", go: () => guarded(() => setCutForm(null)) });
+        }
+        crumbs.push({
+          label: cutForm!.mode === "edit" ? "change this cut"
+            : cutForm!.mode === "copy" ? "make it your own" : "add your own cut",
+        });
+        onBack = () => guarded(() => setCutForm(null));
+        break;
+      case "qr":
+        crumbs.push(catalogCrumb, { label: "try-on qr" });
+        onBack = () => guarded(() => setQrGarment(null));
+        break;
+      case "tags":
+        crumbs.push(catalogCrumb, { label: "print qr tags" });
+        onBack = () => guarded(() => setShowTagSheet(false));
+        break;
+      case "counter":
+        crumbs.push({ label: "at the counter" });
+        onBack = () => guarded(() => setShowCounter(false));
+        break;
+      default:
+        crumbs.push({ label: PAGES[page].toLowerCase() });
+        onBack = () => goTab(returnTab);
+    }
+  }
 
   return (
     <div id="main" style={{ maxWidth: 1080, margin: "0 auto", padding: "0 min(26px, 4vw) 50px" }}>
@@ -274,7 +426,8 @@ export default function Dashboard({
               slot for a flow that starts from zero every time. It belongs
               beside "launch kiosk": the other button that starts something. */}
           {shop.type === "apparel" && (
-            <button className="ph-btn" onClick={() => setShowCounter(true)}
+            <button className="ph-btn"
+              onClick={() => guarded(() => { savedScroll.current = window.scrollY; closePages(); setShowCounter(true); })}
               style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "9px 16px" }}>
               <Icon name="scissors" /> counter
             </button>
@@ -284,14 +437,14 @@ export default function Dashboard({
           {shop.type === "apparel" && (
             <button
               className="ph-btn btn-solid"
-              onClick={() => {
+              onClick={() => guarded(() => {
                 if (catalog.length === 0) {
                   toastWarn("Add at least one garment first — the kiosk needs something to show shoppers.");
                   goTab("catalog");
                   return;
                 }
                 launchKiosk();
-              }}>launch kiosk</button>
+              })}>launch kiosk</button>
           )}
           {/* Sign out lived here as 12px grey text immediately left of the
               primary CTA. It is an account action, so it belongs in the
@@ -316,28 +469,119 @@ export default function Dashboard({
       {/* tabs */}
       <div className="tabs">
         {TABS.map((t) => (
-          <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => goTab(t.key)}>
+          <button key={t.key} className={!page && tab === t.key ? "on" : ""} onClick={() => goTab(t.key)}>
             {t.label}
             {t.badge ? <span className="badge">{t.badge}</span> : null}
           </button>
         ))}
       </div>
 
-      {/* On a page, no tab in the bar is lit — so the page says its own name
-          and offers the way back to the tab the vendor left. Tapping any tab
-          works too; this is just the one that doesn't ask them to choose. */}
-      {isPage(tab) && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "-4px 0 2px", flexWrap: "wrap" }}>
-          <button className="ph-btn" onClick={() => goTab(returnTab)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
-            <Icon name="back" /> back
-          </button>
-          <span className="ph-display" style={{ fontSize: 20, color: "var(--ink)" }}>{PAGES[tab].toLowerCase()}</span>
-        </div>
-      )}
-
       {loading ? (
         <div style={{ color: "var(--stone)", padding: 40, textAlign: "center" }}>Loading your shop…</div>
+      ) : page ? (
+        /* ── a page: breadcrumbs above the panel that used to be a modal.
+           No tab in the bar is lit — the trail says where the vendor is and
+           every earlier segment is a way back up. Deepest state renders,
+           in the same order the `page` derivation uses. ── */
+        <div className="fade-up">
+          <PageHeader crumbs={crumbs} onBack={onBack}
+            sub={page === "counter" ? "one cloth, one customer, right now" : undefined} />
+          {photoFix && photoFixFabric ? (
+            <FabricPage
+              initial={photoFixFabric}
+              photoIntent={photoFix.mode}
+              setLeaveGuard={setLeaveGuard}
+              onClose={backToStudio}
+              onSave={(f) => {
+                editFabric({ ...photoFixFabric, ...f });
+                setStudioFabricId(photoFix.fabricId);
+                setPhotoFix(null);
+              }}
+            />
+          ) : cutForm ? (
+            <CutPage
+              family={cutForm.style?.family ?? studioFabric?.family ?? FAMILIES[0].id}
+              pickFamily={cutForm.mode === "new" && !studioFabric}
+              mode={cutForm.mode}
+              initial={cutForm.style}
+              setLeaveGuard={setLeaveGuard}
+              onClose={() => setCutForm(null)}
+              onSave={async (s) => {
+                /* A copy saves as a new shop cut — the library one every other
+                   shop sees stays untouched. */
+                if (cutForm.mode === "edit" && cutForm.style) {
+                  await updateStyle({ ...cutForm.style, ...s });
+                } else {
+                  await createStyle(s);
+                }
+                setCutForm(null);
+              }}
+            />
+          ) : studioFabric ? (
+            <FabricStudio
+              fabric={studioFabric}
+              styles={styles}
+              compositions={compositions.filter((c) => c.fabricId === studioFabric.id)}
+              onCompose={(styleIds) => composeFabric(studioFabric.id, styleIds)}
+              onEditCut={setCutForm}
+              onPublish={publishComposition}
+              onPrice={priceComposition}
+              onNote={noteComposition}
+              onCorrect={correctComposition}
+              onFixColor={fixFabricColor}
+              onRephoto={(mode) => {
+                setPhotoFix({ fabricId: studioFabric.id, mode });
+                setStudioFabricId(null);
+              }}
+              composing={composing}
+              onRemove={removeComposition}
+            />
+          ) : showForm || editing ? (
+            <GarmentPage
+              initial={editing ?? undefined}
+              setLeaveGuard={setLeaveGuard}
+              onClose={() => { setShowForm(false); setEditing(null); }}
+              onSave={(g) => {
+                if (editing) editGarment({ ...editing, ...g }); else addGarment(g);
+                setShowForm(false); setEditing(null);
+              }}
+              onRemove={editing ? () => { removeGarment(editing.id); setEditing(null); } : undefined}
+            />
+          ) : showFabricForm || editingFabric ? (
+            <FabricPage
+              initial={editingFabric ?? undefined}
+              setLeaveGuard={setLeaveGuard}
+              onClose={() => { setShowFabricForm(false); setEditingFabric(null); }}
+              onSave={(f) => {
+                if (editingFabric) editFabric({ ...editingFabric, ...f }); else addFabric(f);
+                setShowFabricForm(false); setEditingFabric(null);
+              }}
+              onRemove={editingFabric ? () => { removeFabric(editingFabric.id); setEditingFabric(null); } : undefined}
+            />
+          ) : qrGarment ? (
+            <QrPage
+              garment={qrGarment}
+              url={origin + kioskPath + "?g=" + encodeURIComponent(qrGarment.id)}
+              crossDevice={Boolean(shop.slug)}
+            />
+          ) : showTagSheet ? (
+            <TagSheetPage
+              catalog={catalog}
+              urlFor={(g) => origin + kioskPath + "?g=" + encodeURIComponent(g.id)}
+            />
+          ) : showCounter ? (
+            <div style={{ marginTop: 16 }}>
+              <CounterTryOn onRun={runCounter} onKeep={keepCounterRun} enabled={counterEnabled}
+                styles={styles} fabrics={fabrics} onAddGarment={addGarment} />
+            </div>
+          ) : tab === "plan" ? (
+            <PlanTab shop={shop} />
+          ) : (
+            <SettingsTab shop={shop} updateShop={updateShop} changeSlug={changeSlug}
+              kioskUrl={origin + kioskPath}
+              storeUrl={shop.slug ? origin + "/s/" + shop.slug : null} />
+          )}
+        </div>
       ) : (
         <>
           {tab === "overview" && (
@@ -359,7 +603,7 @@ export default function Dashboard({
               {openLeads > 0 && (
                 <button className="ph-btn" onClick={() => goTab("leads")}
                   style={{ width: "100%", textAlign: "left", background: "var(--warn-bg)", border: "1px solid var(--warn)", borderRadius: "var(--radius-card)", padding: "12px 16px", marginBottom: 14, fontSize: 13.5, color: "var(--ink)" }}>
-                  <b style={{ color: "var(--warn)" }}>{openLeads} order{openLeads !== 1 ? "s" : ""} to call back</b> — tap to view
+                  <b style={{ color: "var(--warn)" }}>{openLeads} order{openLeads !== 1 ? "s" : ""} to call back</b>
                 </button>
               )}
               <OverviewTab events={events} catalog={catalog} />
@@ -395,18 +639,18 @@ export default function Dashboard({
                   </select>
                   {catalog.length > 0 && (
                     <button className="ph-btn cat-qr" style={{ padding: "10px 18px", fontSize: 12, fontWeight: 600, border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", color: "var(--ink)", background: "var(--card)" }}
-                      onClick={() => setShowTagSheet(true)}>
+                      onClick={() => openView(() => setShowTagSheet(true))}>
                       <Icon name="print" /> qr tags
                     </button>
                   )}
-                  <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => setShowForm(true)}>
+                  <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => openView(() => setShowForm(true))}>
                     + add garment
                   </button>
                 </div>
               </div>
 
               {filtered.length === 0 ? (
-                <EmptyState onAdd={() => setShowForm(true)} anyItems={catalog.length > 0} />
+                <EmptyState onAdd={() => openView(() => setShowForm(true))} anyItems={catalog.length > 0} />
               ) : (
                 <div className="card-grid">
                   {filtered.map((g) => {
@@ -423,7 +667,7 @@ export default function Dashboard({
                               two lines below it — while the same gesture on the
                               Fabrics tab opened the studio. Same gesture, two
                               answers, neither of them the obvious one. */}
-                          <button onClick={() => setEditing(g)} title={"Edit " + g.name}
+                          <button onClick={() => openView(() => setEditing(g))} title={"Edit " + g.name}
                             style={{ display: "block", width: "100%", height: "100%", padding: 0, border: "none", background: "none", cursor: "pointer" }}>
                             <img src={g.image} alt={g.name} className={"img-blend" + (g.inStock ? "" : " oos-img")} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                           </button>
@@ -461,10 +705,10 @@ export default function Dashboard({
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 6, flexWrap: "wrap" }}>
                             <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: 14.5 }}>{npr(g.price)}</span>
                             <span style={{ display: "flex", gap: 2 }}>
-                              <button className="ph-btn" onClick={() => setEditing(g)} style={cardAction}>
+                              <button className="ph-btn" onClick={() => openView(() => setEditing(g))} style={cardAction}>
                                 Edit
                               </button>
-                              <button className="ph-btn" title={"QR code for " + g.name} onClick={() => setQrGarment(g)} style={cardAction}>
+                              <button className="ph-btn" title={"QR code for " + g.name} onClick={() => openView(() => setQrGarment(g))} style={cardAction}>
                                 QR
                               </button>
                               {/* Labelled with the ACTION, not the state. A
@@ -521,12 +765,12 @@ export default function Dashboard({
                     {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
                   </select>
                   {fabricView === "bolts" ? (
-                    <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => setShowFabricForm(true)}>
+                    <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }} onClick={() => openView(() => setShowFabricForm(true))}>
                       + add fabric
                     </button>
                   ) : (
                     <button className="ph-btn btn-solid cat-add" style={{ padding: "11px 20px", fontSize: 12 }}
-                      onClick={() => setCutForm({ mode: "new" })}>
+                      onClick={() => openView(() => setCutForm({ mode: "new" }))}>
                       + add your own cut
                     </button>
                   )}
@@ -539,18 +783,17 @@ export default function Dashboard({
                     {fabrics.length > 0 ? "No fabrics in that family." : "No fabrics yet."}
                   </div>
                   <div style={{ fontSize: 12.5, marginBottom: 18, lineHeight: 1.6 }}>
-                    Photograph each bolt flat and well-lit — the weave and colour are what
-                    the stitched preview is built from.
+                    Flat, well-lit photos work best.
                   </div>
                   <button className="ph-btn btn-solid" style={{ padding: "11px 22px", fontSize: 12 }}
-                    onClick={() => setShowFabricForm(true)}>+ add fabric</button>
+                    onClick={() => openView(() => setShowFabricForm(true))}>+ add fabric</button>
                 </div>
               ) : (
                 <div className="card-grid">
                   {visibleFabrics.map((f) => (
                     <div key={f.id} className="fade-up" style={{ background: "var(--card)", borderRadius: "var(--radius-card)", overflow: "hidden", border: "1px solid var(--line)" }}>
                       <div style={{ aspectRatio: "4/3", position: "relative", background: "var(--paper-deep)" }}>
-                        <button onClick={() => setEditingFabric(f)} title={"Edit " + f.name}
+                        <button onClick={() => openView(() => setEditingFabric(f))} title={"Edit " + f.name}
                           style={{ display: "block", width: "100%", height: "100%", padding: 0, border: "none", background: "none", cursor: "pointer" }}>
                           <img src={f.image} alt={f.name} className={"img-blend" + (f.inStock ? "" : " oos-img")} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                         </button>
@@ -581,10 +824,10 @@ export default function Dashboard({
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 6, flexWrap: "wrap" }}>
                           <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: 13.5 }}>{fabricPrice(f.price, f.unit)}</span>
                           <span style={{ display: "flex", gap: 2 }}>
-                            <button className="ph-btn" onClick={() => setStudioFabricId(f.id)} style={{ ...cardAction, fontWeight: 700 }}>
+                            <button className="ph-btn" onClick={() => openView(() => setStudioFabricId(f.id))} style={{ ...cardAction, fontWeight: 700 }}>
                               Cuts
                             </button>
-                            <button className="ph-btn" onClick={() => setEditingFabric(f)} style={cardAction}>
+                            <button className="ph-btn" onClick={() => openView(() => setEditingFabric(f))} style={cardAction}>
                               Edit
                             </button>
                             <button className="ph-btn" onClick={() => toggleFabricStock(f.id)}
@@ -604,16 +847,14 @@ export default function Dashboard({
               {fabricView === "cuts" && (
                 <>
                   <div style={{ fontSize: 12.5, color: "var(--stone)", margin: "-2px 0 18px", lineHeight: 1.65 }}>
-                    Every cut a cloth can be stitched into. Library cuts come with peeq and are
-                    shared by every shop; cuts marked yours belong to your shop alone, and only
-                    you can change them.
+                    Library cuts, plus your own.
                   </div>
 
                   {visibleCuts.length === 0 ? (
                     <div style={{ textAlign: "center", padding: "54px 20px", color: "var(--stone)" }}>
                       <div style={{ fontSize: 14, marginBottom: 18 }}>No cuts in that family yet.</div>
                       <button className="ph-btn btn-solid" style={{ padding: "11px 22px", fontSize: 12 }}
-                        onClick={() => setCutForm({ mode: "new" })}>+ add your own cut</button>
+                        onClick={() => openView(() => setCutForm({ mode: "new" }))}>+ add your own cut</button>
                     </div>
                   ) : (
                     FAMILIES.filter((f) => familyFilter === "All" || f.id === familyFilter).map((f) => {
@@ -624,7 +865,7 @@ export default function Dashboard({
                          leaves the text cards mostly white space. */
                       const withImage = familyCuts.filter((c) => c.refImage);
                       const textOnly = familyCuts.filter((c) => !c.refImage);
-                      const edit = (c: Style) => setCutForm({ mode: c.shopId ? "edit" : "copy", style: c });
+                      const edit = (c: Style) => openView(() => setCutForm({ mode: c.shopId ? "edit" : "copy", style: c }));
                       return (
                         <div key={f.id} style={{ marginBottom: 30 }}>
                           <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: 10 }}>
@@ -650,137 +891,9 @@ export default function Dashboard({
             </div>
           )}
 
-          {tab === "plan" && (
-            <div className="fade-up">
-              <PlanTab shop={shop} />
-            </div>
-          )}
-
-          {tab === "settings" && (
-            <div className="fade-up">
-              <SettingsTab shop={shop} updateShop={updateShop} changeSlug={changeSlug}
-                kioskUrl={origin + kioskPath}
-                storeUrl={shop.slug ? origin + "/s/" + shop.slug : null} />
-            </div>
-          )}
         </>
       )}
 
-      {showForm && <GarmentModal onClose={() => setShowForm(false)} onSave={(g) => { addGarment(g); setShowForm(false); }} />}
-      {editing && (
-        <GarmentModal
-          initial={editing}
-          onClose={() => setEditing(null)}
-          onSave={(g) => { editGarment({ ...editing, ...g }); setEditing(null); }}
-          onRemove={() => { removeGarment(editing.id); setEditing(null); }}
-        />
-      )}
-      {showFabricForm && (
-        <FabricModal onClose={() => setShowFabricForm(false)}
-          onSave={(f) => { addFabric(f); setShowFabricForm(false); }} />
-      )}
-      {editingFabric && (
-        <FabricModal
-          initial={editingFabric}
-          onClose={() => setEditingFabric(null)}
-          onSave={(f) => { editFabric({ ...editingFabric, ...f }); setEditingFabric(null); }}
-          onRemove={() => { removeFabric(editingFabric.id); setEditingFabric(null); }}
-        />
-      )}
-      {studioFabric && (
-        <FabricStudio
-          fabric={studioFabric}
-          styles={styles}
-          compositions={compositions.filter((c) => c.fabricId === studioFabric.id)}
-          onClose={() => setStudioFabricId(null)}
-          onCompose={(styleIds) => composeFabric(studioFabric.id, styleIds)}
-          onCreateStyle={createStyle}
-          onUpdateStyle={updateStyle}
-          onPublish={publishComposition}
-          onPrice={priceComposition}
-          onNote={noteComposition}
-          onCorrect={correctComposition}
-          onFixColor={fixFabricColor}
-          onRephoto={(mode) => {
-            setPhotoFix({ fabricId: studioFabric.id, mode });
-            setStudioFabricId(null);
-          }}
-          composing={composing}
-          onRemove={removeComposition}
-        />
-      )}
-      {photoFix && photoFixFabric && (
-        <FabricModal
-          initial={photoFixFabric}
-          photoIntent={photoFix.mode}
-          onClose={() => { setStudioFabricId(photoFix.fabricId); setPhotoFix(null); }}
-          onSave={(f) => {
-            editFabric({ ...photoFixFabric, ...f });
-            setStudioFabricId(photoFix.fabricId);
-            setPhotoFix(null);
-          }}
-        />
-      )}
-      {cutForm && (
-        <CutModal
-          family={cutForm.style?.family ?? FAMILIES[0].id}
-          pickFamily={cutForm.mode === "new"}
-          mode={cutForm.mode}
-          initial={cutForm.style}
-          onClose={() => setCutForm(null)}
-          onSave={async (s) => {
-            /* A copy saves as a new shop cut — the library one every other
-               shop sees stays untouched. */
-            if (cutForm.mode === "edit" && cutForm.style) {
-              await updateStyle({ ...cutForm.style, ...s });
-            } else {
-              await createStyle(s);
-            }
-            setCutForm(null);
-          }}
-        />
-      )}
-      {/* Full-screen rather than a centred modal: the counter is three photo
-          uploads and a fitting to study, which is a screen's worth of work —
-          and it keeps the room it had as a tab. closeOnBackdrop is off because
-          by step three there are three uploaded photographs in here, and a
-          stray tap on the edge would bin all of them. */}
-      {showCounter && (
-        <Dialog variant="full" hideHeader closeOnBackdrop={false}
-          ariaLabel="At the counter" onClose={() => setShowCounter(false)}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "14px min(26px, 4vw)", background: "var(--card)", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
-            <div>
-              <span className="ph-display" style={{ fontSize: 20, color: "var(--ink)" }}>at the counter</span>
-              <span style={{ fontSize: 12, color: "var(--stone)", marginLeft: 10 }}>one cloth, one customer, right now</span>
-            </div>
-            <button className="ph-btn" onClick={() => setShowCounter(false)}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
-              <Icon name="close" /> close
-            </button>
-          </div>
-          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px min(26px, 4vw) 44px" }}>
-            <div style={{ maxWidth: 1080, margin: "0 auto" }}>
-              <CounterTryOn onRun={runCounter} onKeep={keepCounterRun} enabled={counterEnabled}
-                styles={styles} fabrics={fabrics} onAddGarment={addGarment} />
-            </div>
-          </div>
-        </Dialog>
-      )}
-      {showTagSheet && (
-        <TagSheetModal
-          catalog={catalog}
-          urlFor={(g) => origin + kioskPath + "?g=" + encodeURIComponent(g.id)}
-          onClose={() => setShowTagSheet(false)}
-        />
-      )}
-      {qrGarment && (
-        <QRModal
-          garment={qrGarment}
-          url={origin + kioskPath + "?g=" + encodeURIComponent(qrGarment.id)}
-          crossDevice={Boolean(shop.slug)}
-          onClose={() => setQrGarment(null)}
-        />
-      )}
     </div>
   );
 }
@@ -906,9 +1019,9 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
             showed the same control under two different names, so a vendor who
             skipped it during setup had to work out that this was the thing
             they skipped. */}
-        <div className="field">Pin your shop on the map
+        <div className="field">Pin on the map
           <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--stone)", margin: "2px 0 8px", display: "block" }}>
-            Optional — shoppers see this pin on the peeq map and your storefront. Tap the map or drag the dot.
+            Optional — tap to place.
           </span>
           <LocationPicker lat={pin.lat} lng={pin.lng} onChange={(lat, lng) => { setPin({ lat, lng }); setSaved(false); }} />
         </div>
@@ -931,7 +1044,7 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
             <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
               <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 20, letterSpacing: ".1em", color: "var(--ink)" }}>{shop.vendorCode}</span>
               <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--stone)" }}>
-                Every item you add is numbered {shop.vendorCode}-0001, {shop.vendorCode}-0002, and so on. This code is fixed — unlike your kiosk link, it can never change, so printed tags stay valid forever.
+                Numbers every item you add.
               </span>
             </div>
           </div>
@@ -939,12 +1052,7 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
         <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", fontSize: 13.5, color: "var(--ink)", lineHeight: 1.5 }}>
           <input type="checkbox" checked={listed} style={{ marginTop: 3, accentColor: "var(--ink)" }}
             onChange={(e) => { setListed(e.target.checked); setSaved(false); }} />
-          <span>
-            Show my shop on the peeq landing page
-            <span style={{ display: "block", fontSize: 12, color: "var(--stone)" }}>
-              Shoppers can find and browse your storefront and kiosk.
-            </span>
-          </span>
+          <span>Show my shop on peeq</span>
         </label>
         <button className="ph-btn btn-solid" disabled={!dirty}
           onClick={() => { updateShop({ ...shop, name, area, whatsapp, listed, lat: pin.lat, lng: pin.lng }); setSaved(true); }}
@@ -1016,7 +1124,7 @@ function SlugEditor({ slug, changeSlug }: { slug: string; changeSlug: (slug: str
           style={{ color: "var(--stone)", padding: "10px 8px", fontSize: 11, letterSpacing: ".1em" }}>cancel</button>
       </div>
       <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: error ? "var(--danger)" : "var(--stone)" }}>
-        {error || "Lowercase letters, numbers and dashes. Changing this breaks QR codes you've already printed."}
+        {error || "Changing this breaks printed QRs."}
       </span>
     </div>
   );
@@ -1029,18 +1137,20 @@ function EmptyState({ onAdd, anyItems }: { onAdd: () => void; anyItems: boolean 
         {anyItems ? "Nothing in this category yet" : "No garments yet"}
       </div>
       <p style={{ color: "var(--stone)", maxWidth: 420, margin: "0 auto 20px", fontSize: 14, lineHeight: 1.6 }}>
-        Photograph each garment flat or on a mannequin against a plain wall, then add it here. Clean photos give the best try-on results.
+        Clean photos, plain background.
       </p>
       <button className="ph-btn btn-solid" onClick={onAdd}>+ add your first garment</button>
     </div>
   );
 }
 
-function GarmentModal({ initial, onClose, onSave, onRemove }: {
+function GarmentPage({ initial, onClose, onSave, onRemove, setLeaveGuard }: {
   initial?: Garment;
   onClose: () => void;
   onSave: (g: Omit<Garment, "id" | "itemCode">) => void;
   onRemove?: () => void;
+  /** Registers the dirty check every way off this page runs through. */
+  setLeaveGuard: (fn: (() => Promise<boolean>) | null) => void;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [category, setCategory] = useState<string>(initial?.category ?? CATEGORIES[0]);
@@ -1081,27 +1191,42 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
       || image !== initial.image || sizes.join() !== initial.sizes.join()
     : Boolean(name.trim() || image || price || sizes.length);
 
-  return (
-    <Dialog onClose={onClose} title={initial ? "edit garment" : "add a garment"} hideHeader
-      width={400} dirty={dirty}
-      dirtyMessage="This garment isn't saved yet. Discard what you've filled in?"
-      panelStyle={{ padding: "28px 26px" }}>
-      <div className="ph-display" style={{ fontSize: 24, color: "var(--ink)", marginBottom: 18 }}>
-        {initial ? "edit garment" : "add a garment"}
-      </div>
+  /* Back, a crumb, a tab — every way off this page runs through this before
+     the form unmounts. The same question the Dialog used to ask on a
+     backdrop-click; a ref so the guard registered once always reads the
+     current answer. */
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+  useEffect(() => {
+    setLeaveGuard(async () => !dirtyRef.current || confirmAsync({
+      title: "Discard changes?",
+      body: "This garment isn't saved yet. Discard what you've filled in?",
+      confirmLabel: "Discard", cancelLabel: "Keep editing", destructive: true,
+    }));
+    return () => setLeaveGuard(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  return (
+    /* Page-width now: the photo gets a real column instead of a 190px strip
+       at the top of a 400px modal, with the fields beside it. */
+    <div className="panel" style={{ padding: "28px 26px" }}>
+      <div className="page-split">
+      <div>
       {/* a button, not a div: this is the field the whole form depends on */}
       <button type="button" onClick={() => fileRef.current?.click()}
         aria-label={image ? "Change the garment photo" : "Upload a garment photo"}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
-        style={{ width: "100%", border: "1.5px dashed " + (image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-lg)", height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
+        style={{ width: "100%", border: "1.5px dashed " + (image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-lg)", height: "clamp(280px, 45vw, 460px)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
         {busy ? <span>Processing photo…</span>
-          : image ? <img src={image} alt="Garment preview" style={{ height: "100%", objectFit: "contain" }} />
-          : <div style={{ padding: 12 }}>Tap to upload a garment photo<br /><span style={{ fontSize: 12 }}>Flat-lay or mannequin, plain background</span></div>}
+          : image ? <img src={image} alt="Garment preview" style={{ height: "100%", maxWidth: "100%", objectFit: "contain" }} />
+          : <div style={{ padding: 12 }}>Tap to add a photo<br /><span style={{ fontSize: 12 }}>Flat-lay, plain background</span></div>}
       </button>
       <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
+      </div>
 
+      <div>
       {/* Real labels. Every field here was placeholder-only, so the moment a
           vendor typed anything the form became six unlabelled boxes. */}
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1167,12 +1292,6 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
           {initial ? "save changes" : "save to catalog"}
         </button>
       </div>
-      {cropping && (
-        <ImageCropper src={cropping} title="Crop the photo"
-          hint="Keep the garment and leave the room out — this is the picture shoppers see, and the one try-on puts on them."
-          onCancel={() => setCropping(null)}
-          onDone={(dataUrl) => { setCropping(null); setImage(dataUrl); }} />
-      )}
       {initial && onRemove && (
         <button className="ph-btn"
           onClick={async () => {
@@ -1187,7 +1306,15 @@ function GarmentModal({ initial, onClose, onSave, onRemove }: {
           Remove from catalog
         </button>
       )}
-    </Dialog>
+      </div>
+      </div>
+      {cropping && (
+        <ImageCropper src={cropping} title="Crop the photo"
+          hint="Keep just the garment."
+          onCancel={() => setCropping(null)}
+          onDone={(dataUrl) => { setCropping(null); setImage(dataUrl); }} />
+      )}
+    </div>
   );
 }
 
@@ -1260,7 +1387,7 @@ function ColorReadout({ reading, colors, onChange, corrected, image, onRecrop }:
         Colours
         {image && (
           <button type="button" className="ph-btn" onClick={onRecrop}
-            title="Crop this photo tighter — anything but cloth in the frame is measured as cloth"
+            title="Crop tighter"
             style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3, padding: "4px 2px", minHeight: 28 }}>
             re-crop
           </button>
@@ -1273,9 +1400,9 @@ function ColorReadout({ reading, colors, onChange, corrected, image, onRecrop }:
           <span className="hint">
             {colors.length === 0
               ? reading
-                ? "We couldn't pick colours out of this photo — set them yourself, or leave them and the previews will go on the photo alone."
-                : "Read off the photo when you add one, or set them yourself now."
-              : "Tap a swatch for the wheel, and set roughly how much of the cloth each colour covers — a border is a small share, not half the garment."}
+                ? "None read — set them yourself."
+                : "Read from the photo automatically."
+              : "Tap a swatch to adjust."}
           </span>
         </>
       ) : (
@@ -1299,9 +1426,7 @@ function ColorReadout({ reading, colors, onChange, corrected, image, onRecrop }:
             </span>
           </button>
           <span className="hint">
-            {corrected
-              ? "Set by you — the previews follow these over the photo."
-              : "Measured from the photo. If the light has shifted them, correct them here against the cloth in your hands — the previews will follow your words instead."}
+            {corrected ? "Set by you." : "Measured from the photo."}
           </span>
         </>
       )}
@@ -1313,16 +1438,18 @@ function ColorReadout({ reading, colors, onChange, corrected, image, onRecrop }:
   );
 }
 
-/* ── Fabric modal ──
-   Deliberately not a GarmentModal variant. A fabric has no sizes (it's cut to
+/* ── Fabric page ──
+   Deliberately not a GarmentPage variant. A fabric has no sizes (it's cut to
    the person) and no category, but it does have a family, a unit, and a weave
    — and price without a unit is meaningless on a bolt. Sharing one component
    would mean a prop soup of mutually-exclusive fields. */
-function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
+function FabricPage({ initial, onClose, onSave, onRemove, photoIntent, setLeaveGuard }: {
   initial?: Fabric;
   onClose: () => void;
   onSave: (f: Omit<Fabric, "id" | "itemCode">) => void;
   onRemove?: () => void;
+  /** Registers the dirty check every way off this page runs through. */
+  setLeaveGuard: (fn: (() => Promise<boolean>) | null) => void;
   /** Opened from the studio because the picture is what's wrong. "crop" goes
       straight into the cropper on the photo that's already there; "replace"
       opens here with the photo called out, and the vendor taps it themselves —
@@ -1461,6 +1588,20 @@ function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
       || note !== (initial.note ?? "") || image !== initial.image
     : Boolean(name.trim() || image || price || composition || note);
 
+  /* Same shape as the garment page: the guard reads dirtiness through a ref
+     so registering once on mount is enough. */
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+  useEffect(() => {
+    setLeaveGuard(async () => !dirtyRef.current || confirmAsync({
+      title: "Discard changes?",
+      body: "This fabric isn't saved yet. Discard what you've filled in?",
+      confirmLabel: "Discard", cancelLabel: "Keep editing", destructive: true,
+    }));
+    return () => setLeaveGuard(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const save = async () => {
     setTouched(true);
     if (!canSave) return;
@@ -1498,26 +1639,17 @@ function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
   };
 
   return (
-    /* 430 rather than 400: the colour row carries a well, a list and a button
-       side by side, and at 400 the list is narrower than the words in it. */
-    <Dialog onClose={onClose} title={initial ? "edit fabric" : "add a fabric"} hideHeader
-      width={430} dirty={dirty}
-      dirtyMessage="This fabric isn't saved yet. Discard what you've filled in?"
-      panelStyle={{ padding: "28px 26px" }}>
-      <div className="ph-display" style={{ fontSize: 24, color: "var(--ink)", marginBottom: 18 }}>
-        {initial ? "edit fabric" : "add a fabric"}
-      </div>
-
+    /* Page-width: the weave photo — the single source every render and colour
+       reading works from — gets a real column, with the fields beside it. */
+    <div className="panel" style={{ padding: "28px 26px" }}>
+      <div className="page-split">
+      <div>
       {/* Sent here from the studio by a preview whose colour came out wrong.
           The picture is the thing to change, so it's said before the vendor
           reaches the form and the box below is drawn as the thing to press. */}
       {photoIntent === "replace" && (
         <div style={{ background: "var(--warn-bg)", border: "1px solid var(--warn)", borderRadius: "var(--radius-field)", padding: "11px 13px", marginBottom: 14, fontSize: 12.5, color: "var(--ink)", lineHeight: 1.6 }}>
-          Tap the picture below to shoot or upload a new one — daylight if you can, and fill the
-          frame with the weave. If the colour is what went wrong, use the pro shot with a sheet
-          of white paper: it sets the white balance from the paper instead of the phone&apos;s
-          guess. Everything else about this bolt stays as it is, and every preview made from the
-          old photo will be marked for re-stitching.
+          Tap the photo to retake.
         </div>
       )}
 
@@ -1525,10 +1657,10 @@ function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
         aria-label={image ? "Change the fabric photo" : "Upload a fabric photo"}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
-        style={{ width: "100%", border: "1.5px dashed " + (photoIntent === "replace" ? "var(--warn)" : image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-lg)", height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 8, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
+        style={{ width: "100%", border: "1.5px dashed " + (photoIntent === "replace" ? "var(--warn)" : image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-lg)", height: "clamp(260px, 38vw, 400px)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 8, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
         {busy ? <span>Processing photo…</span>
-          : image ? <img src={image} alt="Fabric preview" style={{ height: "100%", objectFit: "contain" }} />
-          : <div style={{ padding: 12 }}>Tap to upload a fabric photo<br /><span style={{ fontSize: 12 }}>Lay it flat in daylight — fill the frame with the weave</span></div>}
+          : image ? <img src={image} alt="Fabric preview" style={{ height: "100%", maxWidth: "100%", objectFit: "contain" }} />
+          : <div style={{ padding: 12 }}>Tap to add a photo<br /><span style={{ fontSize: 12 }}>Daylight, fill the frame</span></div>}
       </button>
       <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
       {/* The colour-true door, next to the ordinary one. This photo is the
@@ -1536,10 +1668,12 @@ function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
           it earns a camera of its own — the OS camera can't be told about
           white paper. */}
       <button type="button" className="ph-btn" onClick={() => setProShot(true)}
-        style={{ display: "inline-flex", alignItems: "center", gap: 7, marginBottom: 16, fontSize: 12, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "8px 13px" }}>
-        <Icon name="camera" /> pro shot — true colour, off a sheet of white paper
+        style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "8px 13px" }}>
+        <Icon name="camera" /> pro shot — true colour
       </button>
+      </div>
 
+      <div>
       {/* No inline styles on any of these: `.field input/select/textarea` in
           globals.css already gives every control on the form one padding, one
           radius and one type size. Restating them here is what let the colour
@@ -1600,11 +1734,8 @@ function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
 
             <label className="field">Anything else we should know?
               <textarea value={note} maxLength={300} onChange={(e) => setNote(e.target.value)}
-                placeholder="e.g. banarasi brocade with zari buttas — gold border on one edge only, goes on the pallu" />
-              <span className="hint">
-                Optional, but it&apos;s the part a photo can&apos;t show — the pattern, where a
-                border sits, how it drapes.
-              </span>
+                placeholder="e.g. gold border on pallu" />
+              <span className="hint">Pattern, borders, drape.</span>
             </label>
           </div>
         </details>
@@ -1624,23 +1755,6 @@ function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
           {initial ? "save changes" : "save fabric"}
         </button>
       </div>
-      {cropping && (
-        <ImageCropper src={cropping} title="Keep just the cloth"
-          hint="Drag the box onto the weave and leave the counter out. Everything inside it is what gets stitched from — and what we read the colour off."
-          confirmLabel="use this crop"
-          onCancel={() => setCropping(null)} onDone={acceptCrop} />
-      )}
-
-      {/* A pro-shot frame lands in the same cropper as an upload, so the rest
-          of the pipeline — compression, the colour reading, the staleness a
-          new photo triggers — never learns which camera it came from. */}
-      {proShot && (
-        <ProShot
-          onClose={() => setProShot(false)}
-          onCapture={(dataUrl) => { setProShot(false); setCropping(dataUrl); }}
-          onUpload={() => { setProShot(false); fileRef.current?.click(); }} />
-      )}
-
       {initial && onRemove && (
         <button className="ph-btn"
           onClick={async () => {
@@ -1655,11 +1769,29 @@ function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
           Remove fabric
         </button>
       )}
-    </Dialog>
+      </div>
+      </div>
+      {cropping && (
+        <ImageCropper src={cropping} title="Keep just the cloth"
+          hint="Leave the counter out."
+          confirmLabel="use this crop"
+          onCancel={() => setCropping(null)} onDone={acceptCrop} />
+      )}
+
+      {/* A pro-shot frame lands in the same cropper as an upload, so the rest
+          of the pipeline — compression, the colour reading, the staleness a
+          new photo triggers — never learns which camera it came from. */}
+      {proShot && (
+        <ProShot
+          onClose={() => setProShot(false)}
+          onCapture={(dataUrl) => { setProShot(false); setCropping(dataUrl); }}
+          onUpload={() => { setProShot(false); fileRef.current?.click(); }} />
+      )}
+    </div>
   );
 }
 
-function QRModal({ garment, url, crossDevice, onClose }: { garment: Garment; url: string; crossDevice: boolean; onClose: () => void }) {
+function QrPage({ garment, url, crossDevice }: { garment: Garment; url: string; crossDevice: boolean }) {
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -1679,54 +1811,58 @@ function QRModal({ garment, url, crossDevice, onClose }: { garment: Garment; url
   };
 
   return (
-    <Dialog onClose={onClose} title="try-on QR" hideHeader width={380}
-      panelStyle={{ padding: "28px 26px", textAlign: "center" }}>
-      <div className="ph-display" style={{ fontSize: 24, color: "var(--ink)", marginBottom: 4 }}>try-on QR</div>
-        <div style={{ fontSize: 14, fontWeight: 500 }}>{garment.name}</div>
-        <div style={{ fontSize: 12, color: "var(--stone)", marginBottom: 4 }}>
-          Shoppers scan this on the hanger tag and try it on their own phone.
-        </div>
-        {qr ? (
-          <img src={qr} alt={"QR code linking to try-on for " + garment.name} style={{ width: 200, height: 200, display: "block", margin: "14px auto" }} />
-        ) : (
-          <div style={{ width: 200, height: 200, margin: "14px auto", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--stone)", fontSize: 13 }}>
-            Generating…
-          </div>
-        )}
-        <div style={{ display: "flex", gap: 8, justifyContent: "center", margin: "12px 0" }}>
-          <a className="ph-btn" href={url} target="_blank" rel="noopener noreferrer"
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, color: "var(--ink)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px", textDecoration: "none" }}>
-            <Icon name="open" /> open link
-          </a>
-          <button className="ph-btn" onClick={copyLink}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, color: copied ? "var(--ink)" : "var(--ink)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
-            <Icon name={copied ? "check" : "copy"} /> {copied ? "copied" : "copy link"}
-          </button>
-        </div>
-        {!crossDevice && (
-          <div style={{ fontSize: 12.5, color: "var(--warn)", background: "var(--warn-bg)", borderRadius: "var(--radius-sm)", padding: "8px 12px", marginBottom: 12 }}>
-            Local mode: this link only works on this device until you connect Supabase and deploy.
-          </div>
-        )}
-        <div style={{ display: "flex", gap: 10 }}>
-          <button className="ph-btn" onClick={onClose}
-            style={{ flex: 1, color: "var(--ink)", padding: 13, fontSize: 13, letterSpacing: ".06em", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", fontWeight: 600 }}>close</button>
-          {qr && (
-            <a className="ph-btn" href={qr} download={"peeq-qr-" + garment.id + ".png"}
-              style={{ flex: 2, background: "var(--ink)", color: "var(--card)", padding: 13, fontSize: 13, letterSpacing: ".06em", textDecoration: "none", borderRadius: "var(--radius-btn)", fontWeight: 600, textAlign: "center" }}>download PNG</a>
+    /* Page-width: the code beside its explanation and actions, rather than
+       everything stacked into a 380px strip. flex-wrap stacks it on phones
+       without a media query. */
+    <div className="panel" style={{ padding: "28px 26px" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 32, alignItems: "flex-start" }}>
+        <div style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: 14, flexShrink: 0 }}>
+          {qr ? (
+            <img src={qr} alt={"QR code linking to try-on for " + garment.name} style={{ width: "min(280px, 70vw)", height: "auto", display: "block" }} />
+          ) : (
+            <div style={{ width: "min(280px, 70vw)", aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--stone)", fontSize: 13 }}>
+              Generating…
+            </div>
           )}
         </div>
-    </Dialog>
+        <div style={{ flex: "1 1 280px", maxWidth: 520 }}>
+          <div style={{ fontSize: 17, fontWeight: 600 }}>{garment.name}</div>
+          <div style={{ fontSize: 13, color: "var(--stone)", margin: "4px 0 16px", lineHeight: 1.6 }}>
+            Scan to try it on.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "12px 0" }}>
+            <a className="ph-btn" href={url} target="_blank" rel="noopener noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, color: "var(--ink)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px", textDecoration: "none" }}>
+              <Icon name="open" /> open link
+            </a>
+            <button className="ph-btn" onClick={copyLink}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, color: copied ? "var(--ink)" : "var(--ink)", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)", padding: "8px 14px" }}>
+              <Icon name={copied ? "check" : "copy"} /> {copied ? "copied" : "copy link"}
+            </button>
+          </div>
+          {!crossDevice && (
+            <div style={{ fontSize: 12.5, color: "var(--warn)", background: "var(--warn-bg)", borderRadius: "var(--radius-sm)", padding: "8px 12px", marginBottom: 12 }}>
+              Local mode: this link only works on this device until you connect Supabase and deploy.
+            </div>
+          )}
+          {/* "close" went with the modal — back and the crumbs are the way out
+              of a page. Download keeps the whole row. */}
+          {qr && (
+            <a className="ph-btn" href={qr} download={"peeq-qr-" + garment.id + ".png"}
+              style={{ display: "block", maxWidth: 300, background: "var(--ink)", color: "var(--card)", padding: 13, fontSize: 13, letterSpacing: ".06em", textDecoration: "none", borderRadius: "var(--radius-btn)", fontWeight: 600, textAlign: "center" }}>download PNG</a>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
 /* ---------- batch QR hanger-tag sheet: pick garments, print 4 tags per A4
    page (cut lines between). Uses a print window so the vendor saves it as a
    PDF from the system dialog — no PDF library needed. ---------- */
-function TagSheetModal({ catalog, urlFor, onClose }: {
+function TagSheetPage({ catalog, urlFor }: {
   catalog: Garment[];
   urlFor: (g: Garment) => string;
-  onClose: () => void;
 }) {
   const [checked, setChecked] = useState<Set<string>>(new Set(catalog.map((g) => g.id)));
   const [busy, setBusy] = useState(false);
@@ -1814,28 +1950,33 @@ function TagSheetModal({ catalog, urlFor, onClose }: {
   };
 
   return (
-    <Dialog onClose={onClose} title="print qr hanger tags" hideHeader width={440}
-      panelStyle={{ maxHeight: "88dvh", display: "flex", flexDirection: "column", padding: "22px 22px 18px" }}>
-      <div className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>print qr hanger tags</div>
-      <div style={{ fontSize: 13, color: "var(--stone)", margin: "4px 0 14px" }}>
-        {count} tag{count !== 1 ? "s" : ""} selected · {pages} page{pages !== 1 ? "s" : ""} of 4 — cut along the dashed lines.
-      </div>
-      <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 6, flex: 1, minHeight: 0 }}>
-        {catalog.map((g) => (
-          <label key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, cursor: "pointer", padding: "4px 2px" }}>
-            <input type="checkbox" checked={checked.has(g.id)} onChange={() => toggle(g.id)} style={{ accentColor: "var(--violet)" }} />
-            <img src={g.image} alt="" style={{ width: 30, height: 38, objectFit: "cover", borderRadius: "var(--radius-sm)" }} />
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</span>
-          </label>
-        ))}
-      </div>
-      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
-        <button className="ph-btn" onClick={onClose} style={{ color: "var(--ink)", fontSize: 13, fontWeight: 600, padding: "10px 16px", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)" }}>cancel</button>
+    /* Page-width: the pick-list is a grid of cards rather than a single
+       column squeezed into 440px — a thirty-garment catalog is a screen, not
+       a scroll. The print button sits in the header row so it never ends up
+       below the fold of a long catalog. */
+    <div className="panel" style={{ padding: "22px 24px 20px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+        <div style={{ fontSize: 13, color: "var(--stone)" }}>
+          {count} tag{count !== 1 ? "s" : ""} · {pages} page{pages !== 1 ? "s" : ""}
+        </div>
         <button className="ph-btn btn-solid" disabled={count === 0 || busy} onClick={printSheet}
           style={{ padding: "11px 24px", fontSize: 13, opacity: count === 0 || busy ? 0.5 : 1 }}>
           {busy ? "building…" : "print tag sheet"}
         </button>
       </div>
-    </Dialog>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 10 }}>
+        {catalog.map((g) => (
+          <label key={g.id} style={{
+            display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, cursor: "pointer",
+            padding: "8px 12px", border: "1px solid " + (checked.has(g.id) ? "var(--line-strong)" : "var(--line)"),
+            borderRadius: "var(--radius-md)", background: checked.has(g.id) ? "var(--paper)" : "var(--card)",
+          }}>
+            <input type="checkbox" checked={checked.has(g.id)} onChange={() => toggle(g.id)} style={{ accentColor: "var(--violet)", flexShrink: 0 }} />
+            <img src={g.image} alt="" style={{ width: 34, height: 44, objectFit: "cover", borderRadius: "var(--radius-sm)", flexShrink: 0 }} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{g.name}</span>
+          </label>
+        ))}
+      </div>
+    </div>
   );
 }

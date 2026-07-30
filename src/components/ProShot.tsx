@@ -282,17 +282,11 @@ export default function ProShot({ onCapture, onClose, onUpload }: Props) {
           <div style={{ maxWidth: 480, width: "100%", flexShrink: 0 }}>
             {!balanced ? (
               <div style={{ background: "rgba(255,255,255,.1)", borderRadius: "var(--radius-sm)", padding: "11px 14px", fontSize: 12.5, color: "rgba(255,255,255,.9)", lineHeight: 1.65 }}>
-                Hold something <b>plain white</b> — paper, a receipt, a shirt collar — flat beside
-                the cloth, in the same light, and <b>tap it on the screen</b>. Whatever the light
-                is doing, it did to that white too, so one tap sets the colour and the exposure
-                from a white we know instead of the phone&apos;s guess. Works under any lamp.
+                <b>Tap something white</b> on screen.
               </div>
             ) : unlocked ? (
               <div style={{ background: "rgba(125,223,154,.12)", border: "1px solid rgba(125,223,154,.4)", borderRadius: "var(--radius-sm)", padding: "11px 14px", fontSize: 12.5, color: "rgba(255,255,255,.92)", lineHeight: 1.65 }}>
-                Colour and exposure are set from your white — what you see is what the file
-                gets. The light reads strong and clean; under daylight or a 95+&nbsp;CRI lamp
-                like this, the manual controls below are worth using. Moved, or changed the
-                light? Tap it again.
+                Set from your white. Moved? Tap again.
               </div>
             ) : (
               /* Corrected in full even here — the frame on screen is already
@@ -301,9 +295,7 @@ export default function ProShot({ onCapture, onClose, onUpload }: Props) {
                  the arithmetic part is done, and what's left wrong about this
                  light is not something a slider reaches. */
               <div style={{ background: "rgba(255,179,92,.12)", border: "1px solid rgba(255,179,92,.45)", borderRadius: "var(--radius-sm)", padding: "11px 14px", fontSize: 12.5, color: "rgba(255,255,255,.92)", lineHeight: 1.65 }}>
-                {verdict?.reason} Shoot away — this is already far closer than the phone&apos;s
-                guess. The manual controls stay shut here, because they can&apos;t reach what&apos;s
-                left.
+                {verdict?.reason} Shoot away.
               </div>
             )}
           </div>
@@ -328,8 +320,7 @@ export default function ProShot({ onCapture, onClose, onUpload }: Props) {
           )}
           {unlocked && controls.length === 0 && (
             <div style={{ maxWidth: 480, width: "100%", fontSize: 11.5, color: "rgba(255,255,255,.55)", lineHeight: 1.6, textAlign: "center", flexShrink: 0 }}>
-              This phone doesn&apos;t hand its manual camera controls to the browser — the white
-              balance above still applies, and in light this good the auto exposure is safe.
+              Manual controls unavailable here.
             </div>
           )}
 
@@ -348,7 +339,7 @@ export default function ProShot({ onCapture, onClose, onUpload }: Props) {
               <Icon name="camera" size={26} />
             </button>
             <div style={{ fontSize: 11, color: "rgba(255,255,255,.5)" }}>
-              {busy ? "keeping the colour…" : balanced ? "balanced — shoot when the weave fills the frame" : "or shoot now with the phone's guess"}
+              {busy ? "keeping the colour…" : balanced ? "balanced — fill the frame" : "or shoot with the guess"}
             </div>
           </div>
         </div>

@@ -241,9 +241,9 @@ export const coverageCategory = (c: StyleCoverage): string =>
   c === "top" ? "tops" : c === "bottom" ? "bottoms" : "one-pieces";
 
 export const COVERAGES: { id: StyleCoverage; label: string; note: string }[] = [
-  { id: "top", label: "Top only", note: "kurtha, blouse, blazer — nothing below the waist" },
-  { id: "bottom", label: "Bottom only", note: "suruwal, churidar, skirt — nothing above" },
-  { id: "set", label: "Full set", note: "both pieces, cut from this same cloth" },
+  { id: "top", label: "Top only", note: "kurtha, blouse, blazer" },
+  { id: "bottom", label: "Bottom only", note: "suruwal, churidar, skirt" },
+  { id: "set", label: "Full set", note: "both pieces, same cloth" },
 ];
 
 /* ── the counter ──
