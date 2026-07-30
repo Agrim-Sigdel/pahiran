@@ -298,6 +298,51 @@
 
 }
 
+/* ── per-shop storefront accents ──
+   One class per STOREFRONT_ACCENTS entry (constants.ts); a shop's /s/ page
+   wears at most one. Same design rule as the brand accent above: on paper the
+   accent is a deep, near-black tone that carries white text (--on-accent stays
+   the default #fff, so the light classes only move --violet); in the dark
+   theme it lifts to a bright tone and its text goes dark. Every pair below
+   holds ≥7:1 as fill-vs-text and ≥4.5:1 as link text on --paper/--card in its
+   own theme. The dark copies live in the same media/data-theme selector as the
+   theme itself, so forcing light with data-theme="light" pins these too. */
+.sf-accent-plum   { --violet: #3B2140; }
+.sf-accent-wine   { --violet: #4A1526; }
+.sf-accent-rust   { --violet: #5C2410; }
+.sf-accent-ocean  { --violet: #123147; }
+.sf-accent-teal   { --violet: #0F3A40; }
+.sf-accent-moss   { --violet: #2E3B1A; }
+.sf-accent-indigo { --violet: #232052; }
+.sf-accent-ink    { --violet: #26262B; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sf-accent-plum   { --violet: #D9BCE3; --on-accent: #241028; }
+  :root:not([data-theme="light"]) .sf-accent-wine   { --violet: #EBAEBE; --on-accent: #331019; }
+  :root:not([data-theme="light"]) .sf-accent-rust   { --violet: #EDB48C; --on-accent: #301305; }
+  :root:not([data-theme="light"]) .sf-accent-ocean  { --violet: #A3C8E8; --on-accent: #0C2135; }
+  :root:not([data-theme="light"]) .sf-accent-teal   { --violet: #96D2CE; --on-accent: #0B2A28; }
+  :root:not([data-theme="light"]) .sf-accent-moss   { --violet: #BCCE90; --on-accent: #1A2410; }
+  :root:not([data-theme="light"]) .sf-accent-indigo { --violet: #B3B8F0; --on-accent: #14123A; }
+  :root:not([data-theme="light"]) .sf-accent-ink    { --violet: #C9C9D2; --on-accent: #1B1B22; }
+}
+
+/* ── storefront editor ── the form beside a live preview of the page it
+   describes. One column on a phone, where an edit/preview toggle swaps the
+   panes; side by side from 980px, where the preview rides along stickily and
+   the toggle disappears. */
+.sfe-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.sfe-toggle { display: flex; gap: 6px; margin-bottom: 4px; }
+@media (max-width: 979.98px) {
+  .sfe-form[data-pane="preview"] { display: none; }
+  .sfe-preview[data-pane="edit"] { display: none; }
+}
+@media (min-width: 980px) {
+  .sfe-split { grid-template-columns: minmax(0, 1fr) clamp(320px, 34vw, 420px); align-items: start; }
+  .sfe-preview { position: sticky; top: 14px; }
+  .sfe-toggle { display: none; }
+}
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 html, body {
@@ -741,6 +786,17 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
 
 /* product-card grids: auto-fill desktop, guaranteed 2-up on phones */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px; }
+/* Dashboard tiles share one body padding and one action-row size, as classes
+   rather than inline styles for exactly one reason: phones shrink them.
+   Desktop keeps the 38px action target (WCAG 2.5.8 asks 24; a thumb wants
+   more); mobile trades some of that for two cards that actually fit. */
+.tile-pad { padding: 13px 14px 14px; }
+.card-act { color: var(--ink); font-size: 12.5px; font-weight: 600; padding: 9px 10px; min-height: 38px; border-radius: var(--radius-md); }
+.orders-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; align-items: stretch; }
+.order-tile { position: relative; border: 1px solid var(--line); border-radius: var(--radius-card); padding: 13px 14px; display: flex; align-items: center; gap: 12px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat-tile { background: var(--card); border-radius: var(--radius-card); padding: 16px 18px; }
+.stat-tile .num { font-size: 34px; margin-top: 2px; }
 /* The studio's render cards carry a price field, a note field and an action
    row on top of the image, so they need more width than a catalog tile and
    collapse to one column on phones — two 122px columns cannot hold a textarea
@@ -752,6 +808,10 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
    spreadsheet, not a form — but the photo finally gets photo-sized room. */
 .page-split { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 560px); gap: 32px; align-items: start; }
 @media (max-width: 820px) { .page-split { grid-template-columns: 1fr; } }
+/* Overview: the daily chart and the most-tried table side by side once the
+   screen can hold both — stacked they left half the page empty. */
+.overview-grid { display: grid; grid-template-columns: 1fr; gap: 0 16px; align-items: start; }
+@media (min-width: 880px) { .overview-grid { grid-template-columns: 1fr 1fr; } }
 /* The counter's three steps. auto-fit rather than auto-fill: this is one
    sequence of three, so at any width they share the row evenly instead of
    leaving a phantom fourth column — and below ~800px they stack, which is the
@@ -1146,6 +1206,15 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
 
   .section-pad { padding: 30px 16px; }
   .card-grid, .shop-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  /* smaller cards on a phone: tighter bodies, shorter action rows, denser
+     stat tiles — the information stays, the air goes */
+  .tile-pad { padding: 9px 10px 10px; }
+  .card-act { font-size: 11.5px; padding: 6px 7px; min-height: 30px; }
+  .orders-grid { gap: 8px; }
+  .order-tile { padding: 10px 12px; gap: 10px; }
+  .stat-grid { gap: 8px; }
+  .stat-tile { padding: 10px 12px; }
+  .stat-tile .num { font-size: 24px; }
   /* One column, not two: a render card is an editing surface, and half a
      phone width leaves ~122px once the modal's padding is taken out. */
   .studio-grid { grid-template-columns: 1fr; gap: 14px; }

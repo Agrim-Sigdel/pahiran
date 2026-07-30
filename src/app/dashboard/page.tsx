@@ -24,11 +24,11 @@ import { colorText } from "@/lib/constants";
 import { reportError } from "@/lib/logging";
 import { toast, toastOk, toastErr, toastWarn, toastFailure, dismissToast } from "@/lib/toast";
 import { getRole, markVendor } from "@/lib/account";
-import type { Composition, CounterInput, CounterRun, Fabric, FabricColor, Garment, Lead, Shop, Style, StyleCoverage, StyleFamily, TryOnEvent } from "@/lib/types";
+import { defaultStorefront, type Composition, type CounterInput, type CounterRun, type Fabric, type FabricColor, type Garment, type Lead, type Shop, type Style, type StyleCoverage, type StyleFamily, type TryOnEvent } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [shop, setShop] = useState<Shop>({ id: null, slug: null, vendorCode: null, name: "", area: "", whatsapp: "", listed: false, status: "approved", statusNote: null, type: "apparel", category: "clothing", lat: null, lng: null });
+  const [shop, setShop] = useState<Shop>({ id: null, slug: null, vendorCode: null, name: "", area: "", whatsapp: "", listed: false, status: "approved", statusNote: null, type: "apparel", category: "clothing", lat: null, lng: null, storefront: defaultStorefront() });
   const [catalog, setCatalog] = useState<Garment[]>([]);
   const [fabrics, setFabrics] = useState<Fabric[]>([]);
   const [styles, setStyles] = useState<Style[]>([]);

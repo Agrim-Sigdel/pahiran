@@ -11,10 +11,11 @@ import { fileToDataURL } from "@/lib/images";
 import ImageCropper from "@/components/ImageCropper";
 import ColorList from "@/components/ColorList";
 import { readFabricColors, type ColorReading } from "@/lib/color-detect";
-import { OverviewTab, LeadsTab, garmentTryCounts, groupLeads } from "@/components/Analytics";
+import { OverviewTab, LeadsTab, OrderCard, garmentTryCounts, groupLeads, useNow } from "@/components/Analytics";
 import LocationPicker from "@/components/LocationPicker";
 import PlanTab from "@/components/PlanTab";
 import FabricStudio, { CutPage } from "@/components/FabricStudio";
+import StorefrontEditor from "@/components/StorefrontEditor";
 import ProShot from "@/components/ProShot";
 import CounterTryOn from "@/components/CounterTryOn";
 import Icon from "@/components/Icon";
@@ -32,13 +33,13 @@ import type { Composition, CounterInput, CounterRun, Fabric, FabricColor, Garmen
    The bar carried eight entries at once — five on a catalog-only shop — in a
    horizontally-scrolling strip, which on a phone meant half the product was
    off the right edge of a nav with no affordance saying so. */
-type Tab = "overview" | "leads" | "catalog" | "fabrics" | "settings" | "plan";
+type Tab = "overview" | "leads" | "catalog" | "fabrics" | "fits" | "settings" | "plan" | "storefront";
 
 /* Set-up-once surfaces: rarely opened, but a toast or a bookmark has to be
    able to send a vendor straight to one, so they carry a ?tab= of their own. */
-const PAGES = { plan: "Plan & billing", settings: "Shop settings" } as const;
+const PAGES = { plan: "Plan & billing", settings: "Shop settings", storefront: "Storefront" } as const;
 type Page = keyof typeof PAGES;
-const isPage = (t: string | null): t is Page => t === "plan" || t === "settings";
+const isPage = (t: string | null): t is Page => t === "plan" || t === "settings" || t === "storefront";
 
 /* ── every former modal is a page now ──
    One header for all of them, the shape Plan & billing established: a back
@@ -77,13 +78,8 @@ function PageHeader({ crumbs, sub, onBack }: { crumbs: Crumb[]; sub?: string; on
   );
 }
 
-/* One row of actions on every catalog card. 11px text in 4×5px padding gave
-   a ~20×24px target on a surface the marketing tells vendors to run from a
-   phone; WCAG 2.5.8 asks for 24, and a thumb wants more. */
-const cardAction: React.CSSProperties = {
-  color: "var(--ink)", fontSize: 12.5, fontWeight: 600,
-  padding: "9px 10px", minHeight: 38, borderRadius: "var(--radius-md)",
-};
+/* The card action row is the `.card-act` class (globals.css) — a class, not
+   an inline style, so phones can shrink the whole row at the breakpoint. */
 
 interface DashboardProps {
   shop: Shop;
@@ -188,10 +184,17 @@ export default function Dashboard({
   const [codeQuery, setCodeQuery] = useState("");
   const [qrGarment, setQrGarment] = useState<Garment | null>(null);
   const [showTagSheet, setShowTagSheet] = useState(false);
+  /* The key, not the order: the grouped list is rebuilt as leads change, so a
+     "Done" pressed on the order's page updates the same order it shows. */
+  const [openOrderKey, setOpenOrderKey] = useState<string | null>(null);
 
   /* Orders, not rows: a three-piece bag is one thing to call back about, so
      counting its lines would read as three waiting shoppers. */
-  const openLeads = useMemo(() => groupLeads(leads).filter((o) => !o.handled).length, [leads]);
+  const orders = useMemo(() => groupLeads(leads), [leads]);
+  const openLeads = useMemo(() => orders.filter((o) => !o.handled).length, [orders]);
+  const openOrder = useMemo(() => orders.find((o) => o.key === openOrderKey) ?? null, [orders, openOrderKey]);
+  const garmentById = useMemo(() => new Map(catalog.map((g) => [g.id, g])), [catalog]);
+  const nowTick = useNow();
   const tryCounts = useMemo(() => garmentTryCounts(events), [events]);
   /* Vendors reading a code off a hanger tag type just the digits ("14") as
      often as the whole thing ("A7K2-0014"), so match on either. */
@@ -244,7 +247,9 @@ export default function Dashboard({
   const TABS: { key: Tab; label: string; badge?: number }[] = [
     { key: "leads", label: "Orders", badge: openLeads || undefined },
     { key: "catalog", label: "Catalog" },
-    ...(shop.type === "apparel" ? [{ key: "fabrics" as Tab, label: "Fabrics" }] : []),
+    ...(shop.type === "apparel"
+      ? [{ key: "fabrics" as Tab, label: "Fabrics" }, { key: "fits" as Tab, label: "Fits" }]
+      : []),
   ];
 
   /* A page holding a half-typed form registers a guard here, and every way
@@ -270,6 +275,7 @@ export default function Dashboard({
     setShowFabricForm(false); setEditingFabric(null);
     setStudioFabricId(null); setPhotoFix(null); setCutForm(null);
     setQrGarment(null); setShowTagSheet(false); setShowCounter(false);
+    setOpenOrderKey(null);
   };
 
   /* Plan and Shop settings are addressable; the bar tabs are view state. So
@@ -310,13 +316,14 @@ export default function Dashboard({
      studio, a cut form on top of wherever it was opened from. A page renders
      in place of the tab content, under the same header and tab bar — the
      shape Plan & billing already had. */
-  type View = "photoFix" | "cut" | "studio" | "garment" | "fabricForm" | "qr" | "tags" | "counter" | Page;
+  type View = "photoFix" | "cut" | "studio" | "garment" | "fabricForm" | "order" | "qr" | "tags" | "counter" | Page;
   const page: View | null =
     photoFix && photoFixFabric ? "photoFix"
     : cutForm ? "cut"
     : studioFabric ? "studio"
     : showForm || editing ? "garment"
     : showFabricForm || editingFabric ? "fabricForm"
+    : openOrder ? "order"
     : qrGarment ? "qr"
     : showTagSheet ? "tags"
     : showCounter ? "counter"
@@ -344,7 +351,11 @@ export default function Dashboard({
   let onBack: () => void = () => goTab(returnTab);
   if (page) {
     const catalogCrumb: Crumb = { label: "catalog", go: () => goTab("catalog") };
-    const fabricsCrumb: Crumb = { label: "fabrics", go: () => goTab("fabrics") };
+    /* The studio can be entered from Fabrics or from Fits; the trail names
+       whichever the vendor actually came through. */
+    const fabricsCrumb: Crumb = tab === "fits"
+      ? { label: "fits", go: () => goTab("fits") }
+      : { label: "fabrics", go: () => goTab("fabrics") };
     switch (page) {
       case "garment":
         crumbs.push(catalogCrumb, { label: editing ? "edit garment" : "add a garment" });
@@ -374,6 +385,12 @@ export default function Dashboard({
             : cutForm!.mode === "copy" ? "make it your own" : "add your own cut",
         });
         onBack = () => guarded(() => setCutForm(null));
+        break;
+      case "order":
+        crumbs.push(
+          { label: "orders", go: () => goTab("leads") },
+          { label: openOrder!.name || "order" });
+        onBack = () => guarded(() => setOpenOrderKey(null));
         break;
       case "qr":
         crumbs.push(catalogCrumb, { label: "try-on qr" });
@@ -558,6 +575,13 @@ export default function Dashboard({
               }}
               onRemove={editingFabric ? () => { removeFabric(editingFabric.id); setEditingFabric(null); } : undefined}
             />
+          ) : openOrder ? (
+            /* The inbox card holds a name and one line; this is the rest —
+               the same full card the inbox itself used to stack. */
+            <div style={{ maxWidth: 640, margin: "16px auto 0" }}>
+              <OrderCard order={openOrder} byId={garmentById} shopName={shop.name}
+                onLeadHandled={onLeadHandled} now={nowTick} />
+            </div>
           ) : qrGarment ? (
             <QrPage
               garment={qrGarment}
@@ -576,10 +600,15 @@ export default function Dashboard({
             </div>
           ) : tab === "plan" ? (
             <PlanTab shop={shop} />
+          ) : tab === "storefront" ? (
+            <StorefrontEditor shop={shop} catalog={catalog}
+              fabrics={fabrics} styles={styles} compositions={compositions}
+              updateShop={updateShop} setLeaveGuard={setLeaveGuard} />
           ) : (
             <SettingsTab shop={shop} updateShop={updateShop} changeSlug={changeSlug}
               kioskUrl={origin + kioskPath}
-              storeUrl={shop.slug ? origin + "/s/" + shop.slug : null} />
+              storeUrl={shop.slug ? origin + "/s/" + shop.slug : null}
+              onEditStorefront={shop.slug ? () => openPage("storefront") : null} />
           )}
         </div>
       ) : (
@@ -596,23 +625,19 @@ export default function Dashboard({
                   <span style={{ color: "var(--stone)", marginLeft: 10, fontSize: 13 }}>how your shop is doing</span>
                 </div>
               </div>
-              {/* --warn. This was `var(--camel)`, a legacy alias of the
-                  body-text grey, so an "alert" drawn in it was the same colour
-                  as the paragraph under it: the one row on the page meaning
-                  "people are waiting for a phone call" read as decoration. */}
-              {openLeads > 0 && (
-                <button className="ph-btn" onClick={() => goTab("leads")}
-                  style={{ width: "100%", textAlign: "left", background: "var(--warn-bg)", border: "1px solid var(--warn)", borderRadius: "var(--radius-card)", padding: "12px 16px", marginBottom: 14, fontSize: 13.5, color: "var(--ink)" }}>
-                  <b style={{ color: "var(--warn)" }}>{openLeads} order{openLeads !== 1 ? "s" : ""} to call back</b>
-                </button>
-              )}
-              <OverviewTab events={events} catalog={catalog} />
+              {/* The "orders to call back" banner folded into the overview's
+                  own attention chips — one row for everything that needs the
+                  vendor, not a lone banner above a screen of stats. */}
+              <OverviewTab events={events} catalog={catalog}
+                leads={leads} compositions={compositions}
+                onGo={(t) => goTab(t)} />
             </div>
           )}
 
           {tab === "leads" && (
             <div className="fade-up">
-              <LeadsTab leads={leads} catalog={catalog} onLeadHandled={onLeadHandled} shopName={shop.name} />
+              <LeadsTab leads={leads} catalog={catalog}
+                onOpen={(key) => openView(() => setOpenOrderKey(key))} />
             </div>
           )}
 
@@ -685,7 +710,7 @@ export default function Dashboard({
                             </span>
                           )}
                         </div>
-                        <div style={{ padding: "13px 14px 14px" }}>
+                        <div className="tile-pad">
                           {/* Everything on this card used to be under 12px —
                               code 10.5, name 11.5, size chips 10, actions 11 —
                               on the surface the marketing says vendors run from
@@ -705,10 +730,10 @@ export default function Dashboard({
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 6, flexWrap: "wrap" }}>
                             <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: 14.5 }}>{npr(g.price)}</span>
                             <span style={{ display: "flex", gap: 2 }}>
-                              <button className="ph-btn" onClick={() => openView(() => setEditing(g))} style={cardAction}>
+                              <button className="ph-btn card-act" onClick={() => openView(() => setEditing(g))}>
                                 Edit
                               </button>
-                              <button className="ph-btn" title={"QR code for " + g.name} onClick={() => openView(() => setQrGarment(g))} style={cardAction}>
+                              <button className="ph-btn card-act" title={"QR code for " + g.name} onClick={() => openView(() => setQrGarment(g))}>
                                 QR
                               </button>
                               {/* Labelled with the ACTION, not the state. A
@@ -716,10 +741,10 @@ export default function Dashboard({
                                   out of stock is a button whose label is a lie
                                   the moment you believe it. aria-pressed carries
                                   the state for anyone who needs it announced. */}
-                              <button className="ph-btn" onClick={() => toggleStock(g.id)}
+                              <button className="ph-btn card-act" onClick={() => toggleStock(g.id)}
                                 aria-pressed={!g.inStock}
                                 title={g.inStock ? "Mark out of stock" : "Mark back in stock"}
-                                style={{ ...cardAction, color: g.inStock ? "var(--stone)" : "var(--warn)" }}>
+                                style={{ color: g.inStock ? "var(--stone)" : "var(--warn)" }}>
                                 {g.inStock ? "Mark sold out" : "Restock"}
                               </button>
                             </span>
@@ -739,6 +764,17 @@ export default function Dashboard({
               they share a tab and a family filter, and the switch below picks
               the half. Two top-level tabs for this was two names for one
               workspace. */}
+          {/* Every stitched preview across every bolt, one rack — renders used
+              to be visible only inside each fabric's own studio, so seeing
+              what the shop has actually generated meant opening bolts one by
+              one. A card opens that fabric's cuts. */}
+          {tab === "fits" && (
+            <div className="fade-up">
+              <FitsTab compositions={compositions} fabrics={fabrics} styles={styles}
+                onOpen={(fabricId) => openView(() => setStudioFabricId(fabricId))} />
+            </div>
+          )}
+
           {tab === "fabrics" && (
             <div className="fade-up">
               <div className="cat-bar">
@@ -824,16 +860,16 @@ export default function Dashboard({
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, gap: 6, flexWrap: "wrap" }}>
                           <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: 13.5 }}>{fabricPrice(f.price, f.unit)}</span>
                           <span style={{ display: "flex", gap: 2 }}>
-                            <button className="ph-btn" onClick={() => openView(() => setStudioFabricId(f.id))} style={{ ...cardAction, fontWeight: 700 }}>
+                            <button className="ph-btn card-act" onClick={() => openView(() => setStudioFabricId(f.id))} style={{ fontWeight: 700 }}>
                               Cuts
                             </button>
-                            <button className="ph-btn" onClick={() => openView(() => setEditingFabric(f))} style={cardAction}>
+                            <button className="ph-btn card-act" onClick={() => openView(() => setEditingFabric(f))}>
                               Edit
                             </button>
-                            <button className="ph-btn" onClick={() => toggleFabricStock(f.id)}
+                            <button className="ph-btn card-act" onClick={() => toggleFabricStock(f.id)}
                               aria-pressed={!f.inStock}
                               title={f.inStock ? "Mark out of stock" : "Mark back in stock"}
-                              style={{ ...cardAction, color: f.inStock ? "var(--stone)" : "var(--warn)" }}>
+                              style={{ color: f.inStock ? "var(--stone)" : "var(--warn)" }}>
                               {f.inStock ? "Mark sold out" : "Restock"}
                             </button>
                           </span>
@@ -986,13 +1022,107 @@ function TextCutCard({ cut, onEdit }: { cut: Style; onEdit: () => void }) {
   );
 }
 
+/* ── Fits: every ready render across every bolt ──
+   The cut and the cloth both name the card, the bolt's own photo sits as a
+   swatch on the corner, and tapping it lands in that fabric's studio — the
+   place prices, publishing and re-stitches already live. */
+function FitsTab({ compositions, fabrics, styles, onOpen }: {
+  compositions: Composition[];
+  fabrics: Fabric[];
+  styles: Style[];
+  onOpen: (fabricId: string) => void;
+}) {
+  const [family, setFamily] = useState("All");
+  const fabricById = useMemo(() => new Map(fabrics.map((f) => [f.id, f])), [fabrics]);
+  const styleById = useMemo(() => new Map(styles.map((s) => [s.id, s])), [styles]);
+  const fits = useMemo(() =>
+    compositions
+      .filter((c) => c.status === "ready" && c.image && c.fabricId && fabricById.has(c.fabricId))
+      .map((c) => ({
+        c,
+        fabric: fabricById.get(c.fabricId!)!,
+        style: c.styleId ? styleById.get(c.styleId) : undefined,
+      }))
+      .filter((x) => family === "All" || x.fabric.family === family)
+      .sort((a, b) =>
+        a.fabric.name.localeCompare(b.fabric.name)
+        || (a.style?.name ?? "").localeCompare(b.style?.name ?? "")),
+    [compositions, fabricById, styleById, family]);
+  const published = fits.filter((x) => x.c.published).length;
+
+  return (
+    <>
+      <div className="cat-bar">
+        <div>
+          <span className="ph-display" style={{ fontSize: 22, color: "var(--ink)" }}>fits</span>
+          <span style={{ color: "var(--stone)", marginLeft: 10, fontSize: 13 }}>
+            {fits.length} stitched · {published} published
+          </span>
+        </div>
+        <div className="cat-tools">
+          <select value={family} onChange={(e) => setFamily(e.target.value)}
+            aria-label="Filter fits by family"
+            className="ph-select" style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)", fontSize: 13 }}>
+            <option>All</option>
+            {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {fits.length === 0 ? (
+        <div style={{ border: "1.5px dashed var(--line)", borderRadius: "var(--radius-modal)", padding: "60px 24px", textAlign: "center", background: "var(--card)", color: "var(--stone)", fontSize: 14 }}>
+          Nothing stitched yet.
+        </div>
+      ) : (
+        <div className="card-grid">
+          {fits.map(({ c, fabric, style }) => (
+            <button key={c.id} type="button" onClick={() => onOpen(fabric.id)}
+              title={"Open " + fabric.name + " cuts"}
+              className="fade-up"
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "stretch", textAlign: "left",
+                padding: 0, background: "var(--card)", borderRadius: "var(--radius-card)",
+                overflow: "hidden", cursor: "pointer",
+                border: "1px solid " + (c.published ? "var(--ink)" : "var(--line)"),
+              }}>
+              <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--paper-deep)" }}>
+                <img src={c.image!} alt={(style?.name ?? "Cut") + " in " + fabric.name} className="img-blend"
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                <span style={{
+                  position: "absolute", top: 10, left: 10, fontSize: 10, fontWeight: 600,
+                  letterSpacing: ".1em", padding: "4px 10px", borderRadius: "var(--radius-xs)",
+                  background: c.published ? "var(--ink)" : "var(--card)",
+                  color: c.published ? "var(--card)" : "var(--stone)",
+                }}>
+                  {c.published ? "PUBLISHED" : "DRAFT"}
+                </span>
+                {/* the bolt it came from, worn as a corner swatch */}
+                <img src={fabric.image} alt=""
+                  style={{ position: "absolute", bottom: 10, left: 10, width: 34, height: 34, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--card)" }} />
+              </div>
+              <div className="tile-pad">
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>{style?.name ?? "Cut"}</div>
+                <div style={{ fontSize: 12, color: "var(--stone)" }}>{fabric.name}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)", marginTop: 5 }}>
+                  {c.price > 0 ? npr(c.price) : <span style={{ color: "var(--stone)", fontWeight: 400 }}>no price yet</span>}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ── Settings tab: draft state + explicit save ── */
-function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
+function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl, onEditStorefront }: {
   shop: Shop;
   updateShop: (s: Shop) => void;
   changeSlug: ((slug: string) => Promise<string | null>) | null;
   kioskUrl: string;
   storeUrl: string | null;
+  onEditStorefront: (() => void) | null;
 }) {
   const [name, setName] = useState(shop.name);
   const [area, setArea] = useState(shop.area);
@@ -1036,7 +1166,14 @@ function SettingsTab({ shop, updateShop, changeSlug, kioskUrl, storeUrl }: {
         </div>
         {storeUrl && (
           <div className="field">Storefront link (share anywhere)
-            <LinkBox url={storeUrl} />
+            <LinkBox url={storeUrl}>
+              {onEditStorefront && (
+                <button className="ph-btn" onClick={onEditStorefront}
+                  style={{ color: "var(--stone)", padding: "10px 8px", fontSize: 11, letterSpacing: ".1em" }}>
+                  Customise
+                </button>
+              )}
+            </LinkBox>
           </div>
         )}
         {shop.vendorCode && (

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { npr, waLink } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import Icon from "@/components/Icon";
-import type { Garment, Lead, TryOnEvent } from "@/lib/types";
+import type { Composition, Garment, Lead, TryOnEvent } from "@/lib/types";
 
 /* Vendor analytics, split into dashboard tabs:
    - OverviewTab: stat tiles, 30-day daily chart, most-tried table, CSV, errors
@@ -30,7 +30,7 @@ export function timeAgo(iso: string, now: number = Date.now()): string {
 /* timeAgo was computed at render off Date.now(), so a dashboard left open on
    the counter all day kept saying "2m ago" about an order placed at nine in
    the morning. This ticks once a minute and re-renders whoever uses it. */
-function useNow(intervalMs = 60_000): number {
+export function useNow(intervalMs = 60_000): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const iv = setInterval(() => setNow(Date.now()), intervalMs);
@@ -49,10 +49,28 @@ export function garmentTryCounts(events: TryOnEvent[]): Map<string, number> {
 
 /* ── Overview ─────────────────────────────────────────── */
 
-export function OverviewTab({ events, catalog }: {
+export function OverviewTab({ events, catalog, leads = [], compositions = [], onGo }: {
   events: TryOnEvent[]; catalog: Garment[];
+  /* The landing screen answers "what needs me today", not just "how did
+     try-ons go" — so it reads orders and fits too, and can jump to them. */
+  leads?: Lead[];
+  compositions?: Composition[];
+  onGo?: (tab: "leads" | "catalog" | "fits") => void;
 }) {
   const byId = useMemo(() => new Map(catalog.map((g) => [g.id, g])), [catalog]);
+
+  const orderStats = useMemo(() => {
+    const orders = groupLeads(leads);
+    const cutoff = Date.now() - 30 * DAY_MS;
+    return {
+      last30: orders.filter((o) => new Date(o.createdAt).getTime() >= cutoff).length,
+      open: orders.filter((o) => !o.handled).length,
+    };
+  }, [leads]);
+  const outOfStock = useMemo(() => catalog.filter((g) => !g.inStock).length, [catalog]);
+  const draftFits = useMemo(
+    () => compositions.filter((c) => c.status === "ready" && !c.published).length,
+    [compositions]);
 
   const { days, last30, week, sessions } = useMemo(() => {
     const now = Date.now();
@@ -121,24 +139,43 @@ export function OverviewTab({ events, catalog }: {
     URL.revokeObjectURL(a.href);
   };
 
-  if (events.length === 0) {
+  if (events.length === 0 && leads.length === 0) {
     return (
       <div className="panel" style={{ color: "var(--stone)", fontSize: 14, lineHeight: 1.6 }}>
         <span className="panel-head" style={{ marginBottom: 6 }}><span className="title">Activity</span></span>
-        No try-ons yet — once shoppers use your kiosk, daily activity and your most-tried
-        pieces appear here.
+        No activity yet.
       </div>
     );
   }
 
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+      <div className="stat-grid">
         <StatTile label="Try-ons · 30 days" value={last30} />
         <StatTile label="This week" value={week} />
         <StatTile label="Shoppers · 30 days" value={sessions} hint="unique kiosk sessions" />
+        <StatTile label="Orders · 30 days" value={orderStats.last30} />
+        <StatTile label="To call back" value={orderStats.open} warn={orderStats.open > 0} />
       </div>
 
+      {/* What needs the vendor today, each chip a door to the tab that fixes
+          it. Replaces the lone "orders to call back" banner: same signal, and
+          the other two things a landing screen should nag about beside it. */}
+      {onGo && (orderStats.open > 0 || outOfStock > 0 || draftFits > 0) && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+          {orderStats.open > 0 && (
+            <AttentionChip warn label={`${orderStats.open} to call back`} onClick={() => onGo("leads")} />
+          )}
+          {outOfStock > 0 && (
+            <AttentionChip label={`${outOfStock} out of stock`} onClick={() => onGo("catalog")} />
+          )}
+          {draftFits > 0 && (
+            <AttentionChip label={`${draftFits} unpublished fit${draftFits !== 1 ? "s" : ""}`} onClick={() => onGo("fits")} />
+          )}
+        </div>
+      )}
+
+      <div className="overview-grid">
       <div className="panel">
         <div className="panel-head">
           <span className="title">Try-ons per day</span><span className="sub">last 30 days</span>
@@ -179,20 +216,35 @@ export function OverviewTab({ events, catalog }: {
           </table>
         </div>
       )}
+      </div>
 
     </div>
   );
 }
 
-function StatTile({ label, value, hint, accent }: { label: string; value: number; hint?: string; accent?: boolean }) {
+function StatTile({ label, value, hint, accent, warn }: { label: string; value: number; hint?: string; accent?: boolean; warn?: boolean }) {
   return (
-    <div style={{ background: "var(--card)", border: "1px solid " + (accent ? "var(--stone)" : "var(--line)"), borderRadius: "var(--radius-card)", padding: "16px 18px" }}>
+    <div className="stat-tile" style={{ border: "1px solid " + (warn ? "var(--warn)" : accent ? "var(--stone)" : "var(--line)") }}>
       <div style={{ fontSize: 12, color: "var(--stone)", fontWeight: 600, letterSpacing: ".06em" }}>{label}</div>
-      <div className="ph-display" style={{ fontSize: 34, marginTop: 2, color: accent ? "var(--stone)" : "var(--ink)" }}>
+      <div className="ph-display num" style={{ color: warn ? "var(--warn)" : accent ? "var(--stone)" : "var(--ink)" }}>
         {value.toLocaleString("en-IN")}
       </div>
       {hint && <div style={{ fontSize: 12, color: "var(--stone)" }}>{hint}</div>}
     </div>
+  );
+}
+
+function AttentionChip({ label, onClick, warn }: { label: string; onClick: () => void; warn?: boolean }) {
+  return (
+    <button type="button" className="ph-btn" onClick={onClick}
+      style={{
+        fontSize: 12.5, fontWeight: 600, padding: "8px 14px", borderRadius: "var(--radius-pill)",
+        border: "1px solid " + (warn ? "var(--warn)" : "var(--line-strong)"),
+        background: warn ? "var(--warn-bg)" : "var(--card)",
+        color: "var(--ink)", cursor: "pointer",
+      }}>
+      {label} →
+    </button>
   );
 }
 
@@ -348,16 +400,16 @@ function linePrice(lead: Lead, garment?: Garment): number {
 
 const PAGE = 25;
 
-export function LeadsTab({ leads, catalog, onLeadHandled, shopName }: {
-  leads: Lead[]; catalog: Garment[]; onLeadHandled: (id: string, handled: boolean) => void;
-  shopName?: string;
+export function LeadsTab({ leads, catalog, onOpen }: {
+  leads: Lead[]; catalog: Garment[];
+  /** Open one order's own page — the card holds only the shopper and a line. */
+  onOpen: (orderKey: string) => void;
 }) {
   const byId = useMemo(() => new Map(catalog.map((g) => [g.id, g])), [catalog]);
   const all = useMemo(() => groupLeads(leads), [leads]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"all" | "open" | "done">("all");
   const [limit, setLimit] = useState(PAGE);
-  const now = useNow();
 
   /* Search, a status filter and paging. There were none: the inbox rendered
      `orders.slice(0, 50)` with no count, no pagination and no "showing 50 of
@@ -399,63 +451,92 @@ export function LeadsTab({ leads, catalog, onLeadHandled, shopName }: {
 
   if (leads.length === 0) {
     return (
-      <div className="panel" style={{ color: "var(--stone)", fontSize: 14, lineHeight: 1.6 }}>
-        No orders yet — when a shopper checks out from your storefront bag, or taps
-        &ldquo;I want this&rdquo; after a try-on, it lands here with their name, phone and sizes.
+      <div style={{ border: "1.5px dashed var(--line)", borderRadius: "var(--radius-modal)", padding: "60px 24px", textAlign: "center", background: "var(--card)", color: "var(--stone)", fontSize: 14 }}>
+        No orders yet.
       </div>
     );
   }
 
   const shown = orders.slice(0, limit);
+  const pick = (s: typeof status) => { setStatus(s); setLimit(PAGE); };
 
   return (
-    <div className="panel">
-      <div className="panel-head">
-        <span className="title">Orders</span>
-        <span className="sub">
-          {openCount > 0 ? `${openCount} to call back · ` : ""}{all.length} total · newest first
-        </span>
-        {/* try-ons had a CSV export and orders — the thing a shop actually
-            needs to reconcile against its books — had none */}
-        <button className="ph-btn" onClick={exportOrders}
-          style={{ marginLeft: "auto", color: "var(--stone)", fontSize: 12, letterSpacing: ".06em", padding: "6px 12px", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)" }}>
-          Export CSV
-        </button>
-      </div>
-
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-        <label style={{ flex: "1 1 200px", display: "flex", flexDirection: "column", gap: 4 }}>
-          <span className="sr-only">Search orders by name, phone, order ref or piece</span>
-          <input type="search" value={query} onChange={(e) => { setQuery(e.target.value); setLimit(PAGE); }}
-            placeholder="name, phone, PQ-…, or a piece"
-            style={{ padding: "10px 14px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)", fontSize: 13.5, width: "100%" }} />
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span className="sr-only">Filter by status</span>
-          <select value={status} onChange={(e) => { setStatus(e.target.value as typeof status); setLimit(PAGE); }}
-            className="ph-select"
-            style={{ padding: "10px 14px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)", color: "var(--ink)", fontSize: 13.5 }}>
-            <option value="all">All orders</option>
-            <option value="open">To call back</option>
-            <option value="done">Done</option>
-          </select>
-        </label>
-      </div>
-
-      <div aria-live="polite" style={{ fontSize: 12.5, color: "var(--stone)", marginBottom: 10 }}>
-        Showing {shown.length} of {orders.length}{orders.length !== all.length ? ` (filtered from ${all.length})` : ""}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {shown.map((o) => (
-          <OrderCard key={o.key} order={o} byId={byId} shopName={shopName} onLeadHandled={onLeadHandled} now={now} />
-        ))}
-        {shown.length === 0 && (
-          <div style={{ color: "var(--stone)", fontSize: 13.5, padding: "20px 0", textAlign: "center" }}>
-            Nothing matches that.
+    /* The catalog's shape, not a panel: a bar with the state up top, then a
+       grid of order cards. One long column inside a boxed inbox made every
+       order the same wall of grey; as cards on the page each one reads on
+       its own, and a wide screen shows several at once. */
+    <>
+      <div className="cat-bar">
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minWidth: 0 }}>
+          <div className="subtabs">
+            {([["all", "All"], ["open", "To call back"], ["done", "Done"]] as const).map(([s, label]) => (
+              <button key={s} className={status === s ? "on" : ""} aria-pressed={status === s} onClick={() => pick(s)}>
+                {label}
+                {s === "open" && openCount > 0 && (
+                  <span style={{ background: "var(--butter)", color: "var(--on-light)", fontSize: 11, fontWeight: 700, borderRadius: "var(--radius-pill)", padding: "1px 7px", marginLeft: 6 }}>
+                    {openCount}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
-        )}
+          <span aria-live="polite" style={{ color: "var(--stone)", fontSize: 13 }}>
+            {shown.length} of {orders.length}
+          </span>
+        </div>
+        <div className="cat-tools">
+          <input className="cat-search" type="search" value={query}
+            onChange={(e) => { setQuery(e.target.value); setLimit(PAGE); }}
+            placeholder="name, phone, PQ-…"
+            aria-label="Search orders by name, phone, order ref or piece"
+            style={{ padding: "10px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13 }} />
+          {/* try-ons had a CSV export and orders — the thing a shop actually
+              needs to reconcile against its books — had none */}
+          <button className="ph-btn" onClick={exportOrders}
+            style={{ color: "var(--stone)", fontSize: 12, letterSpacing: ".06em", padding: "10px 14px", border: "1px solid var(--line)", borderRadius: "var(--radius-btn)" }}>
+            Export CSV
+          </button>
+        </div>
       </div>
+
+      {/* One shopper, one line, one way to call — everything else lives on
+          the order's own page, a card-tap away. */}
+      <div className="orders-grid">
+        {shown.map((o) => {
+          const first = o.lines[0];
+          const piece = byId.get(first.garmentId || "")?.name || "a piece";
+          const more = o.lines.length - 1;
+          return (
+            <div key={o.key} className={"fade-up order-tile" + (o.handled ? " done-row" : "")}
+              style={{ background: o.handled ? undefined : "var(--card)" }}>
+              {/* The whole card opens the order; the call button floats above
+                  the stretched hit area. */}
+              <button type="button" onClick={() => onOpen(o.key)}
+                aria-label={"Open order from " + (o.name || "anonymous shopper")}
+                style={{ position: "absolute", inset: 0, background: "none", border: "none", cursor: "pointer", borderRadius: "var(--radius-card)" }} />
+              <div style={{ minWidth: 0, flex: 1, pointerEvents: "none" }}>
+                <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {o.name || "anonymous shopper"}
+                </div>
+                <div style={{ fontSize: 12.5, color: "var(--stone)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {first.qty}× {piece}{more > 0 ? ` +${more} more` : ""}
+                </div>
+              </div>
+              {o.phone && (
+                <a href={"tel:" + o.phone} className="ph-btn card-act"
+                  style={{ position: "relative", letterSpacing: ".06em", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", textDecoration: "none", flexShrink: 0 }}>
+                  <Icon name="phone" /> Call
+                </a>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {shown.length === 0 && (
+        <div style={{ color: "var(--stone)", fontSize: 13.5, padding: "20px 0", textAlign: "center" }}>
+          Nothing matches that.
+        </div>
+      )}
 
       {limit < orders.length && (
         <button className="ph-btn btn-solid" onClick={() => setLimit((n) => n + PAGE)}
@@ -463,11 +544,13 @@ export function LeadsTab({ leads, catalog, onLeadHandled, shopName }: {
           show {Math.min(PAGE, orders.length - limit)} more
         </button>
       )}
-    </div>
+    </>
   );
 }
 
-function OrderCard({ order, byId, shopName, onLeadHandled, now }: {
+/* The full order — items, total, WhatsApp, done — rendered by the order's
+   own page in the dashboard; the inbox card carries none of this any more. */
+export function OrderCard({ order, byId, shopName, onLeadHandled, now }: {
   order: LeadOrder; byId: Map<string, Garment>; shopName?: string;
   onLeadHandled: (id: string, handled: boolean) => void;
   now: number;
@@ -496,8 +579,8 @@ function OrderCard({ order, byId, shopName, onLeadHandled, now }: {
        number, which is the one thing a vendor comes back to a closed order
        for. It recedes by going onto the well surface instead, and everything
        on it stays readable. */
-    <div className={order.handled ? "done-row" : undefined}
-      style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "12px 14px" }}>
+    <div className={"fade-up" + (order.handled ? " done-row" : "")}
+      style={{ background: order.handled ? undefined : "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", padding: "13px 14px 12px", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -564,7 +647,8 @@ function OrderCard({ order, byId, shopName, onLeadHandled, now }: {
         ))}
       </div>
 
-      <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", marginTop: 10 }}>
+      {/* Pinned to the card's foot so every card in a grid row ends level. */}
+      <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", marginTop: "auto", paddingTop: 10 }}>
         {order.phone && (
           <a href={"tel:" + order.phone} className="ph-btn"
             style={{ fontSize: 12, letterSpacing: ".06em", padding: "9px 14px", border: "1px solid var(--line-strong)", color: "var(--ink)", borderRadius: "var(--radius-btn)", fontWeight: 600, textDecoration: "none" }}>
