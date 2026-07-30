@@ -15,6 +15,7 @@ import { OverviewTab, LeadsTab, garmentTryCounts, groupLeads } from "@/component
 import LocationPicker from "@/components/LocationPicker";
 import PlanTab from "@/components/PlanTab";
 import FabricStudio, { CutModal } from "@/components/FabricStudio";
+import ProShot from "@/components/ProShot";
 import CounterTryOn from "@/components/CounterTryOn";
 import Icon from "@/components/Icon";
 import AccountMenu from "@/components/AccountMenu";
@@ -1367,6 +1368,12 @@ function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
   const [cropping, setCropping] = useState<string | null>(
     photoIntent === "crop" && initial?.image ? initial.image : null
   );
+  /* The in-app camera, offered beside the file input rather than replacing
+     it. What it adds over the OS camera is exactly the two things this photo
+     is downstream of: white balance set off a tapped sheet of paper instead
+     of the phone's guess, and manual camera controls that unlock only under
+     light good enough to deserve them. */
+  const [proShot, setProShot] = useState(false);
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
@@ -1507,8 +1514,10 @@ function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
       {photoIntent === "replace" && (
         <div style={{ background: "var(--warn-bg)", border: "1px solid var(--warn)", borderRadius: "var(--radius-field)", padding: "11px 13px", marginBottom: 14, fontSize: 12.5, color: "var(--ink)", lineHeight: 1.6 }}>
           Tap the picture below to shoot or upload a new one — daylight if you can, and fill the
-          frame with the weave. Everything else about this bolt stays as it is, and every preview
-          made from the old photo will be marked for re-stitching.
+          frame with the weave. If the colour is what went wrong, use the pro shot with a sheet
+          of white paper: it sets the white balance from the paper instead of the phone&apos;s
+          guess. Everything else about this bolt stays as it is, and every preview made from the
+          old photo will be marked for re-stitching.
         </div>
       )}
 
@@ -1516,12 +1525,20 @@ function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
         aria-label={image ? "Change the fabric photo" : "Upload a fabric photo"}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
-        style={{ width: "100%", border: "1.5px dashed " + (photoIntent === "replace" ? "var(--warn)" : image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-lg)", height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 16, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
+        style={{ width: "100%", border: "1.5px dashed " + (photoIntent === "replace" ? "var(--warn)" : image ? "var(--ink)" : "var(--line)"), borderRadius: "var(--radius-lg)", height: 190, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", marginBottom: 8, overflow: "hidden", background: "var(--paper)", color: "var(--stone)", fontSize: 14, textAlign: "center", lineHeight: 1.6 }}>
         {busy ? <span>Processing photo…</span>
           : image ? <img src={image} alt="Fabric preview" style={{ height: "100%", objectFit: "contain" }} />
           : <div style={{ padding: 12 }}>Tap to upload a fabric photo<br /><span style={{ fontSize: 12 }}>Lay it flat in daylight — fill the frame with the weave</span></div>}
       </button>
       <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0])} />
+      {/* The colour-true door, next to the ordinary one. This photo is the
+          single source every render and every colour reading works from, so
+          it earns a camera of its own — the OS camera can't be told about
+          white paper. */}
+      <button type="button" className="ph-btn" onClick={() => setProShot(true)}
+        style={{ display: "inline-flex", alignItems: "center", gap: 7, marginBottom: 16, fontSize: 12, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--line-strong)", borderRadius: "var(--radius-btn)", padding: "8px 13px" }}>
+        <Icon name="camera" /> pro shot — true colour, off a sheet of white paper
+      </button>
 
       {/* No inline styles on any of these: `.field input/select/textarea` in
           globals.css already gives every control on the form one padding, one
@@ -1612,6 +1629,16 @@ function FabricModal({ initial, onClose, onSave, onRemove, photoIntent }: {
           hint="Drag the box onto the weave and leave the counter out. Everything inside it is what gets stitched from — and what we read the colour off."
           confirmLabel="use this crop"
           onCancel={() => setCropping(null)} onDone={acceptCrop} />
+      )}
+
+      {/* A pro-shot frame lands in the same cropper as an upload, so the rest
+          of the pipeline — compression, the colour reading, the staleness a
+          new photo triggers — never learns which camera it came from. */}
+      {proShot && (
+        <ProShot
+          onClose={() => setProShot(false)}
+          onCapture={(dataUrl) => { setProShot(false); setCropping(dataUrl); }}
+          onUpload={() => { setProShot(false); fileRef.current?.click(); }} />
       )}
 
       {initial && onRemove && (
