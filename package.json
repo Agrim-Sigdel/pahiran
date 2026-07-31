@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "seed": "node scripts/seed.mjs"
+    "seed": "node scripts/seed.mjs",
+    "style-shots": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/style-shots.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.3",

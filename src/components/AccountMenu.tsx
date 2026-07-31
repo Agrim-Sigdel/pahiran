@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import Icon from "@/components/Icon";
+import Icon, { type IconName } from "@/components/Icon";
 import { useAccount, signOut } from "@/lib/account";
 
 /* Shared account affordance — dropped into every page's nav so a signed-in
@@ -16,7 +16,7 @@ export default function AccountMenu({ extraItems = [] }: {
      group. The dashboard puts Plan and Shop settings here: both are set-up-
      once surfaces that were costing a permanent slot in a tab bar a vendor
      scrolls sideways on a phone, next to the tabs they open every day. */
-  extraItems?: { label: string; onSelect: () => void }[];
+  extraItems?: { label: string; onSelect: () => void; icon?: IconName }[];
 } = {}) {
   const { user, role, loading, configured } = useAccount();
   const pathname = usePathname();
@@ -66,18 +66,24 @@ export default function AccountMenu({ extraItems = [] }: {
      a row that does nothing, and "Dashboard" on /dashboard was exactly that —
      the entry a vendor sees most often and can never use. Dropping self-links
      is also what frees the slot the dashboard fills with "Overview". */
-  const items = !signedIn ? [] : [
-    ...(isVendor ? [{ href: "/dashboard", label: "Dashboard" }] : []),
-    { href: "/account", label: "My account" },
+  const items: { href: string; label: string; icon: IconName }[] = !signedIn ? [] : [
+    ...(isVendor ? [{ href: "/dashboard", label: "Dashboard", icon: "grid" as IconName }] : []),
+    { href: "/account", label: "My account", icon: "person" as IconName },
     /* A vendor lands on /dashboard and stays there: the dashboard nav has no
        link out to the public side, so "back to home" is the way back to the
        storefronts they are building for. Shoppers already start there. */
-    ...(isVendor ? [{ href: "/", label: "Back to home" }] : []),
+    ...(isVendor ? [{ href: "/", label: "Back to home", icon: "open" as IconName }] : []),
   ].filter((it) => it.href !== pathname);
 
+  /* Every row carries a glyph in a fixed 18px gutter, so the labels line up
+     as a column of text rather than sitting at whatever indent each icon's
+     width happens to produce. Decorative — the word beside it is the label. */
   const itemStyle: React.CSSProperties = {
-    display: "block", padding: "11px 14px", fontSize: 14,
+    display: "flex", alignItems: "center", gap: 11, padding: "11px 14px", fontSize: 14,
     color: "var(--ink)", textDecoration: "none",
+  };
+  const gutter: React.CSSProperties = {
+    width: 18, display: "inline-flex", justifyContent: "center", flexShrink: 0, color: "var(--stone)",
   };
 
   return (
@@ -135,6 +141,7 @@ export default function AccountMenu({ extraItems = [] }: {
                   onClick={() => { setOpen(false); it.onSelect(); }}
                   style={{ ...itemStyle, width: "100%", textAlign: "left" }}
                 >
+                  <span style={gutter}>{it.icon && <Icon name={it.icon} size="1.15em" />}</span>
                   {it.label}
                 </button>
               ))}
@@ -142,6 +149,7 @@ export default function AccountMenu({ extraItems = [] }: {
           )}
           {items.map((it) => (
             <Link key={it.href} href={it.href} role="menuitem" onClick={() => setOpen(false)} style={itemStyle}>
+              <span style={gutter}><Icon name={it.icon} size="1.15em" /></span>
               {it.label}
             </Link>
           ))}
@@ -155,13 +163,15 @@ export default function AccountMenu({ extraItems = [] }: {
               className="ph-btn"
               role="menuitem"
               onClick={async () => { setOpen(false); await signOut(); window.location.href = "/"; }}
-              style={{ display: "block", width: "100%", textAlign: "left", padding: "11px 14px", fontSize: 14, color: "var(--stone)", borderTop: "1px solid var(--line)" }}
+              style={{ ...itemStyle, width: "100%", textAlign: "left", color: "var(--stone)", borderTop: "1px solid var(--line)" }}
             >
+              <span style={gutter}><Icon name="logout" size="1.15em" /></span>
               Sign out
             </button>
           ) : configured ? (
             <Link href="/signin" role="menuitem" onClick={() => setOpen(false)}
               style={{ ...itemStyle, color: "var(--violet)", fontWeight: 600, borderTop: "1px solid var(--line)" }}>
+              <span style={{ ...gutter, color: "var(--violet)" }}><Icon name="logout" size="1.15em" /></span>
               Sign in
             </Link>
           ) : null}

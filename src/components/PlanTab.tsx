@@ -161,7 +161,7 @@ export default function PlanTab({ shop }: { shop: Shop }) {
                 </ul>
                 {canRequest ? (
                   <button className="ph-btn btn-solid" disabled={!!busy} onClick={() => requestPlan(p)}
-                    style={{ marginTop: "auto", padding: "9px 12px", fontSize: 12, opacity: busy ? 0.6 : 1 }}>
+                    style={{ marginTop: "auto", opacity: busy ? 0.6 : 1 }}>
                     {busy === "plan:" + p.id ? "requesting…" : "Request " + p.name}
                   </button>
                 ) : p.priceNpr === 0 && p.id !== "free" ? (

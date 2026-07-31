@@ -4,6 +4,8 @@
 import {
   colorPhrase, colorText, STOREFRONT_SECTION_IDS, STOREFRONT_SECTIONS, STOREFRONT_ACCENTS,
   STOREFRONT_LAYOUTS, STOREFRONT_TONES, STOREFRONT_CORNERS, STOREFRONT_FONTS,
+  STOREFRONT_CARDS, STOREFRONT_DENSITIES, STOREFRONT_BUTTONS, STOREFRONT_HEADERS,
+  STOREFRONT_TYPE_SCALES, STOREFRONT_TILES, STOREFRONT_ANNOUNCE_TONES,
 } from "@/lib/constants";
 
 /* Admin approval state. Only 'approved' shops can add catalog items, run
@@ -63,7 +65,7 @@ export type SlotImage =
 
 export interface StorefrontConfig {
   /* ── look ──
-     Four independent axes, each null-means-default so an untouched shop is
+     Independent axes, each null-means-default so an untouched shop is
      byte-identical to the page peeq has always rendered:
 
        layout   which shell the sections wear      (STOREFRONT_LAYOUTS)
@@ -85,6 +87,24 @@ export interface StorefrontConfig {
   accentHex: string | null; // free accent colour; overrides `accent`
   corners: string | null; // STOREFRONT_CORNERS id; null = soft
   font: string | null;    // STOREFRONT_FONTS id; null = peeq's rounded face
+
+  /* ── the finer axes ──
+     Same null-means-default rule, with one difference that matters: a LAYOUT
+     may set these too (lookbook wants tall tiles, story wants its captions on
+     the photo), so null here means "whatever the layout asked for" and a
+     chosen value means "the vendor overrules the layout". That is why their
+     class helpers emit a class for every id including the nominal default —
+     `.sf-tiles-portrait` exists precisely so a vendor on lookbook can take
+     the 2:3 frames back to 3:4. See the note above those helpers in
+     constants.ts. */
+  cards: string | null;      // STOREFRONT_CARDS id; null = the layout's choice
+  density: string | null;    // STOREFRONT_DENSITIES id
+  buttons: string | null;    // STOREFRONT_BUTTONS id
+  header: string | null;     // STOREFRONT_HEADERS id
+  typeScale: string | null;  // STOREFRONT_TYPE_SCALES id
+  tiles: string | null;      // STOREFRONT_TILES id
+  announceTone: string | null; // STOREFRONT_ANNOUNCE_TONES id — the bar's colour
+
   announceText: string | null;
   hero: {
     kicker: string | null;
@@ -114,6 +134,13 @@ export function defaultStorefront(): StorefrontConfig {
     accentHex: null,
     corners: null,
     font: null,
+    cards: null,
+    density: null,
+    buttons: null,
+    header: null,
+    typeScale: null,
+    tiles: null,
+    announceTone: null,
     announceText: null,
     hero: { kicker: null, headline: null, body: null, images: [] },
     featured: { heading: null, picks: [] },
@@ -170,6 +197,13 @@ export function normalizeStorefront(raw: unknown): StorefrontConfig {
   cfg.accentHex = cfgHex(o.accentHex);
   cfg.corners = cfgPreset(o.corners, STOREFRONT_CORNERS);
   cfg.font = cfgPreset(o.font, STOREFRONT_FONTS);
+  cfg.cards = cfgPreset(o.cards, STOREFRONT_CARDS);
+  cfg.density = cfgPreset(o.density, STOREFRONT_DENSITIES);
+  cfg.buttons = cfgPreset(o.buttons, STOREFRONT_BUTTONS);
+  cfg.header = cfgPreset(o.header, STOREFRONT_HEADERS);
+  cfg.typeScale = cfgPreset(o.typeScale, STOREFRONT_TYPE_SCALES);
+  cfg.tiles = cfgPreset(o.tiles, STOREFRONT_TILES);
+  cfg.announceTone = cfgPreset(o.announceTone, STOREFRONT_ANNOUNCE_TONES);
   cfg.announceText = cfgText(o.announceText);
 
   const hero = (o.hero ?? {}) as Record<string, unknown>;

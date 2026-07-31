@@ -383,7 +383,7 @@ Machinery in `Dashboard.tsx`:
 - Everything else — badge, phone/time/ref, full item list, total, WhatsApp,
   Done/Reopen — moved to the order's own page (`OrderCard`, now exported from
   `Analytics.tsx`; "Done" pressed there updates live).
-- Header is the catalog's shape: **All / To call back / Done** segmented
+- Header is the catalog's shape: **All / open / Done** segmented
   pills (amber count on open), result count, search, Export CSV.
 
 ## 4. Fits tab + overview upgrade
@@ -394,8 +394,8 @@ Machinery in `Dashboard.tsx`:
   fabric's studio; the studio's breadcrumb names whichever tab it was entered
   from (fits or fabrics).
 - **Overview** is a landing screen now: two new tiles (Orders · 30 days,
-  To call back — amber when non-zero) and a **needs-attention chip row**
-  ("3 to call back →", "2 out of stock →", "5 unpublished fits →") that jumps
+  open — amber when non-zero) and a **needs-attention chip row**
+  ("3 open →", "2 out of stock →", "5 unpublished fits →") that jumps
   to the right tab. Replaces the old lone orders banner. Chart and most-tried
   table sit side by side ≥880px (`.overview-grid`).
 

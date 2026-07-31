@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Note, Pill, SectionHead, Field } from "../AdminShell";
+import Dropdown from "@/components/Dropdown";
 import { adminGet, adminPost, when } from "@/lib/admin-client";
 
 /* Shops — the approval queue and every lever over a live vendor.
@@ -294,21 +295,21 @@ function ShopsTable() {
                   {/* Category is descriptive and changes nothing else, so it
                       saves on pick. Try-on entitlement is a money question, so
                       it needs a reason and an explicit apply. */}
-                  <label style={{ fontSize: 12, color: "var(--stone)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  {/* A div, not a <label>: it wraps a button now, and a label
+                      wrapping a button forwards the press it was already given
+                      — the list would open and shut on the one click. */}
+                  <div style={{ fontSize: 12, color: "var(--stone)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     Sells
-                    <select
+                    <Dropdown
                       value={s.category}
                       disabled={busy === s.id + ":category"}
-                      onChange={(e) => act(s, { action: "category", category: e.target.value }, "category")}
-                      className="ph-select"
-                      style={{ padding: "8px 10px", fontSize: 12, borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)" }}
-                    >
-                      {Object.entries(CATEGORY_LABEL).map(([id, label]) => (
-                        <option key={id} value={id}>{label}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => act(s, { action: "category", category: v }, "category")}
+                      ariaLabel={"What " + (s.name || "this shop") + " sells"}
+                      className="admin-dd"
+                      options={Object.entries(CATEGORY_LABEL).map(([id, label]) => ({ value: id, label }))}
+                    />
                     <span style={{ color: "var(--stone)" }}>descriptive only — does not change try-on</span>
-                  </label>
+                  </div>
 
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     <span style={{ fontSize: 12, color: "var(--stone)" }}>

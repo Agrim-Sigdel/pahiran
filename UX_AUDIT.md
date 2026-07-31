@@ -438,7 +438,7 @@ every interactive element.
   surface the marketing says vendors run from a phone.
 - [x] Everything on that card is under 12px: code 10.5, name 11.5 with `.12em`
   tracking, size chips 10, actions 11.
-- [x] **The "orders to call back" alert is invisible as an alert**
+- [x] **The "orders open" alert is invisible as an alert**
   ([`:210`](src/components/Dashboard.tsx#L210)) — `border: 1px solid var(--camel)` and
   `<b style={{color: var(--camel)}}>`, and `--camel` resolves to the identical grey as
   `--mut`. `--warn` exists.
