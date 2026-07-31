@@ -7,13 +7,17 @@ import { confirmAsync } from "@/components/Dialog";
 import { fileToDataURL } from "@/lib/images";
 import { uploadStorefrontImage } from "@/lib/storage";
 import { toastErr } from "@/lib/toast";
+import ColorWheel from "@/components/ColorWheel";
 import {
-  accentClass,
+  accentClass, toneClass, layoutShowsHeroImages,
   STOREFRONT_DEFAULTS, STOREFRONT_SECTIONS, STOREFRONT_ACCENTS,
+  STOREFRONT_LAYOUTS, STOREFRONT_TONES, STOREFRONT_CORNERS, STOREFRONT_FONTS,
 } from "@/lib/constants";
+import { storefrontLook, accentPreviewHex, tonePreviewHex } from "@/lib/storefront-theme";
+import { storefrontFontVars } from "@/lib/storefront-fonts";
 import {
   AnnounceBar, HeroSection, FeaturedSection, PromoSection, ShopCard,
-  resolveStorefrontSlots, defaultHeroBody,
+  resolveStorefrontSlots, defaultHeroBody, type SectionLayout,
 } from "@/components/storefront";
 import { offersTryOn } from "@/components/TryOnCta";
 import type {
@@ -53,6 +57,9 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
   const [pickFor, setPickFor] = useState<"hero" | "promo" | null>(null);
   const [cropping, setCropping] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  /* Which colour the wheel is open on, if either. One at a time: both open at
+     once is two wheels and no way to tell which swatch is being dragged. */
+  const [wheelFor, setWheelFor] = useState<"accent" | "tone" | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setCfg(shop.storefront); }, [shop.storefront]);
@@ -205,6 +212,132 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
           {/* ---- layout ---- */}
           <div className="panel">
             <div className="panel-head"><span className="title">Layout</span>
+              <span className="sub">how the page is put together</span></div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {STOREFRONT_LAYOUTS.map((l) => {
+                const on = (cfg.layout ?? "boutique") === l.id;
+                return (
+                  <button key={l.id} className="ph-btn" onClick={() => edit((c) => ({ ...c, layout: l.id }))}
+                    aria-pressed={on}
+                    style={{ display: "flex", gap: 12, alignItems: "flex-start", textAlign: "left", padding: "12px 14px", borderRadius: "var(--radius-md)", border: "2px solid " + (on ? "var(--violet)" : "var(--line)"), background: on ? "var(--paper)" : "transparent" }}>
+                    <LayoutThumb id={l.id} on={on} />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>{l.label}</span>
+                      <span style={{ display: "block", fontSize: 12.5, color: "var(--stone)", lineHeight: 1.45, marginTop: 2 }}>{l.blurb}</span>
+                      <span style={{ display: "block", fontSize: 12, color: "var(--stone)", lineHeight: 1.45, marginTop: 4 }}>
+                        Best for {l.best}.
+                      </span>
+                      {/* Said in the picker, not discovered on the live page.
+                          A layout that can't show something the vendor spent
+                          time choosing owes them the sentence before they
+                          pick it — silently dropping their hero pictures
+                          would read as peeq losing them. */}
+                      {l.drops && (
+                        <span style={{ display: "block", fontSize: 12, color: "var(--warn)", fontWeight: 600, lineHeight: 1.45, marginTop: 5 }}>
+                          {l.drops}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ---- colours ---- */}
+          <div className="panel">
+            <div className="panel-head"><span className="title">Colours</span>
+              <span className="sub">the paper, and the accent on it</span></div>
+
+            <div className="field" style={{ marginBottom: 18 }}>Paper
+              <span style={hint}>The background your photos sit on.</span>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {STOREFRONT_TONES.map((t) => {
+                  const on = !cfg.toneHex && (cfg.tone ?? "warm") === t.id;
+                  return (
+                    <Swatch key={t.id} label={t.label} title={t.note} on={on}
+                      /* the class paints --paper for free, so the swatch shows
+                         the theme-appropriate value rather than a hardcoded one */
+                      className={toneClass(t.id)} fill="var(--paper)"
+                      onClick={() => { edit((c) => ({ ...c, tone: t.id, toneHex: null })); setWheelFor(null); }} />
+                  );
+                })}
+                <Swatch label="Pick one" title="Choose any colour" on={!!cfg.toneHex}
+                  fill={cfg.toneHex ? tonePreviewHex(cfg.toneHex) : undefined}
+                  wheel={!cfg.toneHex}
+                  onClick={() => {
+                    if (!cfg.toneHex) edit((c) => ({ ...c, toneHex: tonePreviewHex("#f6efe3") }));
+                    setWheelFor(wheelFor === "tone" ? null : "tone");
+                  }} />
+              </div>
+              {wheelFor === "tone" && (
+                <div style={{ marginTop: 10 }}>
+                  <ColorWheel hex={cfg.toneHex ?? "#f6efe3"}
+                    onChange={(h) => edit((c) => ({ ...c, toneHex: h }))}
+                    onDone={() => setWheelFor(null)} />
+                  <p style={{ fontSize: 12, color: "var(--stone)", margin: "8px 0 0", lineHeight: 1.5 }}>
+                    The swatch shows what your page will actually use. Very dark
+                    or very strong colours are lightened until prices and
+                    captions still read on them — and a matching dark version is
+                    worked out for shoppers whose phone is in dark mode.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="field">Accent
+              <span style={hint}>Buttons, links and active states.</span>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {[{ id: null as string | null, label: "peeq" }, ...STOREFRONT_ACCENTS].map((a) => {
+                  const on = !cfg.accentHex && cfg.accent === a.id;
+                  return (
+                    <Swatch key={a.id ?? "default"} label={a.label} on={on}
+                      className={accentClass(a.id)} fill="var(--violet)"
+                      onClick={() => { edit((c) => ({ ...c, accent: a.id, accentHex: null })); setWheelFor(null); }} />
+                  );
+                })}
+                <Swatch label="Pick one" title="Choose any colour" on={!!cfg.accentHex}
+                  fill={cfg.accentHex ? accentPreviewHex(cfg.accentHex) : undefined}
+                  wheel={!cfg.accentHex}
+                  onClick={() => {
+                    if (!cfg.accentHex) edit((c) => ({ ...c, accentHex: accentPreviewHex("#4a1526") }));
+                    setWheelFor(wheelFor === "accent" ? null : "accent");
+                  }} />
+              </div>
+              {wheelFor === "accent" && (
+                <div style={{ marginTop: 10 }}>
+                  <ColorWheel hex={cfg.accentHex ?? "#4a1526"}
+                    onChange={(h) => edit((c) => ({ ...c, accentHex: h }))}
+                    onDone={() => setWheelFor(null)} />
+                  <p style={{ fontSize: 12, color: "var(--stone)", margin: "8px 0 0", lineHeight: 1.5 }}>
+                    Your colour, deepened until white button text reads on it —
+                    the swatch and the preview show the real result. A brighter
+                    version of the same colour is worked out for dark mode.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ---- corners + heading face ---- */}
+          <div className="panel">
+            <div className="panel-head"><span className="title">Style</span>
+              <span className="sub">shape and lettering</span></div>
+            <div className="field" style={{ marginBottom: 16 }}>Corners
+              <span style={hint}>How round every card, button and photo is.</span>
+              <Segmented options={STOREFRONT_CORNERS} value={cfg.corners ?? "soft"}
+                onPick={(id) => edit((c) => ({ ...c, corners: id }))} />
+            </div>
+            <div className="field">Heading face
+              <span style={hint}>Headings, buttons and prices. Body text stays the same so Nepali always renders.</span>
+              <Segmented options={STOREFRONT_FONTS} value={cfg.font ?? "peeq"}
+                onPick={(id) => edit((c) => ({ ...c, font: id }))} />
+            </div>
+          </div>
+
+          {/* ---- sections ---- */}
+          <div className="panel">
+            <div className="panel-head"><span className="title">Sections</span>
               <span className="sub">what shows, and in what order</span></div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {displayedSections.map((s, i) => {
@@ -225,28 +358,6 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
                     <button className="ph-btn" onClick={() => move(s.id, 1)} disabled={i === displayedSections.length - 1} aria-label={"Move " + meta.label + " down"}
                       style={{ ...smallBtn, padding: "6px 10px", opacity: i === displayedSections.length - 1 ? 0.35 : 1 }}>↓</button>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ---- accent ---- */}
-          <div className="panel">
-            <div className="panel-head"><span className="title">Accent colour</span>
-              <span className="sub">buttons and links on your page</span></div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {/* the peeq default first, then the presets. Each swatch wears its
-                  own accent class and paints var(--violet), so it shows the
-                  theme-appropriate value for free. */}
-              {[{ id: null as string | null, label: "peeq" }, ...STOREFRONT_ACCENTS].map((a) => {
-                const on = cfg.accent === a.id;
-                return (
-                  <button key={a.id ?? "default"} className={"ph-btn " + accentClass(a.id)}
-                    onClick={() => edit((c) => ({ ...c, accent: a.id }))} aria-pressed={on}
-                    style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: 6, borderRadius: "var(--radius-md)", border: "2px solid " + (on ? "var(--ink)" : "transparent") }}>
-                    <span aria-hidden style={{ width: 34, height: 34, borderRadius: "var(--radius-pill)", background: "var(--violet)", border: "1px solid var(--line)" }} />
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: on ? "var(--ink)" : "var(--stone)" }}>{a.label}</span>
-                  </button>
                 );
               })}
             </div>
@@ -287,7 +398,14 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
 
               <div className="field">Hero pictures
                 <span style={hint}>
-                  {cfg.hero.images.length === 0
+                  {/* The warning belongs here as well as in the layout picker:
+                      a vendor who chose Bazaar last week and comes back to
+                      curate hero slides today never re-reads the picker. */}
+                  {!layoutShowsHeroImages(cfg.layout) ? (
+                    <b style={{ color: "var(--warn)", fontWeight: 600 }}>
+                      The Bazaar layout doesn&apos;t show hero pictures. They&apos;re kept — switch layout to use them.
+                    </b>
+                  ) : cfg.hero.images.length === 0
                     ? "Automatic — your newest in-stock pieces slide through. Add your own to choose what leads."
                     : "These slide through, left to right."}
                 </span>
@@ -445,6 +563,113 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
           onDone={finishCrop} />
       )}
     </div>
+  );
+}
+
+/* ---------- look controls ---------- */
+
+/* One colour choice. A preset swatch wears its own class and paints the token
+   (var(--paper) / var(--violet)), so it shows the value the theme will
+   actually resolve rather than a hardcoded light-mode copy. A picked colour
+   has no class, so it takes `fill` — which is the DERIVED colour, never the
+   raw hex: the swatch has to show what the page will use, or the vendor is
+   choosing from a colour they'll never see. */
+function Swatch({ label, title, on, className, fill, wheel = false, onClick }: {
+  label: string;
+  title?: string;
+  on: boolean;
+  className?: string;
+  fill?: string;
+  /** Draw the empty "any colour" state — a hue ring rather than a flat chip. */
+  wheel?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button className={"ph-btn " + (className ?? "")} onClick={onClick} aria-pressed={on} title={title}
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: 6, borderRadius: "var(--radius-md)", border: "2px solid " + (on ? "var(--ink)" : "transparent") }}>
+      <span aria-hidden style={{
+        width: 34, height: 34, borderRadius: "var(--radius-pill)", border: "1px solid var(--line-strong)",
+        background: wheel
+          ? "conic-gradient(from 0deg, #ff0000, #ffff00 60deg, #00ff00 120deg, #00ffff 180deg, #0000ff 240deg, #ff00ff 300deg, #ff0000 360deg)"
+          : fill,
+      }} />
+      <span style={{ fontSize: 11.5, fontWeight: 600, color: on ? "var(--ink)" : "var(--stone)" }}>{label}</span>
+    </button>
+  );
+}
+
+/* A row of mutually exclusive choices, each with the one-liner that says what
+   it's for — the note is the whole point, since "Soft / Round / Square" alone
+   asks a vendor to imagine three pages. */
+function Segmented({ options, value, onPick }: {
+  options: readonly { id: string; label: string; note: string }[];
+  value: string;
+  onPick: (id: string) => void;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {options.map((o) => {
+        const on = value === o.id;
+        return (
+          <button key={o.id} className="ph-btn" onClick={() => onPick(o.id)} aria-pressed={on}
+            style={{ flex: "1 1 140px", textAlign: "left", padding: "9px 12px", borderRadius: "var(--radius-md)", border: "2px solid " + (on ? "var(--violet)" : "var(--line)"), background: on ? "var(--paper)" : "transparent" }}>
+            <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>{o.label}</span>
+            <span style={{ display: "block", fontSize: 11.5, color: "var(--stone)", marginTop: 1 }}>{o.note}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* A twelve-pixel diagram of where things sit in each layout. Not a screenshot:
+   the point is the arrangement — one big picture, a row that runs off the
+   edge, a page that starts with the rack — which reads faster as bars than as
+   a shrunken page nobody can make out. */
+function LayoutThumb({ id, on }: { id: string; on: boolean }) {
+  const ink = on ? "var(--violet)" : "var(--stone)";
+  const bar = (h: number, w: string, solid = false): React.CSSProperties => ({
+    height: h, width: w, borderRadius: 2, background: solid ? ink : "var(--line-strong)",
+  });
+  return (
+    <span aria-hidden style={{ flexShrink: 0, width: 46, height: 58, padding: 5, borderRadius: 5, border: "1px solid var(--line)", background: "var(--card)", display: "flex", flexDirection: "column", gap: 3, overflow: "hidden" }}>
+      {id === "boutique" && (
+        <>
+          <span style={{ display: "flex", gap: 3 }}>
+            <span style={{ ...bar(20, "50%"), background: "var(--line)" }} />
+            <span style={bar(20, "50%", true)} />
+          </span>
+          <span style={{ display: "flex", gap: 3 }}>
+            <span style={bar(13, "50%")} /><span style={bar(13, "50%")} />
+          </span>
+          <span style={{ display: "flex", gap: 3 }}>
+            <span style={bar(13, "50%")} /><span style={bar(13, "50%")} />
+          </span>
+        </>
+      )}
+      {id === "lookbook" && (
+        <>
+          <span style={bar(27, "100%", true)} />
+          <span style={{ display: "flex", gap: 3 }}>
+            <span style={bar(11, "42%")} /><span style={bar(11, "42%")} /><span style={bar(11, "22%")} />
+          </span>
+          <span style={{ display: "flex", gap: 3 }}>
+            <span style={bar(9, "50%")} /><span style={bar(9, "50%")} />
+          </span>
+        </>
+      )}
+      {id === "bazaar" && (
+        <>
+          <span style={{ ...bar(5, "100%"), background: "var(--line)" }} />
+          <span style={bar(6, "100%", true)} />
+          <span style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <span key={i} style={bar(10, "calc(33.33% - 1.4px)")} />
+            ))}
+          </span>
+        </>
+      )}
+    </span>
   );
 }
 
@@ -638,6 +863,10 @@ function StorefrontPreview({ shop, cfg, catalog }: {
   const tryOn = { enabled: true, left: 1 };
   const tryonHref = "/k/" + slug;
   const noop = () => {};
+  /* The draft's look, through the same function the live page calls — so the
+     preview is showing the vendor the real derivation, not a lookalike. */
+  const look = storefrontLook(cfg);
+  const layout = (cfg.layout ?? "boutique") as SectionLayout;
 
   const card = (g: Garment) => (
     <ShopCard key={g.id} g={g} slug={slug} shop={shop} tryOn={tryOn}
@@ -654,11 +883,11 @@ function StorefrontPreview({ shop, cfg, catalog }: {
             kicker={cfg.hero.kicker ?? STOREFRONT_DEFAULTS.heroKicker}
             headline={cfg.hero.headline ?? STOREFRONT_DEFAULTS.heroHeadline}
             body={cfg.hero.body ?? defaultHeroBody(shop)}
-            slides={slots.heroSlides} tryOn={tryOn} tryonHref={tryonHref} />
+            slides={slots.heroSlides} tryOn={tryOn} tryonHref={tryonHref} layout={layout} />
         );
       case "featured":
         return slots.featured.length > 0 ? (
-          <FeaturedSection heading={cfg.featured.heading ?? STOREFRONT_DEFAULTS.featuredHeading}>
+          <FeaturedSection heading={cfg.featured.heading ?? STOREFRONT_DEFAULTS.featuredHeading} layout={layout}>
             {slots.featured.map(card)}
           </FeaturedSection>
         ) : null;
@@ -668,7 +897,7 @@ function StorefrontPreview({ shop, cfg, catalog }: {
             kicker={cfg.promo.kicker ?? STOREFRONT_DEFAULTS.promoKicker}
             heading={cfg.promo.heading ?? STOREFRONT_DEFAULTS.promoHeading}
             body={cfg.promo.body ?? STOREFRONT_DEFAULTS.promoBody}
-            promo={slots.promo} tryOn={tryOn} tryonHref={tryonHref} />
+            promo={slots.promo} tryOn={tryOn} tryonHref={tryonHref} layout={layout} />
         ) : null;
       case "collection":
         /* Stand-in for the full collection: the heading and the first few
@@ -688,7 +917,8 @@ function StorefrontPreview({ shop, cfg, catalog }: {
   };
 
   return (
-    <div className={accentClass(cfg.accent)} style={{ background: "var(--paper)" }}>
+    <div className={[look.className, storefrontFontVars].filter(Boolean).join(" ")}
+      style={{ ...look.style, background: "var(--paper)" }}>
       {cfg.sections.filter((s) => !s.hidden).map((s) => (
         <div key={s.id}>{sectionFor(s.id)}</div>
       ))}

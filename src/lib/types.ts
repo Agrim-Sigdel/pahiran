@@ -1,7 +1,10 @@
 /* Shared domain types. The storage adapter maps DB rows (snake_case)
    to these app-facing shapes, so components never see raw rows. */
 
-import { colorPhrase, colorText, STOREFRONT_SECTION_IDS, STOREFRONT_SECTIONS, STOREFRONT_ACCENTS } from "@/lib/constants";
+import {
+  colorPhrase, colorText, STOREFRONT_SECTION_IDS, STOREFRONT_SECTIONS, STOREFRONT_ACCENTS,
+  STOREFRONT_LAYOUTS, STOREFRONT_TONES, STOREFRONT_CORNERS, STOREFRONT_FONTS,
+} from "@/lib/constants";
 
 /* Admin approval state. Only 'approved' shops can add catalog items, run
    try-ons, or be read by the public — see 20260721000100_admin_console.sql.
@@ -59,7 +62,29 @@ export type SlotImage =
   | { kind: "upload"; url: string; label?: string };
 
 export interface StorefrontConfig {
+  /* ── look ──
+     Four independent axes, each null-means-default so an untouched shop is
+     byte-identical to the page peeq has always rendered:
+
+       layout   which shell the sections wear      (STOREFRONT_LAYOUTS)
+       tone     the paper the photos sit on        (STOREFRONT_TONES)
+       accent   buttons, links, active states      (STOREFRONT_ACCENTS)
+       corners  how round every card and button is (STOREFRONT_CORNERS)
+       font     the heading face                   (STOREFRONT_FONTS)
+
+     accentHex/toneHex are the escape hatch from the preset lists: a free
+     colour, run through storefront-theme.ts, which derives a light value, a
+     dark value and the text colour that sits on them rather than trusting a
+     vendor's hex to clear four contrast obligations by luck. A hex WINS over
+     the preset id on the same axis — the preset stays stored so "back to a
+     preset" doesn't have to guess which one they were on. */
+  layout: string | null; // STOREFRONT_LAYOUTS id; null = boutique
+  tone: string | null;   // STOREFRONT_TONES id; null = warm (peeq's paper)
+  toneHex: string | null;   // free paper colour; overrides `tone`
   accent: string | null; // STOREFRONT_ACCENTS id; null = the peeq accent
+  accentHex: string | null; // free accent colour; overrides `accent`
+  corners: string | null; // STOREFRONT_CORNERS id; null = soft
+  font: string | null;    // STOREFRONT_FONTS id; null = peeq's rounded face
   announceText: string | null;
   hero: {
     kicker: string | null;
@@ -82,7 +107,13 @@ export interface StorefrontConfig {
 
 export function defaultStorefront(): StorefrontConfig {
   return {
+    layout: null,
+    tone: null,
+    toneHex: null,
     accent: null,
+    accentHex: null,
+    corners: null,
+    font: null,
     announceText: null,
     hero: { kicker: null, headline: null, body: null, images: [] },
     featured: { heading: null, picks: [] },
@@ -99,6 +130,21 @@ export function defaultStorefront(): StorefrontConfig {
    isn't one of the two known shapes becomes no slot. */
 const cfgText = (v: unknown): string | null =>
   typeof v === "string" && v.trim() !== "" ? v : null;
+
+/* A stored colour. Six-digit hex only — the shorthand and the named colours a
+   hand-edited row might carry would each need their own parser downstream, and
+   the picker only ever writes this form. Anything else is "no custom colour",
+   which falls back to the preset on that axis rather than to nothing. */
+const cfgHex = (v: unknown): string | null =>
+  typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v.trim()) ? v.trim().toLowerCase() : null;
+
+/** One of a preset list, or null. Same guard as the accent has always had:
+    an id this build doesn't know (an older column, a hand edit, a preset we
+    since removed) means the default, never a broken class name on the page. */
+const cfgPreset = (v: unknown, ids: readonly { id: string }[]): string | null => {
+  const s = cfgText(v);
+  return s && ids.some((p) => p.id === s) ? s : null;
+};
 
 const cfgSlot = (v: unknown): SlotImage | null => {
   if (!v || typeof v !== "object") return null;
@@ -117,8 +163,13 @@ export function normalizeStorefront(raw: unknown): StorefrontConfig {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return cfg;
   const o = raw as Record<string, unknown>;
 
-  const accent = cfgText(o.accent);
-  cfg.accent = accent && STOREFRONT_ACCENTS.some((a) => a.id === accent) ? accent : null;
+  cfg.layout = cfgPreset(o.layout, STOREFRONT_LAYOUTS);
+  cfg.tone = cfgPreset(o.tone, STOREFRONT_TONES);
+  cfg.toneHex = cfgHex(o.toneHex);
+  cfg.accent = cfgPreset(o.accent, STOREFRONT_ACCENTS);
+  cfg.accentHex = cfgHex(o.accentHex);
+  cfg.corners = cfgPreset(o.corners, STOREFRONT_CORNERS);
+  cfg.font = cfgPreset(o.font, STOREFRONT_FONTS);
   cfg.announceText = cfgText(o.announceText);
 
   const hero = (o.hero ?? {}) as Record<string, unknown>;

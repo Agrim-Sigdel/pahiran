@@ -31,9 +31,19 @@ export type HeroSlide = {
 const ADVANCE_MS = 5000;
 const SWIPE_PX = 40;
 
-export default function HeroCarousel({ slides, priority = true }: {
+export default function HeroCarousel({ slides, priority = true, className = "hero-visual", caption = true }: {
   slides: HeroSlide[];
   priority?: boolean;
+  /** The frame. Defaults to the framed picture beside the copy; the lookbook
+      layout passes .hero-bleed-visual, which is the same carousel filling the
+      top of the page instead. */
+  className?: string;
+  /** Whether the bar names the current piece. Off where the layout already
+      carries words over the photo (lookbook), so the caption doesn't argue
+      with the headline sitting on top of it. The dots are not part of this —
+      they stay whenever there is more than one slide, because they are the
+      only thing that says the photo is a slideshow at all. */
+  caption?: boolean;
 }) {
   const count = slides.length;
   const [index, setIndex] = useState(0);
@@ -84,7 +94,7 @@ export default function HeroCarousel({ slides, priority = true }: {
   if (count === 0) return null;
 
   return (
-    <div className="hero-visual" role="group" aria-roledescription="carousel" aria-label="Featured pieces"
+    <div className={className} role="group" aria-roledescription="carousel" aria-label="Featured pieces"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onFocusCapture={() => setHovered(true)}
@@ -129,15 +139,15 @@ export default function HeroCarousel({ slides, priority = true }: {
           leaves the shopper looking at a piece they can't name. A banner slide
           has nothing to say there, so the bar only appears when the current
           slide has words or there are dots to show. */}
-      {(slides[current].name !== "" || slides[current].price !== null || count > 1) && (
+      {((caption && (slides[current].name !== "" || slides[current].price !== null)) || count > 1) && (
       <div className="hero-bar">
         <div style={{ minWidth: 0 }}>
-          {slides[current].name !== "" && (
+          {caption && slides[current].name !== "" && (
             <div style={{ fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {slides[current].name}
             </div>
           )}
-          {slides[current].price !== null && (
+          {caption && slides[current].price !== null && (
             <div style={{ fontSize: 12.5, opacity: 0.85 }}>{npr(slides[current].price)}</div>
           )}
         </div>

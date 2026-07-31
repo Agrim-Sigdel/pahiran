@@ -247,3 +247,97 @@ export const STOREFRONT_ACCENTS = [
 /** The CSS class carrying a shop's accent, or "" for the peeq default. */
 export const accentClass = (id: string | null | undefined): string =>
   id && STOREFRONT_ACCENTS.some((a) => a.id === id) ? "sf-accent-" + id : "";
+
+/* ── layouts ──
+   Three arrangements of the same five sections. A layout is not a different
+   page: the config, the section order, the text overrides and the image slots
+   all mean exactly what they meant before — the sections just wear a different
+   shell (see the .sf-layout-* rules in globals.css and the `variant` prop the
+   sections in storefront.tsx take).
+
+   `drops` is the honest part. A layout that can't show something a vendor has
+   configured has to say so in the picker rather than silently ignoring it —
+   bazaar has no hero photo frame, so a shop that curated five hero slides is
+   owed the sentence "this layout doesn't show them" before it picks it. */
+export const STOREFRONT_LAYOUTS = [
+  {
+    id: "boutique",
+    label: "Boutique",
+    blurb: "Your words beside a big photo, then featured pieces, then the rack.",
+    best: "a curated shop — a dozen pieces that each deserve a look",
+    drops: null,
+  },
+  {
+    id: "lookbook",
+    label: "Lookbook",
+    blurb: "One photo fills the top of the screen; featured pieces swipe sideways.",
+    best: "a shop with strong photography or stitched try-on shots",
+    drops: null,
+  },
+  {
+    id: "bazaar",
+    label: "Bazaar",
+    blurb: "Search and your whole rack right at the top, nothing to scroll past.",
+    best: "a big rack — fifty pieces and shoppers who come to dig",
+    drops: "Your hero pictures aren't shown in this layout.",
+  },
+] as const;
+
+export type StorefrontLayoutId = (typeof STOREFRONT_LAYOUTS)[number]["id"];
+
+/** The class carrying a shop's layout. Boutique is the default page, so it
+    carries no class — an un-migrated config renders today's markup exactly. */
+export const layoutClass = (id: string | null | undefined): string =>
+  id && id !== "boutique" && STOREFRONT_LAYOUTS.some((l) => l.id === id) ? "sf-layout-" + id : "";
+
+/** Does this layout render the hero image slots at all? The editor asks so it
+    can warn beside the hero pictures, not only in the layout picker. */
+export const layoutShowsHeroImages = (id: string | null | undefined): boolean => id !== "bazaar";
+
+/* ── tones ──
+   Accents recolour the buttons; a tone recolours the *stage* — the paper the
+   shop's photos sit on. Presets for the same reason accents are presets: each
+   pair below is hand-checked so --ink, --stone and every accent still carry
+   their contrast on it, in both themes. A vendor who wants a shade we don't
+   list picks one with the colour wheel instead, and storefront-theme.ts
+   derives a safe ramp from it. */
+export const STOREFRONT_TONES = [
+  { id: "warm", label: "Warm", note: "flatters skin in photos", light: "#FAF6F0", dark: "#1E1310" },
+  { id: "porcelain", label: "Porcelain", note: "cool gallery light", light: "#F8F7F5", dark: "#171614" },
+  { id: "sand", label: "Sand", note: "earthy, for wool and leather", light: "#F6EFE3", dark: "#201709" },
+  { id: "blush", label: "Blush", note: "for bridal and festive", light: "#FAF1EE", dark: "#20130F" },
+] as const;
+
+/** The class carrying a shop's tone. Warm is peeq's own paper, so it carries
+    no class. */
+export const toneClass = (id: string | null | undefined): string =>
+  id && id !== "warm" && STOREFRONT_TONES.some((t) => t.id === id) ? "sf-tone-" + id : "";
+
+/* ── corners ──
+   How round everything on the page is: cards, buttons, inputs, tiles. One
+   class re-points the radius tokens, so a shop that wants hard edges gets them
+   everywhere at once instead of in the six places someone remembered. */
+export const STOREFRONT_CORNERS = [
+  { id: "soft", label: "Soft", note: "peeq's own" },
+  { id: "round", label: "Round", note: "friendly, fully rounded" },
+  { id: "square", label: "Square", note: "sharp, editorial" },
+] as const;
+
+export const cornersClass = (id: string | null | undefined): string =>
+  id && id !== "soft" && STOREFRONT_CORNERS.some((c) => c.id === id) ? "sf-corners-" + id : "";
+
+/* ── heading faces ──
+   Only the DISPLAY face changes. Body text stays Mukta in every choice
+   because it carries Devanagari, and a shop name or a piece written in
+   Nepali has to render in the paragraph face as well as the heading one.
+   The families are loaded by src/lib/storefront-fonts.ts, which only the
+   storefront route and the editor import — so no other page in the app pays
+   for a face it never sets. */
+export const STOREFRONT_FONTS = [
+  { id: "peeq", label: "Rounded", note: "peeq's own — warm and friendly" },
+  { id: "serif", label: "Serif", note: "classic, for heritage and bridal" },
+  { id: "modern", label: "Modern", note: "clean geometric sans" },
+] as const;
+
+export const fontClass = (id: string | null | undefined): string =>
+  id && id !== "peeq" && STOREFRONT_FONTS.some((f) => f.id === id) ? "sf-font-" + id : "";

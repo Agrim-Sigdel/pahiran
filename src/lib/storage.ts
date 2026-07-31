@@ -145,7 +145,10 @@ export async function saveShop(profile: Shop): Promise<void> {
     .update({ ...fields, listed: profile.listed, lat: profile.lat, lng: profile.lng, type: profile.type, category: profile.category, storefront: profile.storefront })
     .eq("id", profile.id);
   if (!error) return;
-  if (error.code === "42703") {
+  /* 42703 is Postgres's undefined-column; PGRST204 is PostgREST failing to
+     find a payload key in its schema cache — the same situation reported one
+     layer up, and what current PostgREST actually returns. */
+  if (error.code === "42703" || error.code === "PGRST204") {
     // shops.listed / lat / lng / type / storefront don't exist yet (one of
     // 20260714_shop_listed.sql, 20260715_shop_location.sql,
     // 20260721000300_shop_type.sql or 20260730000100_storefront_config.sql
