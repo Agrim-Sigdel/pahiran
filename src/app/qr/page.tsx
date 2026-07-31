@@ -36,12 +36,14 @@ export default function QrPage() {
     if (!qr) return;
     const w = CARD_W[per];
     /* The card is the brand, minimal: the real wordmark (Baloo 2 at 800,
-       lowercase, the ee in butter — the same CSS the site's nav uses), the
-       QR, one line saying what scanning does, and the address. Nothing else. */
+       lowercase, the ee in butter — the same CSS the site's nav uses), one
+       line in the counter's own voice, the QR, one line saying what scanning
+       does, and the address. Nothing else. */
     const card = `
       <div class="card">
         <div class="wm">p<span>ee</span>q</div>
         <div class="kicker">counter</div>
+        <div class="tag">कस्तो देख्छ? 🤔<br />Studio Quality मा हेर्नुस्</div>
         <img src="${qr}" alt="" />
         <div class="scan">scan to open the counter</div>
         <div class="site">www.peeq.fashion</div>
@@ -75,7 +77,8 @@ export default function QrPage() {
         .wm { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 2.2em; letter-spacing: -0.03em; line-height: 1; color: #1A1714; }
         .wm span { color: #C9A94E; }
         .kicker { font-size: .8em; font-weight: 600; letter-spacing: .14em; color: #123A2E; margin-top: .6em; }
-        img { width: 60%; margin-top: 1.8em; }
+        .tag { font-size: 1.3em; font-weight: 700; color: #1A1714; margin-top: 1.4em; line-height: 1.35; }
+        img { width: 60%; margin-top: 1.4em; }
         .scan { font-weight: 600; font-size: .85em; letter-spacing: .04em; color: #1A1714; margin-top: 1.8em; }
         .site { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: .8em; letter-spacing: .02em; color: #C9A94E; margin-top: .6em; }
       </style></head><body>
