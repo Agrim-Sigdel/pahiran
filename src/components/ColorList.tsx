@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FABRIC_COLORS, colorHex, colorLabel, normalizeShares } from "@/lib/constants";
 import { colorDisagrees, hexToPaletteId } from "@/lib/color-detect";
 import ColorWheel from "@/components/ColorWheel";
+import Dropdown from "@/components/Dropdown";
 import Icon from "@/components/Icon";
 import type { FabricColor } from "@/lib/types";
 
@@ -97,30 +98,42 @@ export default function ColorList({ colors, onChange, image }: {
                 <span aria-hidden style={{ display: "block", width: "100%", height: "100%", minHeight: 34, borderRadius: "calc(var(--radius-field) - 4px)", background: swatch, boxShadow: "inset 0 0 0 1px rgba(0,0,0,.12)" }} />
               </button>
 
-              <select value={typing ? "__other" : c.id} aria-label={"Colour " + (i + 1)}
-                className="ph-select"
-                onChange={(e) => {
-                  if (e.target.value === "__other") { setCustom(i); return; }
+              {/* "Choose a colour" is the placeholder rather than a first row:
+                  a row that means "no answer" is a thing to pick, and picking
+                  it is not something anyone wants to do.
+
+                  A word the vendor typed themselves leads the list, because it
+                  is this row's current answer and the palette has no entry for
+                  it — without it the trigger would read "Choose a colour" over
+                  a colour that is chosen. */}
+              <Dropdown value={typing ? "__other" : c.id} ariaLabel={"Colour " + (i + 1)}
+                className="color-dd" placeholder="Choose a colour"
+                onChange={(v) => {
+                  if (v === "__other") { setCustom(i); return; }
                   setCustom(null);
-                  setAt(i, { id: e.target.value, hex: colorHex(e.target.value) ?? "" });
+                  setAt(i, { id: v, hex: colorHex(v) ?? "" });
                 }}
-                style={{ flex: 1, minWidth: 0, padding: "10px 12px", borderRadius: "var(--radius-field)", border: "1px solid var(--line)", backgroundColor: "var(--card)", color: "var(--ink)", fontSize: 14 }}>
-                <option value="">Choose a colour</option>
-                {FABRIC_COLORS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                <option value="__other">Other…</option>
-              </select>
+                options={[
+                  ...(!typing && c.id && !isPalette(c.id) ? [{ value: c.id, label: c.id, meta: "yours" }] : []),
+                  ...FABRIC_COLORS.map((p) => ({ value: p.id, label: p.label })),
+                  { value: "__other", label: "Other…" },
+                ]} />
 
               {/* The share, as a percentage the vendor can overrule. Read-only
                   it would be a measurement they can see is wrong and can't
                   fix; the list re-bases around whatever they type. */}
               <span style={{ display: "inline-flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+                {/* .color-txt, not an inline fontSize: it shares its size with
+                    the name dropdown beside it, and the phone rule that lifts
+                    both to 16 cannot win against an inline value. */}
                 <input value={Math.round(c.share * 100)} inputMode="numeric"
+                  className="color-txt"
                   aria-label={"Share of colour " + (i + 1) + ", percent"}
                   onChange={(e) => {
                     const n = Number(e.target.value.replace(/[^0-9]/g, "").slice(0, 3));
                     write(colors.map((x, k) => (k === i ? { ...x, share: n / 100 } : x)));
                   }}
-                  style={{ width: 46, padding: "10px 6px", textAlign: "right", borderRadius: "var(--radius-field)", border: "1px solid var(--line)", backgroundColor: "var(--card)", color: "var(--ink)", fontSize: 14 }} />
+                  style={{ width: 46, padding: "10px 6px", textAlign: "right", borderRadius: "var(--radius-field)", border: "1px solid var(--line)", backgroundColor: "var(--card)", color: "var(--ink)" }} />
                 <span style={{ fontSize: 12, color: "var(--stone)" }}>%</span>
               </span>
 
@@ -133,9 +146,10 @@ export default function ColorList({ colors, onChange, image }: {
 
             {typing && (
               <input value={isPalette(c.id) ? "" : c.id} maxLength={24} autoFocus
+                className="color-txt"
                 aria-label="Name this colour yourself" placeholder="e.g. peacock"
                 onChange={(e) => setAt(i, { id: e.target.value })}
-                style={{ width: "100%", padding: "10px 12px", borderRadius: "var(--radius-field)", border: "1px solid var(--line)", backgroundColor: "var(--card)", color: "var(--ink)", fontSize: 14 }} />
+                style={{ width: "100%", padding: "10px 12px", borderRadius: "var(--radius-field)", border: "1px solid var(--line)", backgroundColor: "var(--card)", color: "var(--ink)" }} />
             )}
 
             {open && (

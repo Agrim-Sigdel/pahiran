@@ -17,6 +17,9 @@ import { familyLabel } from "@/lib/constants";
 import type { StyleCoverage } from "@/lib/types";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/images/edits";
+/* Reference shots have no source image to edit — the cut's own words are the
+   whole input — so they go to the generations endpoint instead. */
+const OPENAI_GENERATIONS = "https://api.openai.com/v1/images/generations";
 
 export const openaiKey = (): string | undefined =>
   process.env.OPENAI_API_KEY || process.env.OPEN_AI_API_KEY;
@@ -65,6 +68,11 @@ export interface ComposeRequest {
   /** Render quality. Defaults to medium — catalog imagery is generated once
       and seen often. */
   quality?: "low" | "medium" | "high";
+  /** No cloth at all: stitch the cut from plain undyed cloth. This is the
+      library's own photograph of a cut — a picture of the shape, made from the
+      description, with nothing in it that a later render could mistake for
+      part of the cut. Only meaningful with no `fabric` source. */
+  plainCloth?: boolean;
 }
 
 async function toFile(src: string, name: string): Promise<File> {
@@ -129,6 +137,10 @@ function buildPrompt(req: ComposeRequest): string {
      a set coming back as a top in the sample and trousers in whatever the
      model thought went with it. */
   const oneCloth = fabrics.length <= 1;
+  /* No cloth handed in at all — a reference shot of the cut itself. Declared
+     here because the wording below has to stop pointing at a sample image that
+     does not exist; the paragraph that says so is a few lines down. */
+  const plain = Boolean(req.plainCloth) && fabrics.length === 0;
 
   const subject =
     coverage === "set"
@@ -162,9 +174,30 @@ function buildPrompt(req: ComposeRequest): string {
   } else {
     parts.push(
       `Make every piece of the outfit, upper and lower together, ` +
-        (oneCloth ? `all stitched from this one cloth and ` : ``) +
+        (plain
+          ? `all stitched from the same plain cloth and `
+          : oneCloth
+          ? `all stitched from this one cloth and `
+          : ``) +
         `arranged as a single coordinated set in the same frame — the top positioned ` +
         `above the lower garment as they would be worn. Do not show only one half of the outfit.`
+    );
+  }
+
+  /* No cloth was handed in, and every paragraph below assumes one was. Said
+     here rather than left unsaid, because a prompt that describes a garment and
+     never names a cloth gets one invented — and an invented cloth in a
+     *reference* photograph is worse than in any other render: this image is
+     later fed back to compose as the style reference, which is told to copy its
+     shape and take none of its colour. A patterned reference is a pattern the
+     model has to be talked out of on every render made from it. */
+  if (plain) {
+    parts.push(
+      `There is no cloth sample. Stitch it from plain undyed mid-grey cloth of a weight that ` +
+        `suits this garment — one flat colour throughout, with no print, motif, embroidery, ` +
+        `border, woven pattern, contrast panel or decorative trim anywhere on it. This picture ` +
+        `exists to show the cut and nothing else: the silhouette, seam lines, collar or ` +
+        `neckline, sleeve and hem lengths and the closures are the whole subject.`
     );
   }
 
@@ -420,7 +453,15 @@ function buildPrompt(req: ComposeRequest): string {
      about a garment that could be read as licence to add a second one. The
      ghost-mannequin lock gets this for free from the forbidden list just
      above; the piece count had nothing holding it at the close. */
-  const fromCloth = oneCloth ? `this exact cloth` : `these exact cloths`;
+  /* "this exact cloth" points at an image, so with no cloth handed in it points
+     at nothing — and the nearest thing the model could bind it to is whatever
+     cloth it just invented, which is the one thing this render must not have an
+     opinion about. */
+  const fromCloth = plain
+    ? `plain unpatterned cloth`
+    : oneCloth
+    ? `this exact cloth`
+    : `these exact cloths`;
   parts.push(
     coverage === "set"
       ? `The result must read as one real studio photograph of one finished outfit stitched from ` +
@@ -460,6 +501,64 @@ export async function composeGarment(req: ComposeRequest): Promise<string> {
   });
   if (!res.ok) {
     throw new Error("compose provider error " + res.status + ": " + (await res.text()).slice(0, 300));
+  }
+  const b64 = (await res.json())?.data?.[0]?.b64_json;
+  if (!b64) throw new Error("compose provider returned no image");
+  return "data:image/png;base64," + b64;
+}
+
+/* ---------- the library's own photograph of a cut ---------- */
+
+/* A cut is a description first — that is what lets the global library ship
+   without a single image asset — but a description alone leaves the shape to
+   whatever the model pictures on the day, and two vendors browsing the same
+   named cut have nothing to look at. So a cut can also carry a reference
+   photograph, and this is how the platform makes one: from the cut's own
+   words, in plain cloth, through the same prompt every render goes through.
+
+   Through the same prompt, and not a second one written for the purpose, is
+   the whole point. The reference is what compose is later handed to copy the
+   silhouette from, so anything the two prompts disagree about — framing, which
+   pieces are in the picture, whether a body is implied — is a disagreement the
+   render inherits. */
+
+/** What a cut is, as far as rendering it goes. `sources` is absent because a
+    reference shot has none: the description is the input. */
+export type StyleShotRequest = Pick<ComposeRequest, "hint" | "family"> &
+  Partial<Pick<ComposeRequest, "coverage" | "quality">>;
+
+/** The exact prompt `composeStyleShot` will send. Exported so a caller can show
+    it — or check it — without spending anything. */
+export function styleShotPrompt(req: StyleShotRequest): string {
+  return buildPrompt({ ...req, sources: [], plainCloth: true });
+}
+
+/** Render the reference photograph for one cut. Returns a PNG data URL; the
+    caller stores it and attaches it to the cut.
+
+    Generations rather than edits: there is no source image to edit. */
+export async function composeStyleShot(req: StyleShotRequest): Promise<string> {
+  const key = openaiKey();
+  if (!key) throw new Error("compose needs OPENAI_API_KEY");
+  if (!req.hint.trim()) {
+    throw new Error("a cut with no description has nothing to render a reference from");
+  }
+
+  const res = await fetch(OPENAI_GENERATIONS, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-image-2",
+      size: "1024x1536", // portrait, same as every other render
+      quality: req.quality ?? "medium",
+      n: 1,
+      prompt: styleShotPrompt(req),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      "compose provider error " + res.status + ": " + (await res.text()).slice(0, 300)
+    );
   }
   const b64 = (await res.json())?.data?.[0]?.b64_json;
   if (!b64) throw new Error("compose provider returned no image");

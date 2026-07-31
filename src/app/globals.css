@@ -186,6 +186,22 @@
   --motion-peek: 240ms ease-out;
   --motion-blink: 140ms;
 
+  /* ── the page gutter ──
+     One number for the distance between the viewport edge and anything that
+     is not deliberately bleeding past it. It exists because every band used
+     to carry its own: `min(32px, 5vw)` on the sections, `min(40px, 6vw)` on
+     the wide heroes, a flat 24px on the nav, 20px on the hero and 16px in the
+     phone rule that was only ever applied to .section-pad. At 390px those
+     resolve to 19.5, 23.4, 24, 20 and 16 — five different left edges down one
+     page, which reads as a page that was assembled rather than designed.
+
+     Note that a *bleed* (the featured rail, the story grid) is written as
+     `calc(-1 * var(--sf-gutter))` for the same reason: the negative margin and
+     the padding it is cancelling are then guaranteed to be the same number,
+     which they previously were not — the rail overhung the page by 3.5px on
+     every phone. */
+  --sf-gutter: min(32px, 5vw);
+
   /* A photograph stops at a hard rectangle, which reads as pasted onto the
      page rather than part of it. This feathers every photo's own edge —
      strongest in the corners, barely there along the middle of each side —
@@ -403,18 +419,11 @@
    framed picture beside a paragraph, featured pieces swipe instead of tiling,
    and the try-on pitch is one loud band. */
 
-/* The nav rides over a full-bleed photo, so it can't sit on nothing: it stays
-   solid-but-translucent and blurs what passes under it. (Fully transparent was
-   the sketch; it loses to the nav's own per-control colours — the shop name,
-   the bag count and the account menu each carry an --ink or --violet that a
-   photograph underneath cannot be trusted to sit behind.) The plain --paper
-   line first is the fallback where color-mix isn't understood. */
-.sf-layout-lookbook .efc-nav {
-  position: sticky; top: 0; z-index: 30;
-  background: var(--paper);
-  background: color-mix(in srgb, var(--paper) 88%, transparent);
-  backdrop-filter: blur(10px);
-}
+/* (The sticky, blurred nav this layout used to declare for itself now belongs
+   to every storefront — see [data-sf-root] .efc-nav. Fully transparent was the
+   sketch and it loses either way: the shop name, the bag count and the account
+   menu each carry an --ink or --violet that a photograph underneath cannot be
+   trusted to sit behind.) */
 
 .hero-bleed {
   position: relative; display: flex; align-items: flex-end;
@@ -433,7 +442,7 @@
   position: relative; z-index: 2;
   display: flex; flex-direction: column; gap: 16px;
   /* clears the carousel's dots, which stay at the bottom edge */
-  padding: 0 min(40px, 6vw) 52px;
+  padding: 0 var(--sf-gutter) 52px;
   max-width: 620px;
 }
 .hero-bleed-visual:hover .hero-arrow { opacity: 1; }
@@ -445,7 +454,7 @@
   display: grid; grid-auto-flow: column; grid-auto-columns: minmax(158px, 44%);
   gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory;
   padding-bottom: 8px;
-  margin-right: calc(-1 * min(32px, 5vw)); padding-right: min(32px, 5vw);
+  margin-right: calc(-1 * var(--sf-gutter)); padding-right: var(--sf-gutter);
 }
 .shop-rail > * { scroll-snap-align: start; }
 .shop-rail::-webkit-scrollbar { height: 0; }
@@ -456,7 +465,7 @@
    in the dark theme, and --ink flips with the theme rather than with the band. */
 .promo-band {
   background: var(--violet); color: var(--on-accent);
-  padding: clamp(34px, 6vw, 64px) min(32px, 5vw);
+  padding: clamp(34px, 6vw, 64px) var(--sf-gutter);
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; align-items: center;
 }
 @media (min-width: 820px) { .promo-band { grid-template-columns: 1.05fr .95fr; } }
@@ -473,9 +482,11 @@
   text-decoration: none; display: inline-block; text-align: center; border: none; cursor: pointer;
 }
 
-/* Taller frames: this vendor's photographs are the reason they chose it. */
-.sf-layout-lookbook .shop-tile { aspect-ratio: 2 / 3; }
-.sf-layout-lookbook .shop-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 240px)); }
+/* Taller, larger frames: this vendor's photographs are the reason they chose
+   it. Set as tokens on the wrapper rather than as properties on .shop-tile, so
+   a vendor who wants square frames on a lookbook can say so — see the note on
+   the finer axes below. */
+.sf-layout-lookbook { --sf-tile-ar: 2 / 3; --sf-tile-min: 180px; --sf-tile-max: 240px; }
 
 /* ── layout: bazaar ──
    The rack is the page. The hero condenses to a line so search, filters and
@@ -483,15 +494,18 @@
    grid flow where a digging shopper actually passes it. */
 .hero-condensed {
   display: flex; flex-direction: column; gap: 6px;
-  padding: 20px min(32px, 5vw) 2px;
+  padding: 20px var(--sf-gutter) 2px;
 }
 .hero-condensed-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-.sf-layout-bazaar .section-pad { padding: 22px min(32px, 5vw); }
-.sf-layout-bazaar .shop-grid { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 12px; }
+.sf-layout-bazaar {
+  --sf-section-y: 22px; --sf-section-y-sm: 18px;
+  --sf-tile-min: 148px; --sf-tile-max: 1fr;
+  --sf-grid-gap: 12px; --sf-grid-gap-sm: 8px; --sf-cols-sm: 3;
+}
 
 .promo-banner {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  margin: 0 min(32px, 5vw); padding: 13px 16px;
+  margin: 0 var(--sf-gutter); padding: 13px 16px;
   border: 1px dashed var(--violet); border-radius: var(--radius-card);
   background: var(--paper-deep);
 }
@@ -500,20 +514,374 @@
   width: 62px; height: 62px; border-radius: var(--radius-md); background: var(--card);
 }
 
-/* ── storefront editor ── the form beside a live preview of the page it
-   describes. One column on a phone, where an edit/preview toggle swaps the
-   panes; side by side from 980px, where the preview rides along stickily and
-   the toggle disappears. */
-.sfe-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
-.sfe-toggle { display: flex; gap: 6px; margin-bottom: 4px; }
-@media (max-width: 979.98px) {
-  .sfe-form[data-pane="preview"] { display: none; }
-  .sfe-preview[data-pane="edit"] { display: none; }
+/* ── the boutique/editorial/poster promo card ──
+   Its copy half used to carry `padding: "40px 36px"` inline, which is 72px of
+   a 358px phone — a fifth of the screen, inside a card that already sits
+   inside the page gutter — and being inline, no media query could reach it. */
+.promo-card {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius-card); overflow: hidden;
 }
-@media (min-width: 980px) {
-  .sfe-split { grid-template-columns: minmax(0, 1fr) clamp(320px, 34vw, 420px); align-items: start; }
-  .sfe-preview { position: sticky; top: 14px; }
-  .sfe-toggle { display: none; }
+.promo-card-copy {
+  padding: clamp(22px, 5vw, 40px) clamp(16px, 4vw, 36px);
+  display: flex; flex-direction: column; justify-content: center; gap: 14px;
+}
+.promo-card-media { min-height: 220px; background: var(--paper-deep); display: block; position: relative; }
+@media (max-width: 640px) { .promo-card-media { min-height: 200px; } }
+
+/* ── layout: editorial ──
+   The words lead. A tinted band carrying type at a size no other layout
+   reaches, with the photograph as a wide strip under it rather than beside it
+   — beside-it is what boutique already does, and it is also what caps the
+   headline: a 76px line in a half-width column wraps to four. */
+.hero-editorial { background: var(--paper-deep); }
+.hero-editorial-copy {
+  display: flex; flex-direction: column; gap: 18px;
+  max-width: 1100px; margin: 0 auto;
+  padding: clamp(44px, 8vh, 92px) var(--sf-gutter) clamp(30px, 5vh, 52px);
+}
+/* The strip is short on purpose. It is a band across the page, not a hero
+   photo — at 16/7 a portrait shot sits inside it whole (the carousel fits
+   rather than crops, like every other frame here) and the type above stays
+   the thing the page opens on. */
+.hero-strip {
+  position: relative; width: 100%; aspect-ratio: 16 / 7;
+  overflow: hidden; background: var(--paper-deep); display: block;
+}
+@media (max-width: 640px) { .hero-strip { aspect-ratio: 4 / 3; } }
+
+/* Featured as a mosaic: the first pick gets a landscape frame across two
+   tracks, the rest tile normally under it. The ratio override is the whole
+   trick — a card twice as wide with a 3/4 frame would be twice as TALL too,
+   and the "large" piece would push the small ones off the screen. */
+.shop-mosaic { display: grid; gap: var(--sf-grid-gap, 16px); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.shop-mosaic > :first-child { grid-column: span 2; }
+.shop-mosaic > :first-child .shop-tile { aspect-ratio: 4 / 3; }
+@media (min-width: 760px) { .shop-mosaic { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* ── layout: catalogue ──
+   Every piece a row. Same card component, same markup: .shop-card-visual goes
+   display:contents so the frame, the name block and the buttons become direct
+   children of the row's grid instead of a column stacked inside it. */
+.sf-layout-catalogue { --sf-section-y: 26px; --sf-grid-gap: 10px; }
+.sf-layout-catalogue .shop-grid {
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch; max-width: 900px; margin: 0 auto;
+}
+.sf-layout-catalogue .shop-card-visual { display: contents; }
+.sf-layout-catalogue .shop-card-item {
+  display: grid; grid-template-columns: 84px minmax(0, 1fr) auto;
+  align-items: center; gap: 14px; padding: 10px;
+}
+.sf-layout-catalogue .shop-tile {
+  width: 84px; border-radius: var(--radius-md); overflow: hidden;
+}
+/* The frame here is 84px, so the save control has to shrink with it — at its
+   full size it covers a third of the piece it is offering to save. */
+.sf-layout-catalogue .card-heart {
+  width: 24px; height: 24px; top: 3px; right: 3px; font-size: 12px;
+  box-shadow: none; background: rgba(255, 255, 255, .82);
+}
+.sf-layout-catalogue .shop-card-meta { padding: 0; gap: 3px; }
+.sf-layout-catalogue .shop-card-title { white-space: normal; font-size: 14.5px; }
+.sf-layout-catalogue .shop-card-actions {
+  margin: 0; padding: 0; flex-direction: row; align-items: center; gap: 14px;
+}
+.sf-layout-catalogue .card-cta { width: auto; padding: 10px 20px; }
+/* Below 560px three columns leaves the name two words wide. The buttons drop
+   to their own line under the name instead, which is still a row — the photo
+   stays beside the words, which is the point of the layout. */
+@media (max-width: 559.98px) {
+  .sf-layout-catalogue .shop-card-item { grid-template-columns: 72px minmax(0, 1fr); }
+  .sf-layout-catalogue .shop-tile { width: 72px; }
+  .sf-layout-catalogue .shop-card-actions { grid-column: 2; }
+}
+
+/* ── layout: poster ──
+   Half a screen of the shop's accent carrying the headline, half a photograph.
+   Everything in the copy half takes --on-accent for the same reason
+   .promo-band does: the accent is the ground, and --ink flips with the theme
+   rather than with the block it is sitting on. */
+.hero-poster { display: grid; grid-template-columns: minmax(0, 1fr); }
+.hero-poster-copy {
+  background: var(--violet); color: var(--on-accent);
+  display: flex; flex-direction: column; justify-content: center; gap: 16px;
+  padding: clamp(38px, 6vw, 72px) var(--sf-gutter);
+}
+.hero-poster-copy .kicker { color: var(--on-accent); opacity: .74; }
+.hero-poster-visual {
+  position: relative; display: block; overflow: hidden;
+  min-height: clamp(280px, 46svh, 520px); background: var(--paper-deep);
+}
+@media (min-width: 860px) {
+  .hero-poster { grid-template-columns: 1fr 1fr; align-items: stretch; }
+  .hero-poster-visual { min-height: clamp(380px, 62svh, 620px); }
+}
+
+/* ── layout: story ──
+   One piece per screen. The collection becomes a single column that bleeds
+   past the section's own padding — the search and sort controls above it keep
+   theirs, so the photographs are the only thing running edge to edge. */
+.sf-layout-story { --sf-tile-ar: 4 / 5; --sf-tile-bg: var(--paper-deep); --sf-grid-gap: 0px; }
+.sf-layout-story .shop-grid {
+  grid-template-columns: minmax(0, 1fr); justify-content: stretch;
+  margin-left: calc(-1 * var(--sf-gutter)); margin-right: calc(-1 * var(--sf-gutter));
+  gap: 0;
+}
+.sf-layout-story .shop-card-item { background: none; border: 0; border-radius: 0; overflow: visible; }
+.sf-layout-story .shop-tile { border-radius: 0; }
+.sf-layout-story .shop-card-meta {
+  position: absolute; inset: auto 0 0 0; z-index: 2;
+  padding: 54px var(--sf-gutter) 18px; gap: 4px; pointer-events: none;
+  background: linear-gradient(to top, rgba(16, 11, 8, .86), rgba(16, 11, 8, 0));
+}
+.sf-layout-story .shop-card-title {
+  color: #fff; pointer-events: auto; white-space: normal;
+  font-family: var(--font-display), sans-serif; font-weight: 600;
+  font-size: calc(clamp(19px, 3.4vw, 26px) * var(--sf-h, 1));
+}
+.sf-layout-story .shop-card-price { color: rgba(255, 255, 255, .86); font-size: 15px; }
+.sf-layout-story .shop-card-actions {
+  flex-direction: row; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 14px var(--sf-gutter) 34px;
+}
+.sf-layout-story .card-cta { width: auto; padding: 12px 26px; }
+/* The three-rule phone override that used to live here (-16px margins, 16px
+   padding) is what --sf-gutter now does for every band at once. */
+
+/* ── the finer axes ──
+   Seven knobs the vendor sets independently of the layout. Declared AFTER
+   every .sf-layout-* block on purpose: these are all single-class selectors
+   landing on the same wrapper element, so specificity ties and source order
+   decides — which is exactly the rule we want, "the vendor's explicit choice
+   beats the layout's default". That is also why their class helpers emit a
+   class for the nominal default too (constants.ts): on a lookbook,
+   .sf-tiles-portrait is the only way back to 3:4. */
+
+/* Card style. `framed` restates the defaults rather than relying on them, so
+   picking it on a story layout genuinely undoes what story did. */
+.sf-cards-framed .shop-card-item {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius-card); overflow: hidden;
+}
+.sf-cards-framed .shop-card-meta { position: static; padding: 13px 14px 0; background: none; }
+.sf-cards-framed .shop-card-title { color: var(--ink); }
+.sf-cards-framed .shop-card-price { color: var(--stone); }
+
+.sf-cards-borderless .shop-card-item { background: none; border: 0; overflow: visible; }
+.sf-cards-borderless .shop-tile { border-radius: var(--radius-card); overflow: hidden; }
+.sf-cards-borderless { --sf-tile-bg: var(--paper); }
+.sf-cards-borderless .shop-card-meta { padding: 11px 2px 0; }
+.sf-cards-borderless .shop-card-actions { padding: 10px 0 14px; }
+
+.sf-cards-overlay .shop-card-item { background: none; border: 0; overflow: visible; }
+.sf-cards-overlay .shop-tile { border-radius: var(--radius-card); overflow: hidden; }
+/* pointer-events off on the scrim, back on for the title: the block covers the
+   bottom third of the photo, and the photo underneath is the link to the piece */
+.sf-cards-overlay .shop-card-meta {
+  position: absolute; inset: auto 0 0 0; z-index: 2;
+  padding: 36px 13px 12px; gap: 1px; pointer-events: none;
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
+  background: linear-gradient(to top, rgba(16, 11, 8, .86), rgba(16, 11, 8, 0));
+}
+.sf-cards-overlay .shop-card-title { color: #fff; pointer-events: auto; }
+.sf-cards-overlay .shop-card-price { color: rgba(255, 255, 255, .86); }
+.sf-cards-overlay .shop-card-actions { padding: 10px 0 14px; }
+
+/* Density. All four numbers move together — moving one without the others
+   just makes a page that doesn't add up. */
+.sf-density-compact {
+  --sf-section-y: 26px; --sf-section-y-sm: 20px;
+  --sf-tile-min: 148px; --sf-tile-max: 180px;
+  --sf-grid-gap: 10px; --sf-grid-gap-sm: 8px; --sf-cols-sm: 3;
+}
+.sf-density-cozy {
+  --sf-section-y: 44px; --sf-section-y-sm: 30px;
+  --sf-tile-min: 170px; --sf-tile-max: 210px;
+  --sf-grid-gap: 18px; --sf-grid-gap-sm: 10px; --sf-cols-sm: 2;
+}
+.sf-density-roomy {
+  --sf-section-y: 68px; --sf-section-y-sm: 44px;
+  --sf-tile-min: 230px; --sf-tile-max: 300px;
+  --sf-grid-gap: 28px; --sf-grid-gap-sm: 16px; --sf-cols-sm: 2;
+}
+
+/* Buttons. One rule per shape reaching every button class at once, which is
+   the only way "outline" can mean outline instead of meaning outline in the
+   four places someone remembered. */
+.sf-buttons-outline .btn-violet,
+.sf-buttons-outline .btn-solid,
+.sf-buttons-outline .card-cta {
+  background: none; color: var(--violet); border: 2px solid var(--violet);
+}
+/* On the accent band and the poster block the ground IS the accent, so the
+   hollow button borrows the text colour instead — an accent-on-accent outline
+   is an invisible button. */
+.sf-buttons-outline .btn-on-accent {
+  background: none; color: var(--on-accent); border: 2px solid var(--on-accent);
+}
+.sf-buttons-outline .card-cta-sold { border: 1px dashed var(--line-strong); color: var(--stone); }
+
+.sf-buttons-block .btn-violet,
+.sf-buttons-block .btn-solid,
+.sf-buttons-block .btn-outline,
+.sf-buttons-block .btn-on-accent {
+  border-radius: var(--radius-xs); padding-left: 34px; padding-right: 34px;
+  letter-spacing: .01em;
+}
+/* The card CTA takes the shape but not the 34px flanks. It is already
+   width:100% inside a tile that is ~146px of usable width on a phone, so 68px
+   of horizontal padding left "add to bag" 78px to sit in — the button either
+   wrapped to three lines or spilled out of the card. A square button in a grid
+   is what `block` means here; the padding was only ever for the wide CTAs. */
+.sf-buttons-block .card-cta {
+  border-radius: var(--radius-xs); letter-spacing: .01em;
+}
+/* flex-basis rather than width:100% — these sit in flex rows beside a second
+   CTA, and a full-width button would stack them one per line. */
+.sf-buttons-block .btn-violet,
+.sf-buttons-block .btn-solid,
+.sf-buttons-block .btn-outline,
+.sf-buttons-block .btn-on-accent { flex: 1 1 200px; }
+
+/* Header — the .sf-header-* rules live beside .efc-nav further down rather
+   than here. They have to out-order the storefront's own nav rules and both
+   are two-class selectors, so source order is what settles it; keeping them
+   next to the bar they arrange is also where anyone would look for them.
+   (They used to hinge on hiding the category strip. The strip has left the
+   bar entirely — see StorefrontNav — so what is left to arrange is the shop's
+   name against its row of glyphs.) */
+
+/* Heading size. Every section heading reads its size through --sf-h, so the
+   scale moves the hero and the collection title in step — a giant hero over
+   normal-sized section titles is not a type scale, it is one big heading. */
+.sf-type-small { --sf-h: .86; }
+.sf-type-medium { --sf-h: 1; }
+.sf-type-large { --sf-h: 1.2; }
+
+/* Frame shape. Pieces are fitted into the frame, never cropped, so this
+   changes how much paper surrounds a garment rather than how much of the
+   garment survives. */
+.sf-tiles-portrait { --sf-tile-ar: 3 / 4; }
+.sf-tiles-square { --sf-tile-ar: 1; }
+.sf-tiles-tall { --sf-tile-ar: 2 / 3; }
+
+/* The announcement strip. Each option is a PAIR — a ground and text known to
+   read on it — because a vendor picking a ground alone is how you get a page
+   that ships black-on-black in one of the two themes. */
+.announce-bar {
+  background: var(--butter); color: var(--on-light);
+  text-align: center; font-size: 13px; font-weight: 500; padding: 9px var(--sf-gutter);
+}
+.sf-announce-butter .announce-bar { background: var(--butter); color: var(--on-light); }
+.sf-announce-accent .announce-bar { background: var(--violet); color: var(--on-accent); }
+.sf-announce-ink .announce-bar { background: var(--ink); color: var(--paper); }
+
+/* ── where two axes contradict each other ──
+   The axes are independent by design, which means every layout × card-style
+   pair is one tap away and a few of them are not merely ugly. These come LAST
+   so they settle the tie by source order, the same rule the rest of this
+   section runs on.
+
+   Catalogue turns .shop-card-visual into `display: contents`, so it generates
+   no box — and an element with no box is not a containing block, whatever its
+   `position` says. The overlay card style then absolutely-positions the name
+   and price against the nearest positioned ancestor, of which there is none,
+   so every product name in the rack flew to the bottom of the *document*. A
+   catalogue row has no photo frame to overlay onto in the first place: the row
+   IS the caption, so the meta stays in flow. */
+.sf-layout-catalogue .shop-card-meta {
+  position: static; padding: 0; gap: 3px; background: none;
+  border-radius: 0; pointer-events: auto;
+}
+.sf-layout-catalogue .shop-card-title { color: var(--ink); }
+.sf-layout-catalogue .shop-card-price { color: var(--stone); }
+
+/* ── where two choices can't both be honoured ──
+   The axes are independent by design, which means every pairing has to render
+   as SOMETHING. This one can't render as asked: a catalogue row has nowhere to
+   overlay a caption onto — the frame is 84px, and a name laid over it would
+   cover the piece whole.
+
+   Left alone it doesn't just look wrong, it breaks: the row puts
+   .shop-card-visual on display:contents to flatten the card into the row's
+   grid, which takes away the positioned ancestor the overlay anchors to, so an
+   absolutely-positioned caption escapes and stretches across the page. So the
+   overlay degrades to a plain row here.
+
+   Three classes deep on purpose. The .sf-cards-* rules are declared after the
+   layouts — that ordering is what lets a vendor's card style beat a layout's
+   default — so this has to out-specify them rather than out-order them. */
+.sf-layout-catalogue .shop-card-item .shop-card-meta {
+  position: static; padding: 0; pointer-events: auto;
+  background: none; border-radius: 0;
+}
+.sf-layout-catalogue .shop-card-item .shop-card-title { color: var(--ink); }
+.sf-layout-catalogue .shop-card-item .shop-card-price { color: var(--stone); }
+
+/* ── storefront editor ──
+   Five tabs at every width: four kinds of edit (Layout, Text, Photos, Look)
+   and the preview as a destination of its own.
+
+   The preview was a permanent 420px sidecar, which made it the one pane that
+   could never show the page at a width anybody browses at — and on a phone it
+   was hidden behind a toggle that only existed below 980px. As a tab it gets
+   the full column at every width and can be looked at deliberately; vendors
+   who want it live beside the form pin it, which is what the old layout did
+   and is still worth having on a wide screen. */
+.sfe-tabs {
+  display: flex; gap: 6px; margin-bottom: 16px; padding-bottom: 2px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.sfe-tabs::-webkit-scrollbar { display: none; }
+.sfe-tab {
+  font-family: var(--font-display), sans-serif; font-size: 13.5px; font-weight: 600;
+  color: var(--stone); background: none; cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 7px;
+  /* 44px, not the 30px the old toggle had: this is the editor's primary
+     navigation and it is worked one-handed from behind a counter. */
+  padding: 9px 15px; min-height: 44px; flex-shrink: 0;
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
+}
+.sfe-tab.on { background: var(--ink); color: var(--card); border-color: var(--ink); }
+.sfe-tab:focus-visible { outline: 3px solid var(--violet); outline-offset: 2px; }
+/* the unsaved dot — the preview tab is where you go to check an edit, so it
+   says whether what you are about to look at is still a draft */
+.sfe-tab .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--butter-deep); flex-shrink: 0; }
+
+.sfe-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+.sfe-side, .sfe-pin { display: none; }
+/* 1080, not 980: the pinned column is only worth the width it takes once the
+   form beside it still has room for a two-across Segmented row. */
+@media (min-width: 1080px) {
+  .sfe-pin { display: inline-flex; }
+  .sfe-split[data-pinned="1"] { grid-template-columns: minmax(0, 1fr) clamp(340px, 30vw, 430px); }
+  .sfe-split[data-pinned="1"] .sfe-side { display: block; position: sticky; top: 14px; }
+}
+
+/* The preview's own controls, and the stage the frame stands on. The stage is
+   a well rather than the page colour so a storefront whose paper is near-white
+   still reads as a device on a surface instead of bleeding into the dashboard. */
+.sfe-ptools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.sfe-stage {
+  display: flex; justify-content: center; align-items: flex-start; overflow-x: auto;
+  background: var(--paper-deep); border: 1px solid var(--line);
+  border-radius: var(--radius-card); padding: 14px;
+}
+@media (max-width: 640px) { .sfe-stage { padding: 8px; } }
+
+/* The pinned column scrolls on its own. Without this the frame auto-heights to
+   the whole storefront — often 4000px — and the page's own scrollbar became
+   the only way to reach the bottom of it, which meant scrolling the form away
+   to look at the preview of the thing you were editing. Sticky column, capped
+   stage, its own scrollbar: the form and the page it describes move
+   independently, which is the point of having them side by side at all. */
+.sfe-side .sfe-stage {
+  max-height: calc(100svh - 56px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -694,16 +1062,17 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--violet); ou
    default, and let it grow downward but never sideways out of its column */
 .field textarea { font-family: inherit; resize: vertical; min-height: 84px; }
 
-/* Every native select paints the platform's own chevron — a blue-grey double
-   arrow on macOS, a filled triangle on Android — and it is the one piece of
-   these forms drawn by somebody else. Ours instead, in the same ink as the
-   text beside it.
+/* A safety net, not a style anything currently uses: there are no native
+   selects left in the app — see .ph-dd-trigger below — but a <select> dropped
+   onto a form later should not be the one control on the page wearing the
+   platform's own chevron, a blue-grey double arrow on macOS and a filled
+   triangle on Android.
 
    The arrow can't be a pseudo-element: a <select> is a replaced element and
    renders no children of ours, so it goes in as a background image. That in
    turn means any inline `background:` shorthand on a select would wipe it —
-   which is why the ones in this codebase set background-color instead. */
-select.ph-select, .field select {
+   set background-color instead. */
+.field select {
   -webkit-appearance: none;
   appearance: none;
   background-image: var(--select-chevron);
@@ -712,14 +1081,75 @@ select.ph-select, .field select {
   background-size: 11px 7px;
   /* !important earns its place here: the chevron is drawn by this same rule,
      and the clearance it needs is not a style choice a call site gets to
-     override. Several selects carry an inline `padding` shorthand for their
-     own vertical rhythm, and every one of those would otherwise reset
-     padding-right and run a long option straight under the arrow. */
+     override. An inline `padding` shorthand for a control's own vertical
+     rhythm would otherwise reset padding-right and run a long option straight
+     under the arrow. */
   padding-right: 38px !important;
 }
 /* Firefox keeps a focus ring on the text itself; this clears the inner one
    without touching the outline that keyboard users need. */
-select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transparent; text-shadow: 0 0 0 var(--ink); }
+.field select:-moz-focusring { color: transparent; text-shadow: 0 0 0 var(--ink); }
+
+/* ── our dropdown (Dropdown.tsx) ──────────────────────────────────
+   The rule above is all a native <select> would ever let us style, and it
+   stops at the box: the list itself is drawn by the operating system, so the
+   same control was a wheel on iOS, a sheet on Android and a menu on a laptop,
+   and no option in it could hold more than one string. There are no native
+   selects left in the app for that reason — every one is a Dropdown now, and
+   this is where its trigger gets its look.
+
+   Here rather than inline in the component because these are the same controls
+   the rules further down this file size for a toolbar, a form and a phone; an
+   inline style would beat every one of them. Same reason .cat-tools keeps the
+   search box's padding out of the JSX. */
+.ph-dd-trigger {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 11px 13px; font-size: 14px; text-align: left;
+  border-radius: var(--radius-field); border: 1px solid var(--line);
+  background: var(--card); color: var(--ink); cursor: pointer;
+  /* .field sets 600/uppercase-ish on its label text and the control inherits
+     it, exactly as `.field input` has to undo above. */
+  font-weight: 400; letter-spacing: 0; text-transform: none;
+}
+/* Open reads on the border, the one the native control drew for us. */
+.ph-dd-trigger[aria-expanded="true"] { border-color: var(--ink); }
+/* Nothing picked yet: the placeholder is an instruction, not an answer. */
+.ph-dd-trigger[data-empty="true"] { color: var(--stone); }
+.ph-dd-trigger:disabled { opacity: .55; cursor: not-allowed; }
+
+/* On a form it matches the inputs it stands in a column with — the 15px and
+   the 12/15 padding of `.field input` above, not the component's own default.
+   A dropdown 1px shorter than the text field over it is the kind of drift
+   these forms were combed through to remove. */
+.field .ph-dd-trigger { padding: 12px 15px; font-size: 15px; }
+
+/* The admin console's inline pickers, which sit inside a sentence rather than
+   over a form field — small, and only as wide as the answer needs. */
+.admin-dd { width: 178px; flex-shrink: 0; }
+.admin-dd .ph-dd-trigger { padding: 8px 10px; font-size: 12px; border-radius: var(--radius-btn); }
+
+/* A colour's row in the fabric form: swatch, name, share, remove. The name is
+   what absorbs whatever the other three leave, and `min-width: 0` is what lets
+   a long one ellipsise instead of pushing the % box off the row. */
+.color-dd { flex: 1; min-width: 0; }
+.color-dd .ph-dd-trigger { padding: 10px 12px; }
+/* One size across the row — 14, not the 15 `.field` gives the controls this
+   list sits among, because the % box beside the name is 46px wide and a colour
+   list is read across rather than down. Here rather than inline on each so the
+   phone rule can raise both at once: `.color-txt` is a real <input>, and iOS
+   zooms the page into anything under 16px and stays there. */
+.color-dd .ph-dd-trigger, .color-txt { font-size: 14px; }
+@media (max-width: 760px) {
+  .color-dd .ph-dd-trigger, .color-txt { font-size: 16px; }
+}
+
+/* The counter card, where the family dropdown stands directly above "pick a
+   cut" — a button that opens the cut picker. Those numbers are `selectStyle`
+   in CounterTryOn.tsx; the two controls are read together at arm's length
+   across a shop counter, so they are one size or they are wrong. */
+.counter-dd .ph-dd-trigger {
+  padding: 11px 14px; font-size: 16px; border-radius: var(--radius-lg);
+}
 
 /* ── the brightness slider in our colour picker (ColorWheel.tsx) ──
    The element *is* the track: the gradient it moves through — black into the
@@ -787,21 +1217,178 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
 .tabs button.on::after { content: ""; position: absolute; left: 18px; right: 18px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--violet); }
 .tabs .badge { background: var(--butter); color: var(--on-light); font-size: 11px; font-weight: 700; border-radius: 10px; padding: 1px 8px; margin-left: 6px; }
 
+/* ── the dashboard's nav bar ────────────────────────────────────────
+   The dashboard is worked from behind a counter, on a phone, one-handed —
+   so below 760px its nav is the shape a phone has already taught every
+   vendor: a bar fixed to the bottom of the screen, thumb-height, one glyph
+   and one word per destination, the active one wearing a filled pill.
+
+   Above that it is the same markup laid out as a row of pills under the
+   header. Not the underlined `.tabs` strip (which admin still uses): that
+   bar scrolled sideways, and a destination you have to swipe to find is a
+   destination a vendor stops using. Four entries, all of them visible, at
+   every width.
+
+   `.navbar` is deliberately not `position: sticky` on desktop — the page
+   scroll there is short and a sticky bar would eat 60px of a laptop's
+   screen for a control used a few times an hour.
+
+   inline-flex, so on a laptop the bar hugs its four entries instead of
+   stretching them into 260px pills across a 1080px page. It goes full-width
+   and equal-width at the phone breakpoint, where a tab bar should. */
+.navbar {
+  display: inline-flex; gap: 6px; margin-bottom: 22px; padding: 4px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--card);
+}
+.navbar button {
+  flex: 0 0 auto; min-width: 0; position: relative;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  font-family: var(--font-display), sans-serif; font-size: 13.5px; font-weight: 600;
+  color: var(--stone); background: none; border: none; cursor: pointer;
+  white-space: nowrap; padding: 7px 13px; min-height: 38px;
+  border-radius: var(--radius-pill);
+  transition: background-color .18s ease, color .18s ease;
+}
+.navbar button.on { background: var(--ink); color: var(--card); }
+.navbar button:focus-visible { outline: 3px solid var(--violet); outline-offset: 2px; }
+.navbar .nav-ico { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.navbar .badge {
+  background: var(--butter); color: var(--on-light); font-size: 11px; font-weight: 700;
+  border-radius: var(--radius-pill); padding: 1px 7px;
+}
+
+/* The whole dashboard's page box. Both axes live here, not inline on the
+   element: an inline `padding` shorthand sets padding-bottom to 0 with a
+   specificity nothing in this file can beat, which is exactly how the fixed
+   bar below ended up covering the last control on every long page. */
+.dash-shell { padding: 0 min(26px, 4vw) 50px; }
+
+/* The minimised stitch: a job that outlives the page that started it, parked
+   in a corner with the cloth and a percentage. Its corner is here rather than
+   inline on the element so the phone breakpoint below can move it off the
+   nav bar. */
+.stitch-min {
+  position: fixed; right: 16px; bottom: 16px; z-index: var(--z-dialog);
+  max-width: min(92vw, 330px);
+}
+
+/* ── the dashboard header ──
+   Wordmark on the left, the occasional destinations on the right. On a phone
+   those shed their words and become 34px glyph buttons on one line — the row
+   used to wrap to three lines of pill buttons and push the actual work below
+   the fold. The words live on in `title`/`aria-label`, so nothing is lost to
+   anyone reading by touch or by screen reader. */
+.dash-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0 14px; flex-wrap: wrap; }
+.dash-head .head-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dash-act {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-btn);
+  padding: 0 13px; min-height: 34px; background: var(--card);
+  text-decoration: none; cursor: pointer; white-space: nowrap;
+}
+.dash-act-solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+/* ── one control size for the whole dashboard ──
+   .btn-solid and .btn-outline are sized for a landing page: 13px/30px of
+   padding at 16px type, because out there a button is the one thing on the
+   screen you are meant to press. In here a button is a tool — "add fabric",
+   "save", "stitch" — pressed dozens of times an hour beside twenty others,
+   and at landing-page size four of them fill a phone.
+
+   Scoped to .dash-shell so the marketing pages, the storefronts and the
+   kiosk keep their own scale. It also outranks the phone override further
+   down the file (0,2,0 against 0,1,0), which is deliberate: this size IS the
+   phone size, and the desktop simply doesn't need it any bigger. Every call
+   site inside the dashboard therefore stopped carrying its own inline
+   padding — there were six different ones. */
+.dash-shell .btn-solid,
+.dash-shell .btn-outline,
+.dash-shell .btn-violet {
+  padding: 8px 17px; font-size: 13px; min-height: 34px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.dash-shell .btn-outline { border-width: 1.5px; padding: 7px 16px; }
+/* A primary that fills its row on a phone still shouldn't be a slab. */
+@media (max-width: 640px) {
+  .dash-shell .btn-solid,
+  .dash-shell .btn-outline,
+  .dash-shell .btn-violet { padding: 8px 15px; font-size: 12.5px; }
+}
+
+@media (max-width: 760px) {
+  .dash-head { padding: 12px 0 12px; gap: 8px; flex-wrap: nowrap; }
+  .dash-head .head-acts { gap: 6px; flex-wrap: nowrap; }
+  .dash-act { padding: 0; width: 34px; flex-shrink: 0; }
+  .dash-act .act-lbl { display: none; }
+
+  .navbar {
+    display: flex;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-sticky);
+    margin: 0; gap: 0; padding: 7px 6px calc(7px + env(safe-area-inset-bottom));
+    border: none; border-top: 1px solid var(--line); border-radius: 0;
+    background: var(--raised); box-shadow: 0 -6px 20px rgba(26, 23, 20, .07);
+  }
+  /* icon over word, the way a phone's tab bar reads.
+
+     This is the one control that did NOT shrink with the rest. Everything
+     else on the dashboard got smaller because it is read at arm's length on
+     a counter; this is hit blind, with a thumb, while looking at a customer.
+     46px is about a thumb pad, and it is the floor. */
+  .navbar button {
+    flex: 1 1 0;
+    flex-direction: column; gap: 3px; font-size: 11px; letter-spacing: .01em;
+    padding: 4px 2px; min-height: 46px; border-radius: var(--radius-md);
+  }
+  /* The pill moves off the whole button and onto the glyph: a full-height
+     dark block per tab is a lot of ink at the bottom of every screen, and
+     the label under it has to stay readable in both states. */
+  .navbar button.on { background: none; color: var(--ink); }
+  .navbar .nav-ico {
+    width: 46px; height: 24px; border-radius: var(--radius-pill);
+    transition: background-color .18s ease, color .18s ease;
+  }
+  .navbar button.on .nav-ico { background: var(--ink); color: var(--card); }
+  /* a count, riding the corner of the glyph rather than trailing the word */
+  .navbar .badge {
+    position: absolute; top: 1px; left: 50%; margin-left: 8px;
+    font-size: 10px; min-width: 17px; padding: 0 4px; line-height: 17px; text-align: center;
+  }
+  .dash-shell { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+
+  /* Everything else that parks along the bottom edge has to clear the bar.
+     Scoped with :has so only a page that actually has one pays for it — the
+     kiosk, the storefronts and the marketing pages keep their corner. */
+  body:has(.navbar) .toast-wrap:not(.top) { bottom: calc(84px + env(safe-area-inset-bottom)); }
+  body:has(.navbar) .stitch-min { bottom: calc(80px + env(safe-area-inset-bottom)); left: 12px; right: 12px; max-width: none; }
+}
+
 /* ── the switch inside a tab ──
-   Bolts and cuts are one job — a bolt is only worth listing once there is a
-   cut to stitch it into — so they share the Fabrics tab and this picks the
+   Bolts, cuts and fits are one job — a bolt is only worth listing once there
+   is a cut to stitch it into, and a fit is exactly the two of them together —
+   so they share the Fabrics tab and this picks the
    view. Deliberately NOT a second .tabs row: two underlined bars stacked on
    each other read as two levels of nav with no hierarchy between them, which
    is how the dashboard ended up with eight top-level tabs in the first
    place. */
 .subtabs { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--card); }
 .subtabs button {
-  font-family: var(--font-display), sans-serif; font-size: 13px; font-weight: 600;
+  font-family: var(--font-display), sans-serif; font-size: 12.5px; font-weight: 600;
   color: var(--stone); background: none; border: none; cursor: pointer;
-  padding: 7px 17px; min-height: 34px; border-radius: var(--radius-pill); white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 6px 13px; min-height: 30px; border-radius: var(--radius-pill); white-space: nowrap;
 }
 .subtabs button.on { background: var(--ink); color: var(--card); }
 .subtabs button:focus-visible { outline: 3px solid var(--violet); outline-offset: 2px; }
+/* On a phone the group takes the full width and the three halves of the
+   fabrics job split it evenly — a pill group hugging its content leaves a
+   240px target strip on a 390px screen with dead space beside it. */
+@media (max-width: 640px) {
+  .subtabs { display: flex; width: 100%; }
+  .subtabs button { flex: 1 1 0; min-width: 0; padding: 6px 5px; min-height: 34px; }
+  .subtabs button .sub-lbl { overflow: hidden; text-overflow: ellipsis; }
+}
 
 .garment-rail::-webkit-scrollbar { height: 0; }
 
@@ -809,20 +1396,227 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
    the search takes its own row, filter + qr share one, add garment goes full
    width. Widths live here (not inline) so the media query can win. */
 .cat-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+
+/* The left half of a .cat-bar: a segmented control, and the sentence counting
+   whatever it has selected.
+
+   The width at the phone breakpoint is load-bearing rather than tidiness.
+   .subtabs takes `width: 100%` down there, and a percentage resolves against
+   THIS box — which, with no width of its own, is shrink-to-fit and therefore
+   sized by its own contents. Those contents include the sentence, and the
+   sentence changes with the selection: "12 fabrics", "8 cuts · 3 yours",
+   "5 stitched · 2 published". So the control visibly resized every time you
+   used it, worst on Fits, which has the longest line. A definite width here
+   gives the percentage something constant to be a percentage of.
+   Same stance .cat-tools already takes on the other half of the bar. */
+.sub-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
+@media (max-width: 640px) { .sub-bar { width: 100%; } }
 .cat-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0; }
 .cat-tools .cat-search { width: 210px; }
+/* A definite width, for the same reason .sub-bar has one. Our dropdown's
+   trigger holds only what is currently picked, so left to shrink-to-fit the
+   filter was 52px wide on "All" and 118px on "Daura Suruwal" — it changed size
+   every time it was used, and took the buttons beside it along for the ride.
+   The native select it replaced sized itself to its widest option instead. */
+.cat-tools .ph-dd { width: 148px; flex-shrink: 0; }
+/* Sizes live here, not inline on each control, so the phone rule below can
+   win — an inline font-size or padding beats every selector in the file. */
+.cat-tools .cat-search, .cat-tools .ph-dd-trigger { font-size: 12.5px; padding: 8px 11px; }
+/* Squarer than the form's fields: in this bar the filter stands next to
+   `qr tags` and `add garment`, so it takes the button radius they have. */
+.cat-tools .ph-dd-trigger { border-radius: var(--radius-btn); }
+
+/* ── the 16px floor ──────────────────────────────────────────────────
+   iOS Safari zooms the whole page in when you focus a field whose text is
+   smaller than 16px, and it does not zoom back out — so on an iPhone every
+   one of these forms threw the vendor into a magnified, sideways-scrolling
+   page on the first tap, and left them there. The dashboard's fields were
+   15px and its toolbar's 12.5px, so this hit all of them.
+
+   Bumped on phones only. On a laptop the smaller text is right — these are
+   dense working forms, not a landing page — and no desktop browser has ever
+   done this. */
+/* Everything the *shopper* types into. The rule above only ever covered the
+   dashboard's own selectors (.field, .cat-tools), so the public storefront —
+   the collection search, the sort, the footer's question box, and both
+   checkout fields — kept its 13–15px inline sizes and threw every iPhone
+   shopper into a magnified sideways page on the first tap. And an inline
+   font-size beats every selector in this file, so the size has to live here
+   rather than at the call site for the phone rule to be able to win at all. */
+.sf-input { font-size: 14.5px; }
+
+/* The collection's sort, which stands beside that search box and so wears the
+   same pill. A definite width because the trigger only holds what is picked,
+   and "Newest first" is half the width of "Price: low to high" — without it the
+   control resized under the thumb that had just used it. */
+.sf-sort { width: 178px; flex-shrink: 0; }
+.sf-sort .ph-dd-trigger {
+  padding: 11px 16px; font-size: 14.5px; font-weight: 500;
+  border-radius: var(--radius-pill);
+}
+@media (max-width: 640px) { .sf-sort { width: 100%; } }
+
+/* Our dropdown's trigger is a <button>, which no browser has ever zoomed into
+   — it takes the floor anyway, because it stands in a row beside the controls
+   that do, and a 12.5px filter next to a 16px search box is a row that looks
+   assembled from two different forms. */
+@media (max-width: 760px) {
+  .field input, .field select, .field textarea, .field .ph-dd-trigger,
+  .cat-tools .cat-search, .cat-tools .ph-dd-trigger,
+  .sf-input, .sf-sort .ph-dd-trigger { font-size: 16px; }
+}
 @media (max-width: 640px) {
   .cat-tools { width: 100%; }
   .cat-tools .cat-search { width: 100%; flex: 1 1 100%; }
-  .cat-tools select { flex: 1 1 0; min-width: 0; }
+  /* Now it can stretch: on one phone row the filter is what absorbs whatever
+     the buttons beside it leave, so the fixed desktop width comes off. */
+  .cat-tools .ph-dd { width: auto; flex: 1 1 0; min-width: 0; }
   .cat-tools .cat-qr { flex: 1 1 0; white-space: nowrap; }
-  .cat-tools .cat-add { flex: 1 1 100%; }
+
+  /* Every control in the bar shares one row unless the bar is genuinely too
+     crowded for that — and the thing that makes it crowded is the search, so
+     that is what the rule asks about rather than which tab it is on. The
+     fabrics bar is a filter and one button; `flex: 1 1 100%` on the button
+     put two controls on two rows and stretched the filter across a whole
+     phone screen to say "All".
+     Without :has() the bar falls back to one row everywhere, which is tight
+     on the catalog but not broken — the right way for this to degrade. */
+  .cat-tools .cat-add {
+    flex: 1 1 0; min-width: 0;
+    padding: 11px 12px; font-size: 13.5px;
+  }
+  .cat-tools:has(.cat-search) .cat-add { flex: 1 1 100%; }
+
+  /* A touch shorter than the desktop bar. The 16px font is not negotiable —
+     iOS zooms into any control below it and does not come back — so the height
+     comes out of the padding instead. */
+  .cat-tools .cat-search, .cat-tools .ph-dd-trigger { padding-top: 7px; padding-bottom: 7px; }
 }
 
 /* ── responsive layout primitives ─────────────────────────────── */
 
 /* top nav: 3 columns on desktop; logo+tools row with scrolling links below on phones */
-.efc-nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 16px 24px; background: var(--paper); border-bottom: 1px solid var(--line); gap: 12px; }
+.efc-nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 16px var(--sf-gutter); background: var(--paper); border-bottom: 1px solid var(--line); gap: 12px; }
+
+/* ── the storefront's nav rides along ──
+   Sticky on a shop's own pages only — [data-sf-root] — and not on the landing
+   page, the account page or the auth screens, which share this class but are
+   read top to bottom rather than shopped from.
+
+   The bag is the reason. A shopper forty pieces down a rack has no way back to
+   it otherwise, and "scroll all the way up to check what you added" is how a
+   bag gets abandoned. Lookbook had this already, because its hero is a
+   full-bleed photo the nav had to survive; every layout wants it for the bag.
+
+   Translucent-and-blurred rather than solid: the nav sits over photographs in
+   half these layouts. The flat --paper line first is the fallback where
+   color-mix isn't understood — without it those browsers get a transparent bar
+   with the shop's name floating over a garment. */
+[data-sf-root] .efc-nav {
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  background: var(--paper);
+  background: color-mix(in srgb, var(--paper) 90%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+/* Anchored jumps have to clear the bar that is now permanently over them —
+   "shop the collection" scrolling the collection heading under the nav is the
+   whole failure mode of a sticky header. */
+[data-sf-root] section[id] { scroll-margin-top: 84px; }
+@media (max-width: 640px) { [data-sf-root] section[id] { scroll-margin-top: 56px; } }
+
+/* Two children, not three: the storefront's nav dropped its category strip
+   (see StorefrontNav) and is now the shop's name and a row of glyphs. Placed
+   by explicit column rather than by the grid-template-areas the shared rule
+   sets further down, hence the `grid-area: auto` — the areas are still
+   declared for the pages that do carry a links column. */
+[data-sf-root] .efc-nav { grid-template-columns: 1fr auto 1fr; padding-block: 10px; }
+[data-sf-root] .efc-nav .nav-logo { grid-area: auto; grid-column: 2; text-align: center; min-width: 0; }
+[data-sf-root] .efc-nav .nav-tools { grid-area: auto; grid-column: 3; gap: 2px; }
+.nav-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.2; }
+.nav-area { font-size: 11px; letter-spacing: .08em; color: var(--stone); margin-top: 2px; }
+
+/* One square, 40px, for every tool in the bar — a thumb target that is the
+   same size whether the glyph inside it is a heart or a bag, which is what
+   stops the row jittering as counts appear and disappear. */
+.nav-tool {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: var(--radius-pill); font-size: 18px;
+}
+.nav-tool:hover { background: var(--paper-deep); }
+.nav-tool:disabled:hover { background: none; }
+/* The count rides the corner of its glyph instead of sitting beside it, so a
+   bag of 1 and a bag of 12 are the same width in the bar. */
+.nav-badge {
+  position: absolute; top: 1px; right: 0;
+  background: var(--violet); color: var(--on-accent);
+  font-size: 10px; font-weight: 700; line-height: 1;
+  min-width: 15px; height: 15px; padding: 0 4px; border-radius: var(--radius-pill);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* The account circle AccountMenu draws is 34px; the nav's own tools are 40px
+   squares. Centring it in one keeps the row's rhythm rather than leaving the
+   last slot 6px short. */
+.nav-account { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; }
+.nav-avatar {
+  width: 34px; height: 34px; border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong); background: var(--card); color: var(--ink);
+}
+
+/* Phones: the row folds behind the hamburger — except the bag, which has no
+   .nav-wide and so stays out at every width (see StorefrontNav). Tablets keep
+   the full row: from 641px there is width for three glyphs and the shop's
+   name, so the hamburger never appears above a phone. */
+.nav-burger { display: none; }
+/* One line on a phone, and only just: the name and the area sit side by side
+   instead of stacking, the squares come down to 36px, and the padding to 5.
+   That is a ~46px bar rather than the ~78px two-row one — and the bar is
+   sticky, so every pixel of it is a pixel off every screen of the rack. */
+@media (max-width: 640px) {
+  [data-sf-root] .efc-nav { grid-template-columns: minmax(0, 1fr) auto; padding: 5px 14px; gap: 8px; }
+  [data-sf-root] .efc-nav .nav-logo {
+    grid-column: 1; text-align: left;
+    display: flex; align-items: baseline; gap: 7px; overflow: hidden;
+  }
+  [data-sf-root] .efc-nav .nav-area {
+    margin-top: 0; flex-shrink: 0; font-size: 10.5px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  [data-sf-root] .efc-nav .nav-tools { grid-column: 2; }
+  [data-sf-root] .efc-nav .nav-wide { display: none; }
+  [data-sf-root] .efc-nav .nav-tool { width: 36px; height: 36px; font-size: 17px; }
+  .nav-burger { display: inline-flex; }
+}
+
+/* The sheet behind it: full-width rows, glyph in a fixed gutter so the labels
+   line up as a column of text — the same shape AccountMenu's own rows take. */
+.nav-sheet-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 4px; font-size: 15px; font-weight: 600;
+  color: var(--ink); text-decoration: none; text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+.nav-sheet-row:last-child { border-bottom: 0; }
+
+/* ── header arrangement ──
+   Declared here rather than up with the other look axes because it has to beat
+   the [data-sf-root] rules above, and both are two-class selectors: source
+   order is what settles it. Only two arrangements now — "minimal" used to mean
+   "without the category strip", which is every storefront since the strip
+   left the bar. */
+.sf-header-left .efc-nav { grid-template-columns: auto minmax(0, 1fr); }
+.sf-header-left .efc-nav .nav-logo { grid-column: 1; text-align: left; }
+.sf-header-left .efc-nav .nav-tools { grid-column: 2; }
+/* A tool that is only text — the landing, privacy, account and auth navs,
+   which still carry worded links — has no box of its own and was a ~20px-tall
+   tap target on the one row every page opens with. The height comes from the
+   row rather than from each call site.
+   :not(.nav-tool) because the storefront's bar has already answered this: its
+   tools are 40px squares, and a min-height of 44 on a 40px-wide box would turn
+   every one of those squares into an oval on hover. */
+.efc-nav .nav-tools > a:not(.nav-tool),
+.efc-nav .nav-tools > button:not(.nav-tool) { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; }
 .efc-nav .nav-links { display: flex; gap: 18px; font-size: 14px; font-weight: 500; overflow-x: auto; }
 .efc-nav .nav-links a { color: inherit; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .efc-nav .nav-logo { text-align: center; }
@@ -842,7 +1636,7 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
   gap: clamp(28px, 5vw, 72px);
   max-width: 1200px;
   margin: 0 auto;
-  padding: clamp(36px, 6vh, 72px) min(40px, 6vw);
+  padding: clamp(36px, 6vh, 72px) var(--sf-gutter);
 }
 .hero-copy {
   display: flex; flex-direction: column; justify-content: center;
@@ -949,13 +1743,16 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
    wraps to three words a line and the photo becomes a sliver. Stack instead —
    well before the 640px phone breakpoint, which was far too late. */
 @media (max-width: 880px) {
-  .hero-grid { grid-template-columns: 1fr; gap: 26px; padding: 34px 22px 32px; }
+  .hero-grid { grid-template-columns: 1fr; gap: 26px; padding: 34px var(--sf-gutter) 32px; }
   .hero-copy { max-width: 560px; justify-self: start; align-items: flex-start; }
-  .hero-visual { justify-self: start; width: min(100%, calc(min(46vh, 400px) * var(--ar, 0.8))); }
+  /* svh, not vh. On iOS `vh` is the viewport with the URL bar hidden, so a
+     photo sized off it is taller than the screen it is actually on — the same
+     trap `body { min-height: 100dvh }` is there to avoid. */
+  .hero-visual { justify-self: start; width: min(100%, calc(min(46svh, 400px) * var(--ar, 0.8))); }
 }
 
 /* section padding that tightens on phones */
-.section-pad { padding: 44px min(32px, 5vw); }
+.section-pad { padding: var(--sf-section-y, 44px) var(--sf-gutter); }
 
 /* product-card grids: auto-fill desktop, guaranteed 2-up on phones */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px; }
@@ -964,7 +1761,7 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
    Desktop keeps the 38px action target (WCAG 2.5.8 asks 24; a thumb wants
    more); mobile trades some of that for two cards that actually fit. */
 .tile-pad { padding: 13px 14px 14px; }
-.card-act { color: var(--ink); font-size: 12.5px; font-weight: 600; padding: 9px 10px; min-height: 38px; border-radius: var(--radius-md); }
+.card-act { color: var(--ink); font-size: 12px; font-weight: 600; padding: 7px 9px; min-height: 32px; border-radius: var(--radius-md); display: inline-flex; align-items: center; gap: 5px; }
 .orders-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; align-items: stretch; }
 .order-tile { position: relative; border: 1px solid var(--line); border-radius: var(--radius-card); padding: 13px 14px; display: flex; align-items: center; gap: 12px; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
@@ -1008,9 +1805,15 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
    the leftover splits evenly instead of piling into a ragged right margin.
    (justify-content, not justify-items: the tracks move as a set, so a lone
    last piece still starts the row rather than floating in the middle.) */
+/* Four tokens, not four hardcoded numbers, because three different vendor
+   choices move them: a LAYOUT has an opinion (bazaar wants small dense tracks,
+   lookbook wants large ones), the DENSITY axis has an opinion, and the TILE
+   axis owns the ratio outright. Reading them through variables is what lets
+   those three settle by the cascade instead of by three copies of this rule
+   each restating everything the others said. */
 .shop-grid {
-  display: grid; gap: 18px;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 210px));
+  display: grid; gap: var(--sf-grid-gap, 18px);
+  grid-template-columns: repeat(auto-fill, minmax(var(--sf-tile-min, 170px), var(--sf-tile-max, 210px)));
   justify-content: center;
 }
 
@@ -1027,7 +1830,76 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
    undoes the blending the mask is there to do; on the card colour the
    leftover space simply *is* the card, and a 3/4 shot still fills the frame
    edge to edge and feathers into it. */
-.shop-tile { position: relative; aspect-ratio: 3/4; background: var(--card); }
+.shop-tile { position: relative; aspect-ratio: var(--sf-tile-ar, 3/4); background: var(--sf-tile-bg, var(--card)); }
+
+/* ── the card around that frame ──
+   Was inline styles on the component until the card, tile and layout axes all
+   needed to reach it; an inline style beats every one of them. The default
+   values here ARE the card peeq has always drawn — a bordered surface, the
+   name and price under the photo, the buttons at the bottom held down by
+   margin-top:auto so cards in a row line up however long their names are. */
+.shop-card-item {
+  display: flex; flex-direction: column;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius-card); overflow: hidden;
+}
+/* Wraps the frame and the name block together so the two card styles that put
+   the name ON the photo have something to position against. It is not a
+   layer of its own in any other style — it just contains. */
+.shop-card-visual { position: relative; }
+.shop-card-meta { padding: 13px 14px 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.shop-card-title {
+  font-size: 13.5px; font-weight: 600; color: var(--ink); text-decoration: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.shop-card-price { color: var(--stone); font-weight: 500; font-size: 14px; }
+.shop-card-actions {
+  margin-top: auto; padding: 12px 14px 15px;
+  display: flex; flex-direction: column; gap: 8px; align-items: stretch;
+}
+
+/* The add-to-bag / choose-size control, as one class so the button axis can
+   redraw every one of them at once. The transparent border is load-bearing:
+   the outline style swaps it for a visible one, and a border appearing from
+   nothing would move the button 2px and reflow the row under it. */
+.card-cta {
+  font-family: var(--font-display), sans-serif;
+  background: var(--violet); color: var(--on-accent);
+  font-weight: 700; font-size: 14px; padding: 10px 0;
+  border: 2px solid transparent; border-radius: var(--radius-pill);
+  width: 100%; text-align: center; text-decoration: none; display: block;
+}
+/* --stone on --line is a grey-on-grey pill. This says the same thing as a
+   plain disabled control without pretending to be a pressable button. */
+.card-cta-sold {
+  background: var(--paper-deep); color: var(--stone);
+  border: 1px dashed var(--line-strong);
+}
+.card-tryon {
+  align-self: flex-start;
+  text-decoration: underline; text-underline-offset: 4px;
+  font-size: 12.5px; font-weight: 600; color: var(--violet);
+}
+/* One size chip, drawn in two places: the product page's buy panel and the
+   card's own size dialog. Keyed off aria-checked rather than a second
+   data-attribute — the radio's accessible state and its look are the same
+   fact, and two sources for it is how they drift apart. */
+.size-chip {
+  min-width: 44px; min-height: 44px; padding: 9px 14px;
+  font-size: 13.5px; font-weight: 600; border-radius: var(--radius-md);
+  background: var(--card); color: var(--ink); border: 1.5px solid var(--line);
+}
+.size-chip[aria-checked="true"] {
+  background: var(--violet); color: var(--on-accent); border-color: var(--violet);
+}
+
+.card-heart {
+  position: absolute; top: 8px; right: 8px; z-index: 3;
+  width: 34px; height: 34px; border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, .9); font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .12);
+}
 
 /* ── landing hero — one look, two fits. The b-image crossfades in and out
    so the page opens on the product's whole promise with zero words. ── */
@@ -1368,21 +2240,65 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
 }
 
 @media (max-width: 640px) {
-  .efc-nav { grid-template-columns: 1fr auto; grid-template-areas: "logo tools" "links links"; padding: 12px 16px 10px; }
-  .efc-nav .nav-logo { grid-area: logo; text-align: left; }
-  .efc-nav .nav-tools { grid-area: tools; }
+  /* One gutter for the whole page below 640px. Every band reads it, so the
+     phone rules below no longer restate a number each. */
+  :root { --sf-gutter: 16px; }
+
+  /* The tools column is `auto` and .nav-tools has no flex-wrap, so it never
+     gives width back: saved + Contact + account + bag is ~230px minimum, which
+     on a 360px screen left ~85px for the shop name. A name whose longest word
+     is wider than that pushed the whole nav past the viewport, where
+     `overflow-x: clip` quietly cut it off rather than wrapping it.
+     minmax(0,1fr) lets the logo column actually shrink, and the name
+     truncates — a clipped nav is a bug, a shortened shop name is a choice. */
+  .efc-nav { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "logo tools" "links links"; padding: 12px var(--sf-gutter) 10px; }
+  .efc-nav .nav-logo { grid-area: logo; text-align: left; min-width: 0; }
+  .efc-nav .nav-logo > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .efc-nav .nav-tools { grid-area: tools; gap: 10px; }
   .efc-nav .nav-links { grid-area: links; padding-top: 8px; -webkit-overflow-scrolling: touch; }
+  /* the footer's "your bag" and "send" are the same 13px text controls with no
+     box of their own — give them one on a phone too */
+  footer .ph-btn { min-height: 40px; }
 
-  .hero-grid { grid-template-columns: 1fr; min-height: 0; gap: 22px; padding: 28px 20px 30px; }
-  /* phones: a shallower cap, and centred once it stops filling the width */
-  .hero-visual { width: min(100%, calc(min(44vh, 360px) * var(--ar, 0.8))); justify-self: center; }
+  .hero-grid { grid-template-columns: 1fr; min-height: 0; gap: 22px; padding: 28px var(--sf-gutter) 30px; }
+  /* Phones: the frame runs gutter to gutter and takes its height from the
+     photo's own ratio. It used to be capped by a height — 288px wide before
+     the image reported --ar — which left ~50px of bare paper down each side of
+     a picture sitting under a full-width headline, on the one screen where the
+     hero has nothing to share the row with. */
+  /* The cap is a height, not a width: a very tall shot (--ar near 0.5) at the
+     full gutter-to-gutter width would be 700px+ of hero before a shopper had
+     seen a single price. Past the cap the ratio gives way and the blurred
+     .hero-fill takes the slack, which is what that layer is there for. */
+  .hero-visual { width: 100%; justify-self: stretch; max-height: 74svh; }
 
-  .section-pad { padding: 30px 16px; }
-  .card-grid, .shop-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  /* Phones keep their own, tighter defaults — but through the same tokens, so
+     a vendor who asked for a roomy page still gets one on a phone instead of
+     having their choice quietly undone below 640px. */
+  .section-pad { padding: var(--sf-section-y-sm, 30px) var(--sf-gutter); }
+  .card-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .shop-grid {
+    grid-template-columns: repeat(var(--sf-cols-sm, 2), minmax(0, 1fr));
+    gap: var(--sf-grid-gap-sm, 10px);
+  }
+  /* The card's own chrome, sized for a ~170px tile rather than a 210px one.
+     Without this the default 14px CTA and the 12.5px try-on link are both
+     wider than the space between the action row's 14px flanks. */
+  .shop-card-meta { padding: 10px 10px 0; }
+  .shop-card-actions { padding: 10px 10px 12px; gap: 6px; }
+  .card-cta { font-size: 13px; padding: 11px 6px; }
+  /* A 12.5px underlined link is a ~17px tap target sitting a few pixels under
+     the add-to-bag button. Same words, same look, a thumb's worth of box. */
+  .card-tryon { min-height: 34px; display: inline-flex; align-items: center; }
   /* smaller cards on a phone: tighter bodies, shorter action rows, denser
      stat tiles — the information stays, the air goes */
   .tile-pad { padding: 9px 10px 10px; }
-  .card-act { font-size: 11.5px; padding: 6px 7px; min-height: 30px; }
+  /* Two cards across a phone leaves ~170px a tile, which a price and three
+     worded buttons do not fit on one line. The ones carrying a glyph drop
+     their word; the stock toggle keeps its, because "Mark sold out" and
+     "Restock" are the pair no icon says honestly. */
+  .card-act { font-size: 11px; padding: 5px 7px; min-height: 28px; }
+  .card-act .act-lbl { display: none; }
   .orders-grid { gap: 8px; }
   .order-tile { padding: 10px 12px; gap: 10px; }
   .stat-grid { gap: 8px; }
@@ -1395,9 +2311,23 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
 
   .btn-solid, .btn-outline, .btn-violet { padding: 12px 24px; font-size: 15px; }
 
+  /* 24px of side padding is 48px of a 390px screen — a seventh of the width
+     spent on the inside of a box that already sits inside the page's gutter. */
+  .panel { padding: 16px 14px; }
+
   .hide-sm { display: none; }
   .k-stage { max-height: 56svh; max-width: 94vw; }
   .k-cam { max-height: 50svh; max-width: 92vw; }
+}
+
+/* Three across stops working before the grid does. At 400px a third of the row
+   is a ~104px tile, and once its 20px of action padding is out there are 84px
+   left for a button whose label needs ~85 and a try-on link that needs ~105 —
+   so Bazaar and Compact both shipped a rack of overflowing cards on a small
+   phone. Set on .shop-grid rather than on the wrapper so it beats the value
+   the layout and density axes inherit down. */
+@media (max-width: 400px) {
+  .shop-grid { --sf-cols-sm: 2; }
 }
 
 /* Reduced motion is a request to stop things MOVING, not a request to stop
@@ -1466,6 +2396,11 @@ select.ph-select:-moz-focusring, .field select:-moz-focusring { color: transpare
   border-radius: var(--radius-modal) 0 0 var(--radius-modal);
   max-width: min(420px, 100%); max-height: none; height: 100dvh;
   animation: dlg-slide 220ms cubic-bezier(.2,.7,.3,1) both;
+  /* The bottom sheet has carried this since it was written; the drawer never
+     did, and the drawer is the cart — a full-height panel whose last row is
+     "place order". On a gesture-navigation phone that button sat under the
+     home indicator. */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 .dlg-panel:focus { outline: none; }
 @keyframes dlg-in { from { opacity: 0 } to { opacity: 1 } }

@@ -16,7 +16,10 @@ export type IconName =
   | "phone" | "locate" | "reset" | "star" | "edit" | "bolt" | "sparkle"
   | "person" | "eye" | "dice" | "party" | "point-down" | "swap" | "scissors"
   | "copy" | "open" | "camera" | "download" | "search"
-  | "globe" | "share" | "back" | "menu";
+  | "globe" | "share" | "back" | "menu"
+  /* the dashboard's nav and menu — see the bar in Dashboard.tsx */
+  | "home" | "grid" | "cloth" | "hanger" | "plus" | "chevron"
+  | "gear" | "wallet" | "store" | "kiosk" | "logout" | "qr";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   bag: <><path d="M4 8h16l-1.2 11.2a2 2 0 0 1-2 1.8H7.2a2 2 0 0 1-2-1.8L4 8Z" /><path d="M8.5 8V6a3.5 3.5 0 0 1 7 0v2" /></>,
@@ -51,6 +54,29 @@ const PATHS: Record<IconName, React.ReactNode> = {
   search: <><circle cx="11" cy="11" r="6.5" /><path d="m15.8 15.8 4.7 4.7" /></>,
   back: <><path d="M19.5 12h-15" /><path d="m10.5 5.5-6 6.5 6 6.5" /></>,
   menu: <><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h16" /></>,
+
+  /* ── the dashboard's own vocabulary ──
+     One glyph per destination in the nav bar and one per row in the account
+     menu. They are drawn at the same optical weight as the set above so a
+     26px tab-bar icon and a 1em inline icon read as the same family. */
+  home: <><path d="M3.5 10.5 12 3.5l8.5 7" /><path d="M5.5 9.8V19a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5V9.8" /><path d="M9.8 20.5v-5.2h4.4v5.2" /></>,
+  grid: <><rect x="3.5" y="3.5" width="7" height="7" rx="2" /><rect x="13.5" y="3.5" width="7" height="7" rx="2" /><rect x="3.5" y="13.5" width="7" height="7" rx="2" /><rect x="13.5" y="13.5" width="7" height="7" rx="2" /></>,
+  /* cloth, not a bolt: three falls of fabric. A rolled bolt drawn at 20px is
+     a cylinder, and a cylinder at 20px is a battery. */
+  cloth: <><path d="M3 7.2c3-2.2 6-2.2 9 0s6 2.2 9 0" /><path d="M3 12c3-2.2 6-2.2 9 0s6 2.2 9 0" /><path d="M3 16.8c3-2.2 6-2.2 9 0s6 2.2 9 0" /></>,
+  /* a hanger — a fit is a finished garment, which is what hangs on one */
+  hanger: <><path d="M12 8.2V9.6" /><path d="M12 8.2a2.1 2.1 0 1 1 2.1-2.1" /><path d="m12 9.6 8 5.2a1.6 1.6 0 0 1-.9 3H4.9a1.6 1.6 0 0 1-.9-3l8-5.2Z" /></>,
+  plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
+  chevron: <path d="m9 5 7 7-7 7" />,
+  gear: <><circle cx="12" cy="12" r="3.1" /><path d="M12 2.8h.9l.4 2.3a7.3 7.3 0 0 1 2 .9l1.9-1.4 1.5 1.5-1.4 1.9c.4.6.7 1.3.9 2l2.3.4v2.1l-2.3.4a7.3 7.3 0 0 1-.9 2l1.4 1.9-1.5 1.5-1.9-1.4c-.6.4-1.3.7-2 .9l-.4 2.3h-2.1l-.4-2.3a7.3 7.3 0 0 1-2-.9l-1.9 1.4-1.5-1.5 1.4-1.9a7.3 7.3 0 0 1-.9-2l-2.3-.4v-2.1l2.3-.4c.2-.7.5-1.4.9-2L4.3 6.5l1.5-1.5 1.9 1.4c.6-.4 1.3-.7 2-.9l.4-2.3Z" /></>,
+  wallet: <><path d="M3.5 8A2.5 2.5 0 0 1 6 5.5h10.5" /><rect x="3.5" y="8" width="17" height="11.5" rx="2.5" /><circle cx="16" cy="13.8" r="1.3" fill="currentColor" stroke="none" /></>,
+  store: <><path d="M4.5 9.8V19a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V9.8" /><path d="M2.8 9.8 4.6 3.8h14.8l1.8 6" /><path d="M9.3 20.5v-5.7h5.4v5.7" /></>,
+  kiosk: <><rect x="4.5" y="3" width="15" height="13.5" rx="2.5" /><path d="M12 16.5v4.2" /><path d="M8.4 20.7h7.2" /></>,
+  logout: <><path d="M15.2 8.4V6a2 2 0 0 0-2-2H6.2a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2.4" /><path d="M20 12H9.6" /><path d="m16.8 8.8 3.2 3.2-3.2 3.2" /></>,
+  /* Three finder squares and a scatter — near enough `grid` to be a cousin,
+     which is the point: they are the catalog and the catalog's code. The
+     broken bottom-right quadrant is what tells them apart at 14px. */
+  qr: <><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.4" /><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.4" /><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.4" /><path d="M14 14h3v3h-3z" /><path d="M20.5 14v2M14 20.5h2.5M20 19v1.5h-1.5" /></>,
 };
 
 export default function Icon({

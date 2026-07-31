@@ -26,7 +26,10 @@ import type { Composition, Fabric, FabricColor, Style, StyleCoverage, StyleFamil
    them before they can say the second one was wrong. Two comes back fast
    enough to judge, and judging is the only thing that stops the third being
    wrong the same way. */
-const PICK_LIMIT = 2;
+/* Exported because CutStudio paces the same spend from the other direction —
+   one cut across several bolts rather than one bolt across several cuts — and
+   two different numbers for the same argument would be two policies. */
+export const PICK_LIMIT = 2;
 
 /* Same voice as the kiosk's try-on copy — this is peeq working, and it should
    sound like peeq whichever side of the counter you're on. The verbs are the
@@ -58,14 +61,11 @@ interface Props {
   /** True while a stitch is running anywhere. It's one at a time, and the job
       outlives this dialog — so the studio is told, it doesn't own it. */
   composing: boolean;
-  onPublish: (id: string, published: boolean) => void;
-  onPrice: (id: string, price: number) => void;
-  onNote: (id: string, note: string) => void;
-  onRemove: (id: string) => void;
-  /** "I've looked at this and it's the cloth." */
-  /** What came out wrong. `scope` decides whether it's true of this pairing
-      only or of the cloth in every cut. */
-  onCorrect: (id: string, correction: string, scope: "cut" | "cloth") => void;
+  /** One fit, on its own page — where it is priced, published, noted and
+      complained about. Those controls used to be open on every tile in the
+      grid below; they live in one place now, the same page the fits rack and
+      the cut studio open, so there is no second set to keep in agreement. */
+  onOpenFit: (compositionId: string) => void;
   /** The cloth's real colours, corrected against a render that missed them. */
   onFixColor: (fabricId: string, colors: FabricColor[]) => void;
   /** The colour is wrong because the photo is. Hands the vendor back to the
@@ -77,7 +77,7 @@ interface Props {
 
 export default function FabricStudio({
   fabric, styles, compositions, onEditCut, onCompose,
-  composing, onPublish, onPrice, onNote, onRemove, onCorrect, onFixColor, onRephoto,
+  composing, onOpenFit, onFixColor, onRephoto,
 }: Props) {
   const [picked, setPicked] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -379,11 +379,19 @@ export default function FabricStudio({
               placeholder={picked.length >= limit
                 ? (limit === 1 ? "One cut first" : `${limit} picked — the limit`)
                 : "Choose a cut…"}
+              /* A cut with no photo is a cut described in words — the counter's
+                 picker says so with the words themselves, but a row this size
+                 has no space for them, so it gets the shears. */
+              thumbFallback={<Icon name="scissors" size={15} />}
               options={cuts.map((c) => {
                 const isDone = done(c.id);
                 return {
                   value: c.id,
                   label: c.name,
+                  /* The same photo the counter shows when you pick a cut
+                     there. A shop knows its own tailoring by the shape of it,
+                     and two cuts called "Kurtha" are told apart by looking. */
+                  thumb: c.refImage,
                   /* Which pieces this cut makes. Without it the vendor cannot
                      tell "Kurtha" the top from "Kurtha" the set until a render
                      comes back half an outfit short. */
@@ -409,7 +417,18 @@ export default function FabricStudio({
                       border: "1px solid var(--ink)", background: "var(--ink)", color: "var(--card)",
                       overflow: "hidden",
                     }}>
-                      <span style={{ padding: "8px 4px 8px 13px", fontSize: 12, fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {/* The cut, pictured, on the chip that says it's picked
+                          — so the answer to "which two am I about to spend a
+                          render on" is a look rather than a read. Lit rather
+                          than transparent: these photos are shot on white and
+                          would vanish into the ink. */}
+                      {c.refImage && (
+                        <span aria-hidden style={{ width: 30, flexShrink: 0, background: "rgba(255,255,255,.16)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                          <img src={c.refImage} alt=""
+                            style={{ width: "100%", height: "100%", objectFit: "contain", padding: 3, boxSizing: "border-box" }} />
+                        </span>
+                      )}
+                      <span style={{ padding: c.refImage ? "8px 4px 8px 9px" : "8px 4px 8px 13px", fontSize: 12, fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 6 }}>
                         {c.name}
                         <span style={{ fontSize: 9.5, letterSpacing: ".06em", opacity: 0.7, textTransform: "uppercase" }}>
                           {c.coverage === "set" ? "set" : c.coverage}
@@ -438,7 +457,7 @@ export default function FabricStudio({
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
           <button className="ph-btn btn-solid" disabled={busy || picked.length === 0} onClick={run}
-            style={{ padding: "11px 22px", fontSize: 12, opacity: busy || picked.length === 0 ? 0.5 : 1 }}>
+            style={{ opacity: busy || picked.length === 0 ? 0.5 : 1 }}>
             {busy ? "stitching…"
               : !checked ? (picked.length ? "stitch this one first" : "stitch one first")
               : picked.length ? `stitch ${picked.length} cut${picked.length !== 1 ? "s" : ""}` : "stitch"}
@@ -478,17 +497,88 @@ export default function FabricStudio({
               stitched previews
             </div>
             <div style={{ fontSize: 12, color: "var(--stone)", marginBottom: 13, lineHeight: 1.6 }}>
-              Publish only what looks right.
+              Tap one to price or publish it.
             </div>
-            <div className="studio-grid">
-              {compositions.map((c) => (
-                <RenderCard key={c.id} composition={c}
-                  style={styles.find((s) => s.id === c.styleId)}
-                  fabric={fabric}
-                  busy={busy}
-                  onPublish={onPublish} onPrice={onPrice} onNote={onNote} onRemove={onRemove}
-                  onCorrect={onCorrect} />
-              ))}
+            {/* ── the pictures, and the name of each ──
+                These were the whole editing card, eight of them down the page:
+                a price box, a note box, a fault form, publish and delete, all
+                open at once on renders the vendor had not even looked at yet.
+                The studio is where you decide what to make; a fit is where you
+                decide what it's worth. So a tile says which cut this is and
+                whether it's out, and the rest is one tap away on the fit's own
+                page — the same page the fits rack and the cut studio open, so
+                there is still exactly one place a render is edited. */}
+            <div className="card-grid">
+              {compositions.map((c) => {
+                const cut = styles.find((s) => s.id === c.styleId);
+                const name = cut?.name ?? "Cut";
+                const why = c.status === "ready" ? staleReason(c, cut, fabric) : null;
+                /* A render still on the machine has nothing to open into
+                   yet — the page it would open would be this tile again,
+                   larger. */
+                const openable = c.status !== "pending";
+                return (
+                  <button key={c.id} type="button" disabled={!openable}
+                    onClick={() => onOpenFit(c.id)}
+                    title={openable ? "Open " + name + " in " + fabric.name : undefined}
+                    className="fade-up"
+                    style={{
+                      display: "flex", flexDirection: "column", alignItems: "stretch", textAlign: "left",
+                      padding: 0, background: "var(--card)", borderRadius: "var(--radius-card)",
+                      overflow: "hidden", cursor: openable ? "pointer" : "default",
+                      border: "1px solid " + (c.published ? "var(--ink)" : "var(--line)"),
+                      /* Said outright: a disabled button lets the browser
+                         grey whatever text hasn't set its own colour, and a
+                         render in progress is not a faded one. */
+                      color: "var(--ink)",
+                    }}>
+                    <div style={{ aspectRatio: "3/4", position: "relative", background: "var(--paper-deep)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {c.status === "ready" && c.image ? (
+                        <img src={c.image} alt={name + " in " + fabric.name} className="img-blend"
+                          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                      ) : c.status === "failed" ? (
+                        <div style={{ padding: 14, textAlign: "center", color: "var(--warn)", fontSize: 12, lineHeight: 1.6 }}>
+                          Didn&apos;t come out.<br />
+                          <span style={{ color: "var(--stone)", fontSize: 11 }}>Tap to delete it.</span>
+                        </div>
+                      ) : (
+                        <div style={{ color: "var(--stone)", fontSize: 12 }}>stitching…</div>
+                      )}
+                      {c.status === "ready" && (
+                        <span style={{
+                          position: "absolute", top: 10, left: 10, fontSize: 10, fontWeight: 600,
+                          letterSpacing: ".1em", padding: "4px 10px", borderRadius: "var(--radius-xs)",
+                          background: c.published ? "var(--ink)" : "var(--card)",
+                          color: c.published ? "var(--card)" : "var(--stone)",
+                        }}>
+                          {c.published ? "PUBLISHED" : "DRAFT"}
+                        </span>
+                      )}
+                      {/* What made this picture has moved on. Kept on the tile
+                          rather than saved for the fit page, because this grid
+                          is where a vendor decides what to stitch again. */}
+                      {why && (
+                        <span style={{ position: "absolute", top: 10, right: 10, background: "var(--warn)", color: "var(--on-accent)", fontSize: 9.5, fontWeight: 600, letterSpacing: ".08em", padding: "4px 9px", borderRadius: "var(--radius-xs)" }}>
+                          {why === "photo" ? "NEW CLOTH PHOTO"
+                            : why === "cut" ? "CUT CHANGED"
+                            : why === "fix" ? "FIX ASKED FOR"
+                            : why === "colour" ? "COLOUR SET"
+                            : why === "cloth" ? "CLOTH CORRECTED"
+                            : "NOTE CHANGED"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="tile-pad">
+                      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>{name}</div>
+                      {c.status === "ready" && (
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)", marginTop: 5 }}>
+                          {c.price > 0 ? npr(c.price) : <span style={{ color: "var(--stone)", fontWeight: 400 }}>no price yet</span>}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </>
         )}
@@ -594,9 +684,12 @@ export function StitchingOverlay({
      percentage and a way back. Nothing about the job changes — only how much
      of the screen it is entitled to while the vendor gets on with pricing the
      last batch. */
+  /* .stitch-min carries the corner it parks in, because on a phone that corner
+     is where the dashboard's nav bar lives and the bar has to sit clear of it
+     — a media query can do that and an inline style can't. */
   if (minimized) {
     return (
-      <div style={{ position: "fixed", right: 16, bottom: 16, zIndex: "var(--z-dialog)", maxWidth: "min(92vw, 330px)", background: "var(--stage)", color: "#fff", borderRadius: "var(--radius-md)", boxShadow: "0 14px 40px rgba(0,0,0,.4)", overflow: "hidden" }}>
+      <div className="stitch-min" style={{ background: "var(--stage)", color: "#fff", borderRadius: "var(--radius-md)", boxShadow: "0 14px 40px rgba(0,0,0,.4)", overflow: "hidden" }}>
         <button type="button" onClick={onExpand} aria-label="Show the stitch in progress"
           style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 13px", background: "none", border: "none", color: "inherit", cursor: "pointer", textAlign: "left" }}>
           <img src={image} alt="" style={{ width: 34, height: 34, borderRadius: "var(--radius-xs)", objectFit: "cover", flexShrink: 0 }} />
@@ -681,8 +774,14 @@ export function StitchingOverlay({
    is wrong is now something you go and do, not something you get asked. */
 type CheckStep = "fault";
 
-/* ── one render ── */
-function RenderCard({
+/* ── one render ──
+   Exported because a fit is a thing you open now, not only a tile in the bolt
+   it came from: the Fits view and the cut studio both hand one to a page of
+   its own, and that page is this card at full width. Everything a render can
+   have done to it — priced, published, noted, complained about, deleted —
+   lives here, so a second surface would be a second set of controls that have
+   to agree with these. */
+export function RenderCard({
   composition, style, fabric, busy,
   onPublish, onPrice, onNote, onRemove, onCorrect,
 }: {
@@ -1088,13 +1187,15 @@ export function CutPage({ family, pickFamily, mode, initial, onClose, onSave, se
 
         {/* Opened from the fabric studio the family is the cloth's and fixed;
             opened from the designs tab there is no cloth, so it's asked here. */}
+        {/* A div, not a <label>: a label wrapping a button forwards the click it
+            was already given, so the dropdown would open and shut on the one
+            press. The words name the control by aria-label instead. */}
         {pickFamily && mode === "new" && (
-          <label className="field" style={{ marginBottom: 14 }}>Which family?
-            <select value={fam} onChange={(e) => setFam(e.target.value as StyleFamily)}
-              style={{ width: "100%", padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", backgroundColor: "var(--card)", fontSize: 13.5 }}>
-              {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-            </select>
-          </label>
+          <div className="field" style={{ marginBottom: 14 }}>Which family?
+            <Dropdown value={fam} ariaLabel="Which family?"
+              onChange={(v) => setFam(v as StyleFamily)}
+              options={FAMILIES.map((f) => ({ value: f.id, label: f.label }))} />
+          </div>
         )}
 
         {/* Real label elements throughout: `.field` wraps its control so the

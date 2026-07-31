@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import LocationPicker from "@/components/LocationPicker";
+import Dropdown from "@/components/Dropdown";
 import { nameError, phoneError, fieldErrorStyle } from "@/lib/validate";
 import { SHOP_CATEGORIES, typeForCategory } from "@/lib/constants";
 import type { Shop, ShopCategory } from "@/lib/types";
@@ -86,19 +87,19 @@ export default function Onboarding({ shop, onComplete }: {
           {/* Drives whether this shop ever sees try-on, via typeForCategory.
               Asked at signup rather than inferred, because it changes what the
               vendor is buying. */}
-          <label className="field">What do you sell?
-            <select value={category} onChange={(e) => setCategory(e.target.value as ShopCategory)}
-              style={{ width: "100%", marginTop: 6, padding: "11px 12px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 14, color: "var(--ink)" }}>
-              {SHOP_CATEGORIES.map((c) => (
-                <option key={c.id} value={c.id}>{c.label}</option>
-              ))}
-            </select>
+          {/* A div, not a <label>: it wraps a button now, and a label wrapping a
+              button forwards the press it was already given — the list would
+              open and shut on the one click. */}
+          <div className="field">What do you sell?
+            <Dropdown value={category} ariaLabel="What do you sell?"
+              onChange={(v) => setCategory(v as ShopCategory)}
+              options={SHOP_CATEGORIES.map((c) => ({ value: c.id, label: c.label }))} />
             <span style={{ fontWeight: 400, letterSpacing: 0, textTransform: "none", fontSize: 12, color: "var(--stone)", marginTop: 6, display: "block", lineHeight: 1.5 }}>
               {typeForCategory(category) === "apparel"
                 ? "Catalog, kiosk, AI try-on."
                 : "Catalog, kiosk, QR tags."}
             </span>
-          </label>
+          </div>
 
           <label className="field">WhatsApp number <span style={{ color: "var(--danger)" }}>*</span>
             <input value={whatsapp} maxLength={20} placeholder="e.g. 9779841000000" inputMode="tel" aria-invalid={!!errors.whatsapp}

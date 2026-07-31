@@ -7,6 +7,7 @@ import { fileToCompressedDataURL } from "@/lib/images";
 import { downloadImage } from "@/lib/looks";
 import { StitchingOverlay, ImageZoom } from "@/components/FabricStudio";
 import Icon from "@/components/Icon";
+import Dropdown from "@/components/Dropdown";
 import Dialog from "@/components/Dialog";
 import { COVERAGES } from "@/lib/types";
 import type { CounterInput, CounterRun, Fabric, Garment, Style, StyleCoverage, StyleFamily } from "@/lib/types";
@@ -336,13 +337,15 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
               <Icon name="search" /> pick a listed fabric
             </button>
           )}
-          <label className="field" style={{ marginTop: 12 }}>Stitched into
-            <select value={family}
-              onChange={(e) => { setFamily(e.target.value as StyleFamily); setStyleId(""); }}
-              style={selectStyle}>
-              {FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-            </select>
-          </label>
+          {/* A div, not a <label>: what it wraps is a button now, and a label
+              wrapping a button forwards the press it was already handed — the
+              list would open and shut on one tap. */}
+          <div className="field" style={{ marginTop: 12 }}>Stitched into
+            <Dropdown value={family} ariaLabel="Stitched into"
+              onChange={(v) => { setFamily(v as StyleFamily); setStyleId(""); }}
+              className="counter-dd"
+              options={FAMILIES.map((f) => ({ value: f.id, label: f.label }))} />
+          </div>
           <label className="field" style={{ marginTop: 12 }}>Anything the photo can&apos;t show
             <textarea value={fabricNote} maxLength={300} onChange={(e) => setFabricNote(e.target.value)}
               placeholder="e.g. gold border, one edge" aria-label="Note about this cloth" style={{ minHeight: 62 }} />
@@ -455,7 +458,7 @@ export default function CounterTryOn({ onRun, onKeep, enabled, styles, fabrics, 
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginTop: 18 }}>
         <button className="ph-btn btn-solid" disabled={!ready} onClick={start}
-          style={{ padding: "13px 26px", fontSize: 12.5, opacity: ready ? 1 : 0.5 }}>
+          style={{ opacity: ready ? 1 : 0.5 }}>
           {busy ? "stitching…" : "stitch & try on"}
         </button>
         <span style={{ fontSize: 11.5, color: "var(--stone)", lineHeight: 1.55 }}>
@@ -554,7 +557,7 @@ function CutPickerModal({ cuts, familyName, selectedId, onPick, onClose }: {
           </span>
           <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus
             placeholder="Search cuts…" aria-label="Search cuts"
-            style={{ width: "100%", padding: "11px 12px 11px 36px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13.5, boxSizing: "border-box" }} />
+            style={{ width: "100%", padding: "10px 12px 10px 36px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 16, boxSizing: "border-box" }} />
         </div>
 
         <div style={{ overflowY: "auto", minHeight: 0 }}>
@@ -654,7 +657,7 @@ function FabricPickerModal({ fabrics, selectedId, onPick, onClose }: {
           </span>
           <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus
             placeholder="Search by name, code, colour…" aria-label="Search fabrics"
-            style={{ width: "100%", padding: "11px 12px 11px 36px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 13.5, boxSizing: "border-box" }} />
+            style={{ width: "100%", padding: "10px 12px 10px 36px", borderRadius: "var(--radius-btn)", border: "1px solid var(--line)", background: "var(--card)", fontSize: 16, boxSizing: "border-box" }} />
         </div>
 
         <div style={{ overflowY: "auto", minHeight: 0 }}>
@@ -709,11 +712,15 @@ function FabricPickerModal({ fabrics, selectedId, onPick, onClose }: {
   );
 }
 
-/* backgroundColor, not the `background` shorthand: the shorthand resets
-   background-image, and .ph-select draws its chevron there. */
+/* What "pick a cut" wears — a control that looks like the dropdown beside it
+   and opens the cut picker instead of a list. `.counter-dd` in globals.css
+   keeps the real dropdown in step with these numbers; change one, change both.
+
+   16px, not 15: this card is worked at a counter with a customer standing
+   there, and the two controls read at arm's length. */
 const selectStyle: React.CSSProperties = {
-  padding: "12px 15px", borderRadius: "var(--radius-lg)", border: "1px solid var(--line)",
-  fontSize: 15, backgroundColor: "var(--card)", color: "var(--ink)", fontWeight: 400,
+  padding: "11px 14px", borderRadius: "var(--radius-lg)", border: "1px solid var(--line)",
+  fontSize: 16, backgroundColor: "var(--card)", color: "var(--ink)", fontWeight: 400,
   letterSpacing: 0, textTransform: "none", width: "100%",
 };
 
@@ -983,11 +990,11 @@ function Result({ run, input, onKeep, onAddGarment, onStartOver }: {
           ) : (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button className="ph-btn btn-solid" onClick={() => setForm("fabric")}
-                style={{ padding: "10px 18px", fontSize: 11.5 }}>
+                >
                 keep this in my fabrics
               </button>
               <button className="ph-btn" onClick={() => setForm("garment")}
-                style={{ padding: "10px 18px", fontSize: 11.5, fontWeight: 500, color: "var(--ink)", border: "1px solid var(--ink)", borderRadius: "var(--radius-btn)" }}>
+                style={{ padding: "8px 17px", minHeight: 34, fontSize: 13, fontWeight: 600, color: "var(--ink)", border: "1px solid var(--ink)", borderRadius: "var(--radius-btn)" }}>
                 add to catalog as a garment
               </button>
             </div>

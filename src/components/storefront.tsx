@@ -8,6 +8,8 @@ import { signInWithEmail, signUpWithEmail, sendPasswordReset, ensureRole, saveCo
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { nameError, phoneError, fieldErrorStyle } from "@/lib/validate";
 import { useCart, type CartLine } from "@/lib/cart";
+import { useAccount } from "@/lib/account";
+import AccountMenu from "@/components/AccountMenu";
 import GarmentImage from "@/components/GarmentImage";
 import HeroCarousel, { type HeroSlide } from "@/components/HeroCarousel";
 import TryOnCta, { offersTryOn, type TryOnState } from "@/components/TryOnCta";
@@ -28,20 +30,195 @@ export type CartApi = ReturnType<typeof useCart>;
 
 /* ---------- save-for-later heart ---------- */
 
+/* Size and placement are in .card-heart rather than inline, because the frame
+   it sits on is no longer one size: the catalogue layout's row shrinks the
+   photo to 84px, where a 34px control covers a third of the piece. Only the
+   colour stays inline — that's this heart's own state, which no stylesheet
+   can know. */
 export function HeartButton({ saved, onClick }: { saved: boolean; onClick: () => void }) {
   return (
-    <button className="ph-btn" onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClick(); }}
+    <button className="ph-btn card-heart" onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClick(); }}
       aria-label={saved ? "Remove from saved" : "Save for later"} aria-pressed={saved}
-      style={{ position: "absolute", top: 8, right: 8, width: 34, height: 34, borderRadius: "var(--radius-pill)", background: "rgba(255,255,255,.9)", color: saved ? "var(--violet)" : "var(--stone)", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(0,0,0,.12)" }}>
+      style={{ color: saved ? "var(--violet)" : "var(--stone)" }}>
       <Icon name={saved ? "heart-filled" : "heart"} />
     </button>
+  );
+}
+
+/* ---------- the storefront's nav ---------- */
+
+/* One nav for both shop pages. They each had their own before, and they drifted
+   exactly the way two copies do: the product page carried no announce bar and a
+   different set of tools, so walking between them shifted the whole top of the
+   site.
+
+   The category strip is gone from here. It was four of a shop's categories,
+   duplicating the chips above the collection that do the same job with the
+   full list and the active state visible — and it was the widest thing in the
+   bar, which is what forced the two-row nav on phones. The bar is now the shop's
+   name and the four things a shopper acts on, as glyphs.
+
+   Glyphs, not words: every one of these carries an aria-label and a title, so
+   the meaning is available to a screen reader and to a hover, and the bar stays
+   one row at any width. Saved, then the bag, then the account circle last —
+   the account is the only one that opens something about the SHOPPER rather
+   than about the shop, so it sits apart at the end.
+
+   Contact isn't in the bar. It's the shop's WhatsApp, which the footer already
+   carries twice and the promo band once; in the bar it was a third copy taking
+   a slot from the two controls a shopper actually returns to.
+
+   Below 640px the row folds into a hamburger — except the bag, which stays
+   out. It is the one control a shopper is actively counting on, and the count
+   on it is the page telling them they have something waiting; behind a menu,
+   both the button and the number are a tap away from being noticed. */
+export function StorefrontNav({
+  shop, slug, savedCount, savedHref, onSaved, cartCount, onOpenCart, contactWa,
+}: {
+  shop: Shop;
+  slug: string;
+  savedCount: number;
+  /** The product page links back to the shop's saved view; the collection page
+      filters in place. One of these, never both. */
+  savedHref?: string;
+  onSaved?: () => void;
+  cartCount: number;
+  onOpenCart: () => void;
+  contactWa: string | null;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { user, role, configured } = useAccount();
+  /* A vendor reading their own shop is usually checking their work, and the
+     way back was buried in the account dropdown — or, on a phone, in a
+     dropdown they had to open a sheet to reach. Shoppers never see it. */
+  const isVendor = !!user && role === "vendor";
+
+  const savedLabel = savedCount === 0
+    ? "Saved pieces — nothing saved yet"
+    : `Saved pieces (${savedCount})`;
+  const savedIcon = <Icon name={savedCount > 0 ? "heart-filled" : "heart"} />;
+  const badge = (n: number) => (n > 0 ? <span className="nav-badge">{n}</span> : null);
+
+  return (
+    <>
+      <nav className="efc-nav">
+        <div className="nav-logo">
+          <Link href={"/s/" + slug} className="ph-display nav-name"
+            style={{ fontSize: "clamp(16px, 4vw, 21px)", fontWeight: 600, color: "var(--ink)", textDecoration: "none" }}>
+            {shop.name || "The shop"}
+          </Link>
+          {/* Its own class because a phone puts it BESIDE the name rather than
+              under it — stacked, the area was a second line, and a two-line bar
+              pinned to the top of a phone is a tenth of the screen spent on the
+              shop's name every time the shopper scrolls. */}
+          {shop.area && <div className="nav-area">{shop.area}</div>}
+        </div>
+        <div className="nav-tools">
+          {/* Always rendered, disabled until there is something in it. It used
+              to appear the instant you hearted your first piece, which shoved
+              the whole nav sideways under the shopper's thumb. */}
+          {savedHref ? (
+            <Link href={savedHref} className="ph-btn nav-tool nav-wide" aria-label={savedLabel} title={savedLabel}
+              style={{ color: savedCount > 0 ? "var(--violet)" : "var(--stone)" }}>
+              {savedIcon}{badge(savedCount)}
+            </Link>
+          ) : (
+            <button className="ph-btn nav-tool nav-wide" onClick={onSaved} disabled={savedCount === 0}
+              aria-label={savedLabel} title={savedLabel}
+              style={{ color: savedCount > 0 ? "var(--violet)" : "var(--stone)", opacity: savedCount > 0 ? 1 : 0.55, cursor: savedCount > 0 ? "pointer" : "default" }}>
+              {savedIcon}{badge(savedCount)}
+            </button>
+          )}
+          {/* No .nav-wide: the bag is in the bar at every width. */}
+          <button className="ph-btn nav-tool" onClick={onOpenCart}
+            aria-label={`Bag, ${cartCount} item${cartCount !== 1 ? "s" : ""}`} title="Your bag"
+            style={{ color: "var(--ink)" }}>
+            <Icon name="bag" />{badge(cartCount)}
+          </button>
+          {isVendor && (
+            <Link href="/dashboard" className="ph-btn nav-tool nav-wide"
+              aria-label="Back to your dashboard" title="Back to your dashboard"
+              style={{ color: "var(--stone)" }}>
+              <Icon name="grid" />
+            </Link>
+          )}
+          {/* Signed in, AccountMenu draws its own initialled circle. Signed
+              out it falls back to the words "sign in", which is the one thing
+              in an all-glyph bar that would be text — so the storefront draws
+              that state itself, as the circle the signed-in state is. */}
+          <span className="nav-wide nav-account">
+            {user ? <AccountMenu /> : configured ? (
+              <Link href="/signin" className="ph-btn nav-tool nav-avatar" aria-label="Sign in" title="Sign in">
+                <Icon name="person" />
+              </Link>
+            ) : null}
+          </span>
+          <button className="ph-btn nav-tool nav-burger" onClick={() => setMenuOpen(true)}
+            aria-label="Menu" aria-expanded={menuOpen} title="Menu" style={{ color: "var(--ink)" }}>
+            <Icon name="menu" />
+          </button>
+        </div>
+      </nav>
+
+      {/* Rendered here rather than inside <nav>, deliberately: the nav is
+          backdrop-filtered, and a filter makes its element the containing block
+          for position:fixed — a sheet opened from in there would be trapped
+          under the bar. Same trap the size dialog hits inside a card. */}
+      {menuOpen && (
+        <Dialog variant="sheet" onClose={() => setMenuOpen(false)} title={shop.name || "The shop"}
+          panelStyle={{ padding: "18px 16px 24px" }}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {savedHref ? (
+              <Link href={savedHref} className="nav-sheet-row" onClick={() => setMenuOpen(false)}>
+                {savedIcon} saved{savedCount > 0 ? ` (${savedCount})` : ""}
+              </Link>
+            ) : (
+              <button className="ph-btn nav-sheet-row" disabled={savedCount === 0}
+                onClick={() => { setMenuOpen(false); onSaved?.(); }}
+                style={{ opacity: savedCount > 0 ? 1 : 0.5 }}>
+                {savedIcon} saved{savedCount > 0 ? ` (${savedCount})` : ""}
+              </button>
+            )}
+            {/* No bag row: the bag is in the bar at every width, and a menu
+                that repeats the button beside it is a menu with one wasted
+                row. */}
+            {/* Contact is out of the bar but kept here: a menu is the right
+                place for the shop's phone number, and on a phone WhatsApp is
+                how most of these orders actually get finished. */}
+            {contactWa && (
+              <a className="nav-sheet-row" href={contactWa} target="_blank" rel="noopener noreferrer"
+                onClick={() => setMenuOpen(false)}>
+                <Icon name="phone" /> message on WhatsApp
+              </a>
+            )}
+            {/* AccountMenu is a dropdown, and a dropdown inside a sheet is a
+                popover inside a popover. The sheet states the same two
+                destinations plainly instead. */}
+            {configured && (
+              <Link href={user ? "/account" : "/signin"} className="nav-sheet-row" onClick={() => setMenuOpen(false)}>
+                <Icon name="person" /> {user ? "my account" : "sign in"}
+              </Link>
+            )}
+            {isVendor && (
+              <Link href="/dashboard" className="nav-sheet-row" onClick={() => setMenuOpen(false)}>
+                <Icon name="grid" /> back to your dashboard
+              </Link>
+            )}
+          </div>
+        </Dialog>
+      )}
+    </>
   );
 }
 
 /* ---------- product card (links to the product page) ---------- */
 
 export function ShopCard({ g, slug, saved, onToggleSave, onAdd, priority = false, tryOn, shop }: {
-  g: Garment; slug: string; saved: boolean; onToggleSave: () => void; onAdd: () => void;
+  g: Garment; slug: string; saved: boolean; onToggleSave: () => void;
+  /* Takes the size, because the card can now ask for one. A piece with a
+     single size (or none) still adds in one tap and passes that size through,
+     so every caller does the same thing with the answer however it was got. */
+  onAdd: (size: string) => void;
   priority?: boolean; // above-the-fold cards skip lazy-loading
   /* Optional so existing callers keep working; omitted means "offer try-on",
      which is the historical behaviour for every apparel shop. */
@@ -49,75 +226,173 @@ export function ShopCard({ g, slug, saved, onToggleSave, onAdd, priority = false
   shop?: Pick<Shop, "type"> | null;
 }) {
   const [added, setAdded] = useState(false);
-  const needsSize = g.sizes.length > 1; // pick a size on the product page first
+  const [picking, setPicking] = useState(false);
+  const needsSize = g.sizes.length > 1;
   const href = `/s/${slug}/${encodeURIComponent(g.id)}`;
 
-  const quickAdd = () => {
-    onAdd();
+  /* "choose size" used to be a link to the product page — a whole navigation,
+     and a lost place in the grid, to answer one question the shopper could
+     answer where they stood. It asks in a dialog now. The one-size path is
+     unchanged: still a single tap, no dialog to dismiss. */
+  const addSize = (size: string) => {
+    onAdd(size);
+    setPicking(false);
     setAdded(true);
     setTimeout(() => setAdded(false), 1400);
   };
+  const quickAdd = () => addSize(g.sizes[0] ?? "");
+
+  /* The card wears .fade-up, whose `animation: … both` leaves a transform in
+     place for good — which makes every card a containing block for
+     `position: fixed`, so a dialog rendered in here draws its scrim over the
+     card instead of the page. The dialog is portalled out to the storefront
+     root for that reason (and only that far: the shop's colours live on that
+     element, and document.body is outside them). */
+  const rootRef = useRef<HTMLDivElement>(null);
 
   return (
-    /* No card-wide opacity: dimming the whole tile to .6 pushed the name and
-       the price under the contrast floor, which is the information a shopper
-       needs in order to ask the shop about a sold-out piece. The photo greys,
-       the words stay readable. */
-    <div className="fade-up" style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-      <div className="shop-tile">
-        <Link href={href} style={{ position: "absolute", inset: 0, display: "block" }}>
-          {/* contain, not cover — see .shop-tile. The frame is fixed; the
-              piece is fitted into it whole rather than cropped to fill it. */}
-          <GarmentImage src={g.image} alt={g.name} objectFit="contain"
-            sizes="(max-width: 640px) 50vw, 210px"
-            grayscale={!g.inStock} priority={priority} />
-          {!g.inStock && (
-            <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--ink)", color: "var(--paper)", fontSize: 11.5, fontWeight: 600, padding: "4px 12px", borderRadius: "var(--radius-pill)" }}>
-              out of stock
-            </span>
-          )}
-        </Link>
-        <HeartButton saved={saved} onClick={onToggleSave} />
-      </div>
-      <div style={{ padding: "13px 14px 15px", display: "flex", flexDirection: "column", flex: 1 }}>
-        <Link href={href} style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 2, color: "var(--ink)", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</Link>
-        <div style={{ color: "var(--stone)", fontWeight: 500, fontSize: 14, marginBottom: 12 }}>{npr(g.price)}</div>
-        <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
-          {g.inStock ? (
-            needsSize ? (
-              <Link href={href} className="ph-btn"
-                style={{ background: "var(--violet)", color: "var(--on-accent)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif", fontSize: 14, padding: "10px 0", borderRadius: "var(--radius-pill)", width: "100%", textAlign: "center", textDecoration: "none" }}>
-                choose size
-              </Link>
-            ) : (
-              <button className="ph-btn" onClick={quickAdd}
-                style={{ background: "var(--violet)", color: "var(--on-accent)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif", fontSize: 14, padding: "10px 0", borderRadius: "var(--radius-pill)", width: "100%" }}>
-                {added ? <><Icon name="check" /> added</> : <><Icon name="bag" /> add to bag</>}
-              </button>
-            )
-          ) : (
-            /* --stone on --line is a grey-on-grey pill. This says the same
-               thing as a plain disabled control without pretending to be a
-               button the shopper could have pressed. */
-            <div aria-disabled style={{ background: "var(--paper-deep)", color: "var(--stone)", border: "1px dashed var(--line-strong)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif", fontSize: 14, padding: "10px 0", borderRadius: "var(--radius-pill)", width: "100%", textAlign: "center" }}>
-              sold out
-            </div>
-          )}
-          {/* "details" is gone: the card image, the title and (when a size is
-              needed) the CTA all already link to the same product page, so it
-              was a fourth link to a place the shopper could reach three other
-              ways — and it competed with the one link that goes somewhere
-              else. */}
-          <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center" }}>
-            <TryOnCta shop={shop ?? { type: "apparel" }} state={tryOn ?? { enabled: true, left: 1 }}
-              href={`/k/${slug}?g=${encodeURIComponent(g.id)}`}
-              style={{ textDecoration: "underline", textUnderlineOffset: 4, fontSize: 12.5, fontWeight: 600, color: "var(--violet)" }}>
-              see it on you →
-            </TryOnCta>
-          </div>
+    /* Structure, not styling. Every piece of this card's chrome — the frame,
+       where the name sits, how the button is drawn — is now a class, because
+       three of the vendor's choices reach in here and an inline style beats
+       any of them: the card axis moves the name onto the photo, the tile axis
+       changes the frame's ratio, and the catalogue layout turns the whole
+       thing into a row. What stays inline is what depends on this garment's
+       own state, which no stylesheet can know.
+
+       No card-wide opacity on a sold-out piece: dimming the whole tile to .6
+       pushed the name and the price under the contrast floor, which is the
+       information a shopper needs in order to ask the shop about it. The photo
+       greys, the words stay readable. */
+    <div ref={rootRef} className="fade-up shop-card-item">
+      <div className="shop-card-visual">
+        <div className="shop-tile">
+          <Link href={href} style={{ position: "absolute", inset: 0, display: "block" }}>
+            {/* contain, not cover — see .shop-tile. The frame is fixed; the
+                piece is fitted into it whole rather than cropped to fill it. */}
+            <GarmentImage src={g.image} alt={g.name} objectFit="contain"
+              sizes="(max-width: 640px) 50vw, 210px"
+              grayscale={!g.inStock} priority={priority} />
+            {!g.inStock && (
+              <span style={{ position: "absolute", bottom: 10, left: 10, background: "var(--ink)", color: "var(--paper)", fontSize: 11.5, fontWeight: 600, padding: "4px 12px", borderRadius: "var(--radius-pill)", zIndex: 3 }}>
+                out of stock
+              </span>
+            )}
+          </Link>
+          <HeartButton saved={saved} onClick={onToggleSave} />
+        </div>
+        {/* Inside the visual rather than after it, so the overlay card style
+            and the story layout have something to position against — both put
+            this block on the photograph. In every other style it simply flows
+            underneath, which is where it has always been. */}
+        <div className="shop-card-meta">
+          <Link href={href} className="shop-card-title">{g.name}</Link>
+          <div className="shop-card-price">{npr(g.price)}</div>
         </div>
       </div>
+      <div className="shop-card-actions">
+        {g.inStock ? (
+          needsSize ? (
+            <button className="ph-btn card-cta" onClick={() => setPicking(true)}>
+              {added ? <><Icon name="check" /> added</> : "choose size"}
+            </button>
+          ) : (
+            <button className="ph-btn card-cta" onClick={quickAdd}>
+              {added ? <><Icon name="check" /> added</> : <><Icon name="bag" /> add to bag</>}
+            </button>
+          )
+        ) : (
+          /* --stone on --line is a grey-on-grey pill. This says the same
+             thing as a plain disabled control without pretending to be a
+             button the shopper could have pressed. */
+          <div aria-disabled className="card-cta card-cta-sold">sold out</div>
+        )}
+        {/* "details" is gone: the card image, the title and (when a size is
+            needed) the CTA all already link to the same product page, so it
+            was a fourth link to a place the shopper could reach three other
+            ways — and it competed with the one link that goes somewhere
+            else. */}
+        <TryOnCta shop={shop ?? { type: "apparel" }} state={tryOn ?? { enabled: true, left: 1 }}
+          href={`/k/${slug}?g=${encodeURIComponent(g.id)}`}
+          className="card-tryon">
+          see it on you →
+        </TryOnCta>
+      </div>
+      {picking && (
+        <SizeDialog g={g} href={href} anchor={rootRef.current}
+          onPick={addSize} onClose={() => setPicking(false)} />
+      )}
     </div>
+  );
+}
+
+/* ---------- choose a size, without leaving the grid ---------- */
+
+/* Deliberately not the product page in a box. It asks the one question that
+   stands between this shopper and the bag, and carries a link to the full
+   page for everything else — quantity, the description, the other photos.
+   Putting a quantity stepper in here would make it a worse product page
+   rather than a better button. */
+function SizeDialog({ g, href, anchor, onPick, onClose }: {
+  g: Garment;
+  href: string;
+  /** The card this was opened from. Only used to find the storefront root to
+      portal out to — the card is mounted before this ever renders, so the
+      lookup can happen in the first render rather than an effect later, which
+      is what keeps the dialog from flashing in the wrong place first. */
+  anchor: Element | null;
+  onPick: (size: string) => void;
+  onClose: () => void;
+}) {
+  const [size, setSize] = useState("");
+  const [err, setErr] = useState(false);
+  const [container] = useState<Element | null>(
+    () => anchor?.closest("[data-sf-root]") ?? null
+  );
+  const labelId = useId();
+
+  /* Same shape as the product page's buy panel: nothing is preselected, and
+     adding without a size raises an alert rather than silently picking one for
+     the shopper — a bag with the wrong size in it is worse than a second tap.
+     role="alert" so it is heard, not only seen. */
+  const add = () => {
+    if (!size) { setErr(true); return; }
+    onPick(size);
+  };
+
+  return (
+    <Dialog onClose={onClose} title="Choose a size" width={380}
+      panelStyle={{ padding: 18 }} container={container}>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 18 }}>
+        <div style={{ position: "relative", width: 62, height: 82, flexShrink: 0, borderRadius: "var(--radius-md)", overflow: "hidden", background: "var(--paper-deep)" }}>
+          <GarmentImage src={g.image} alt="" objectFit="contain" sizes="62px" />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 600, color: "var(--ink)" }}>{g.name}</div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: "var(--stone)", marginTop: 2 }}>{npr(g.price)}</div>
+        </div>
+      </div>
+
+      <div id={labelId} style={{ fontSize: 13, fontWeight: 600, color: "var(--stone)", marginBottom: 9 }}>
+        Size {err && <span role="alert" style={{ color: "var(--danger)" }}>· please pick one</span>}
+      </div>
+      <div role="radiogroup" aria-labelledby={labelId} aria-required
+        style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {g.sizes.map((s) => (
+          <button key={s} className="ph-btn size-chip" role="radio" aria-checked={size === s}
+            onClick={() => { setSize(s); setErr(false); }}>
+            {s}
+          </button>
+        ))}
+      </div>
+
+      <button className="ph-btn btn-violet" onClick={add}
+        style={{ width: "100%", marginTop: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+        <Icon name="bag" /> add to bag
+      </button>
+      <Link href={href} style={{ display: "block", textAlign: "center", marginTop: 12, fontSize: 12.5, fontWeight: 600, color: "var(--stone)", textDecoration: "underline", textUnderlineOffset: 3 }}>
+        see the full details →
+      </Link>
+    </Dialog>
   );
 }
 
@@ -420,18 +695,23 @@ export function CartDrawer({ shop, cart, catalog, defaultName, defaultPhone, log
                     style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)" }}>Your name</span>
-                      <input ref={nameRef} value={name} maxLength={80} placeholder="e.g. Sunita Shrestha" autoComplete="name"
+                      {/* .sf-input, not an inline fontSize: below 16px iOS
+                          zooms the page in on focus and never zooms back, and
+                          an inline size beats every rule in the stylesheet —
+                          so the size has to be a class for the phone floor to
+                          be able to reach it. Same for every field below. */}
+                      <input ref={nameRef} className="sf-input" value={name} maxLength={80} placeholder="e.g. Sunita Shrestha" autoComplete="name"
                         aria-invalid={!!errors.name} aria-describedby={errors.name ? "co-name-err" : undefined}
                         onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((x) => ({ ...x, name: undefined })); }}
-                        style={{ padding: "12px 15px", borderRadius: "var(--radius-field)", border: "1px solid " + (errors.name ? "var(--danger)" : "var(--line)"), background: "var(--card)", color: "var(--ink)", fontSize: 15 }} />
+                        style={{ padding: "12px 15px", borderRadius: "var(--radius-field)", border: "1px solid " + (errors.name ? "var(--danger)" : "var(--line)"), background: "var(--card)", color: "var(--ink)" }} />
                       {errors.name && <div id="co-name-err" style={fieldErrorStyle}>{errors.name}</div>}
                     </label>
                     <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)" }}>Phone number</span>
-                      <input value={phone} maxLength={30} inputMode="tel" placeholder="98XXXXXXXX" autoComplete="tel"
+                      <input className="sf-input" value={phone} maxLength={30} inputMode="tel" placeholder="98XXXXXXXX" autoComplete="tel"
                         aria-invalid={!!errors.phone} aria-describedby={errors.phone ? "co-phone-err" : undefined}
                         onChange={(e) => { setPhone(e.target.value.replace(/[^0-9+ ]/g, "")); if (errors.phone) setErrors((x) => ({ ...x, phone: undefined })); }}
-                        style={{ padding: "12px 15px", borderRadius: "var(--radius-field)", border: "1px solid " + (errors.phone ? "var(--danger)" : "var(--line)"), background: "var(--card)", color: "var(--ink)", fontSize: 15 }} />
+                        style={{ padding: "12px 15px", borderRadius: "var(--radius-field)", border: "1px solid " + (errors.phone ? "var(--danger)" : "var(--line)"), background: "var(--card)", color: "var(--ink)" }} />
                       {errors.phone && <div id="co-phone-err" style={fieldErrorStyle}>{errors.phone}</div>}
                     </label>
                   </form>
@@ -553,9 +833,11 @@ function CheckoutSignIn({ signedIn }: { signedIn: boolean }) {
     setNotice("If an account exists for that email, we've sent it a link to set a new password.");
   };
 
+  /* No fontSize here — .sf-input carries it, so the 16px phone floor can win.
+     See the note on the checkout fields above. */
   const field: React.CSSProperties = {
     padding: "9px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--line)",
-    background: "var(--card)", color: "var(--ink)", fontSize: 14, width: "100%",
+    background: "var(--card)", color: "var(--ink)", width: "100%",
   };
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "var(--ink)", display: "block", marginBottom: 4 };
 
@@ -578,7 +860,7 @@ function CheckoutSignIn({ signedIn }: { signedIn: boolean }) {
         <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
           <div>
             <label htmlFor={emailId} style={label}>Email</label>
-            <input id={emailId} style={field} type="email" value={email} maxLength={120} placeholder="you@email.com" autoComplete="email"
+            <input id={emailId} className="sf-input" style={field} type="email" value={email} maxLength={120} placeholder="you@email.com" autoComplete="email"
               onChange={(e) => { setEmail(e.target.value); setMessage(""); }} />
           </div>
           <div>
@@ -592,7 +874,7 @@ function CheckoutSignIn({ signedIn }: { signedIn: boolean }) {
               )}
             </div>
             <div style={{ position: "relative" }}>
-              <input id={pwId} style={{ ...field, paddingRight: 42 }} type={reveal ? "text" : "password"} value={password} maxLength={72}
+              <input id={pwId} className="sf-input" style={{ ...field, paddingRight: 42 }} type={reveal ? "text" : "password"} value={password} maxLength={72}
                 placeholder={mode === "signup" ? "at least 6 characters" : "your password"}
                 autoComplete={mode === "signin" ? "current-password" : "new-password"}
                 onChange={(e) => { setPassword(e.target.value); setMessage(""); }} />
@@ -710,19 +992,36 @@ export function resolveStorefrontSlots(
   return { heroSlides, featured, promo };
 }
 
+/* The colour is a class rather than inline, because the announce axis picks it
+   — and each of the three options is a token PAIR (a ground and the text that
+   is guaranteed to read on it), never a ground on its own. See .announce-bar
+   in globals.css. */
 export function AnnounceBar({ text }: { text: string }) {
-  return (
-    <div style={{ background: "var(--butter)", color: "var(--on-light)", textAlign: "center", fontSize: 13, fontWeight: 500, padding: "9px 12px" }}>
-      {text}
-    </div>
-  );
+  return <div className="announce-bar">{text}</div>;
 }
 
 /* Which shell the sections wear. One value for the whole page — the layout the
    vendor picked — passed down rather than read from context, so the editor can
    render a draft layout beside the saved one without a provider in between.
-   Unknown/absent means boutique, which is the page peeq has always rendered. */
-export type SectionLayout = "boutique" | "lookbook" | "bazaar";
+   Unknown/absent means boutique, which is the page peeq has always rendered.
+
+   Seven layouts, three hero shapes and three promo shapes between them, because
+   several layouts genuinely want the same band: catalogue and bazaar are both
+   "the rack is the page", so both condense the hero to a line and both put the
+   try-on pitch in a slim banner inside the grid flow. What makes them different
+   pages is the collection — tiles versus rows — and that is CSS, not markup.
+   Branching per layout where two layouts want the same thing would have meant
+   two copies of a band to keep in step. */
+export type SectionLayout =
+  | "boutique" | "lookbook" | "bazaar" | "editorial" | "catalogue" | "poster" | "story";
+
+/* The hero's shape, which is not one-to-one with the layout. */
+const heroShape = (layout: SectionLayout) =>
+  layout === "lookbook" || layout === "story" ? "bleed"
+  : layout === "bazaar" || layout === "catalogue" ? "condensed"
+  : layout === "editorial" ? "editorial"
+  : layout === "poster" ? "poster"
+  : "framed";
 
 export function HeroSection({ shop, kicker, headline, body, slides, tryOn, tryonHref, layout = "boutique" }: {
   shop: Shop;
@@ -734,12 +1033,14 @@ export function HeroSection({ shop, kicker, headline, body, slides, tryOn, tryon
   tryonHref: string;
   layout?: SectionLayout;
 }) {
-  /* ── lookbook: the photo IS the top of the page ──
+  const shape = heroShape(layout);
+
+  /* ── lookbook / story: the photo IS the top of the page ──
      The copy sits on the photo, so none of it can take a theme token: --ink is
      near-white in the dark theme and --violet is a near-black green on paper,
      and both would vanish against a photograph. Everything here is fixed light
      over the scrim in .hero-bleed, the same stance .hero-bar takes. */
-  if (layout === "lookbook") {
+  if (shape === "bleed") {
     return (
       <section className="hero-bleed">
         {slides.length > 0 ? (
@@ -753,7 +1054,7 @@ export function HeroSection({ shop, kicker, headline, body, slides, tryOn, tryon
         )}
         <div className="hero-bleed-copy">
           <div className="kicker" style={{ color: "var(--butter)" }}>{kicker}</div>
-          <h1 className="ph-display" style={{ fontSize: "clamp(32px, 5.4vw, 56px)", lineHeight: 1.08, color: "#fff", margin: 0, whiteSpace: "pre-line", textShadow: "0 2px 18px rgba(16,11,8,.45)" }}>
+          <h1 className="ph-display" style={{ fontSize: "calc(clamp(32px, 5.4vw, 56px) * var(--sf-h, 1))", lineHeight: 1.08, color: "#fff", margin: 0, whiteSpace: "pre-line", textShadow: "0 2px 18px rgba(16,11,8,.45)" }}>
             {headline}
           </h1>
           <p style={{ color: "rgba(255,255,255,.88)", fontSize: 15.5, lineHeight: 1.65, margin: 0, maxWidth: 460 }}>
@@ -769,18 +1070,18 @@ export function HeroSection({ shop, kicker, headline, body, slides, tryOn, tryon
     );
   }
 
-  /* ── bazaar: the hero condenses to a line ──
+  /* ── bazaar / catalogue: the hero condenses to a line ──
      It doesn't disappear — the vendor's kicker, headline and paragraph all
      still say what they say. They just stop taking a screen to say it, because
-     this layout's promise is that the rack starts above the fold. The hero
+     both layouts' promise is that the rack starts above the fold. The hero
      pictures have nowhere to go here, which the editor warns about rather than
      silently dropping. */
-  if (layout === "bazaar") {
+  if (shape === "condensed") {
     return (
       <section className="hero-condensed">
         <div className="kicker">{kicker}</div>
         <div className="hero-condensed-row">
-          <h1 className="ph-display" style={{ fontSize: "clamp(21px, 3.4vw, 30px)", lineHeight: 1.15, color: "var(--ink)", margin: 0 }}>
+          <h1 className="ph-display" style={{ fontSize: "calc(clamp(21px, 3.4vw, 30px) * var(--sf-h, 1))", lineHeight: 1.15, color: "var(--ink)", margin: 0 }}>
             {/* one line, whatever the vendor's line breaks say — this heading
                 shares a row with the paragraph */}
             {headline.replace(/\s*\n\s*/g, " ")}
@@ -798,11 +1099,73 @@ export function HeroSection({ shop, kicker, headline, body, slides, tryOn, tryon
     );
   }
 
+  /* ── editorial: the words are the picture ──
+     A tinted band carrying type at a size the other layouts never reach, and
+     the photograph as a wide strip UNDER it rather than beside it. Beside-it is
+     what boutique already does, and it caps how big the headline can be — a
+     50px line in a half-width column wraps to four. Full width, it doesn't. */
+  if (shape === "editorial") {
+    return (
+      <section className="hero-editorial">
+        <div className="hero-editorial-copy">
+          <div className="kicker">{kicker}</div>
+          <h1 className="ph-display" style={{ fontSize: "calc(clamp(38px, 7vw, 76px) * var(--sf-h, 1))", lineHeight: 1.04, letterSpacing: "-.02em", color: "var(--ink)", margin: 0, whiteSpace: "pre-line" }}>
+            {headline}
+          </h1>
+          <p style={{ color: "var(--stone)", fontSize: 16, lineHeight: 1.7, margin: 0, maxWidth: 560 }}>{body}</p>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <a href="#collection" className="btn-violet">shop the collection</a>
+            <TryOnCta shop={shop} state={tryOn} href={tryonHref} className="btn-outline" />
+          </div>
+        </div>
+        {slides.length > 0 && <HeroCarousel slides={slides} className="hero-strip" caption={false} />}
+      </section>
+    );
+  }
+
+  /* ── poster: half colour, half photograph ──
+     The copy half is a block of the shop's accent, so everything on it takes
+     --on-accent — the same discipline .promo-band keeps, and for the same
+     reason: the accent is the GROUND here, and --ink flips with the theme
+     rather than with the block it is sitting on.
+
+     One photo, not a carousel. A poster with a slideshow in half of it is a
+     boutique hero wearing a colour block; the editor says so in the picker
+     rather than letting a vendor find out from the live page. */
+  if (shape === "poster") {
+    const first = slides[0];
+    return (
+      <section className="hero-poster">
+        <div className="hero-poster-copy">
+          <div className="kicker">{kicker}</div>
+          <h1 className="ph-display" style={{ fontSize: "calc(clamp(30px, 4.4vw, 48px) * var(--sf-h, 1))", lineHeight: 1.1, margin: 0, whiteSpace: "pre-line" }}>
+            {headline}
+          </h1>
+          <p style={{ fontSize: 15.5, lineHeight: 1.7, margin: 0, opacity: 0.84 }}>{body}</p>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <a href="#collection" className="btn-on-accent">shop the collection</a>
+            <TryOnCta shop={shop} state={tryOn} href={tryonHref} className="btn-outline"
+              style={{ borderColor: "var(--on-accent)", color: "var(--on-accent)" }} />
+          </div>
+        </div>
+        <Link href={first?.href ?? "#collection"} className="hero-poster-visual">
+          {first ? (
+            <GarmentImage src={first.image} alt={first.name} sizes="(max-width: 860px) 100vw, 50vw" />
+          ) : (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src="/hero/hero-a.jpg" alt="Someone seeing a piece on themselves with peeq"
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          )}
+        </Link>
+      </section>
+    );
+  }
+
   return (
     <div className="hero-grid">
       <div className="hero-copy">
         <div className="kicker">{kicker}</div>
-        <h1 className="ph-display" style={{ fontSize: "clamp(32px, 4.6vw, 50px)", lineHeight: 1.12, color: "var(--ink)", margin: 0, whiteSpace: "pre-line" }}>
+        <h1 className="ph-display" style={{ fontSize: "calc(clamp(32px, 4.6vw, 50px) * var(--sf-h, 1))", lineHeight: 1.12, color: "var(--ink)", margin: 0, whiteSpace: "pre-line" }}>
           {headline}
         </h1>
         {/* no maxWidth of its own — .hero-copy already holds the measure, and
@@ -839,17 +1202,29 @@ export function FeaturedSection({ heading, children, layout = "boutique" }: {
   children: React.ReactNode;
   layout?: SectionLayout;
 }) {
-  /* A rail in the lookbook, a grid everywhere else. Same cards, same picks —
-     on a phone a rail showing two and a half cards asks to be swiped, where a
-     2×2 grid of the same four just asks to be scrolled past. */
-  const rail = layout === "lookbook";
+  /* Story shows nothing here, and that is the layout keeping its own promise
+     rather than a gap: it gives every piece in the collection a full screen,
+     so a "featured" band above it would be the same four pieces shown twice.
+     Returned as null from inside the section — the two callers (the live page
+     and the editor's preview) both render whatever `sections` lists, and
+     teaching each of them this rule separately is how the two drift apart. */
+  if (layout === "story") return null;
+
+  /* A rail in the lookbook, a mosaic in editorial, rows in catalogue, a grid
+     everywhere else. Same cards, same picks — on a phone a rail showing two
+     and a half cards asks to be swiped, where a 2×2 grid of the same four just
+     asks to be scrolled past. */
+  const frame =
+    layout === "lookbook" ? "shop-rail"
+    : layout === "editorial" ? "shop-mosaic"
+    : "shop-grid";
   return (
     <section className="section-pad">
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 22, flexWrap: "wrap", gap: 10 }}>
-        <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(20px, 3vw, 26px)", color: "var(--ink)", margin: 0 }}>{heading}</h2>
+        <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "calc(clamp(20px, 3vw, 26px) * var(--sf-h, 1))", color: "var(--ink)", margin: 0 }}>{heading}</h2>
         <a className="linklike" href="#collection">view all →</a>
       </div>
-      <div className={rail ? "shop-rail" : "shop-grid"}>
+      <div className={frame}>
         {children}
       </div>
     </section>
@@ -866,16 +1241,16 @@ export function PromoSection({ shop, kicker, heading, body, promo, tryOn, tryonH
   tryonHref: string;
   layout?: SectionLayout;
 }) {
-  /* ── lookbook: one loud band in the shop's own accent ──
+  /* ── lookbook / story: one loud band in the shop's own accent ──
      Everything inside takes --on-accent rather than --ink, because the accent
      is the ground here: it's a deep fill on paper and a bright one in the dark
      theme, and --ink flips with the theme instead of with the band. */
-  if (layout === "lookbook") {
+  if (layout === "lookbook" || layout === "story") {
     return (
       <section className="promo-band">
         <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 520 }}>
           <div className="kicker">{kicker}</div>
-          <h3 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(24px, 3.6vw, 34px)", lineHeight: 1.18, margin: 0 }}>
+          <h3 className="ph-display" style={{ fontWeight: 600, fontSize: "calc(clamp(24px, 3.6vw, 34px) * var(--sf-h, 1))", lineHeight: 1.18, margin: 0 }}>
             {heading}
           </h3>
           <p style={{ fontSize: 15, lineHeight: 1.7, margin: 0, opacity: 0.82 }}>{body}</p>
@@ -890,10 +1265,10 @@ export function PromoSection({ shop, kicker, heading, body, promo, tryOn, tryonH
     );
   }
 
-  /* ── bazaar: a slim banner inside the grid flow ──
+  /* ── bazaar / catalogue: a slim banner inside the grid flow ──
      A shopper who came to dig scrolls past a full-width pitch without reading
      it. One row, in the middle of the thing they ARE reading, gets seen. */
-  if (layout === "bazaar") {
+  if (layout === "bazaar" || layout === "catalogue") {
     return (
       <section style={{ padding: "6px 0 14px" }}>
         <div className="promo-banner">
@@ -914,11 +1289,14 @@ export function PromoSection({ shop, kicker, heading, body, promo, tryOn, tryonH
   }
 
   return (
+    /* The grid, the surface and both paddings are .promo-card now rather than
+       inline: the copy half's 36px flanks were a fifth of a phone screen, and
+       an inline padding is the one thing a media query cannot argue with. */
     <section className="section-pad" style={{ background: "var(--paper-deep)" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
-        <div style={{ padding: "40px 36px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 14 }}>
+      <div className="promo-card">
+        <div className="promo-card-copy">
           <div className="kicker">{kicker}</div>
-          <h3 className="ph-display" style={{ fontWeight: 600, fontSize: 28, lineHeight: 1.22, color: "var(--ink)", margin: 0 }}>
+          <h3 className="ph-display" style={{ fontWeight: 600, fontSize: "calc(28px * var(--sf-h, 1))", lineHeight: 1.22, color: "var(--ink)", margin: 0 }}>
             {heading}
           </h3>
           <p style={{ color: "var(--stone)", fontSize: 14.5, lineHeight: 1.7, margin: 0 }}>
@@ -927,7 +1305,7 @@ export function PromoSection({ shop, kicker, heading, body, promo, tryOn, tryonH
           <div><TryOnCta shop={shop} state={tryOn} href={tryonHref} className="btn-violet" /></div>
         </div>
         {promo && (
-          <Link href={promo.href} style={{ minHeight: 220, background: "var(--paper-deep)", display: "block", position: "relative" }}>
+          <Link href={promo.href} className="promo-card-media">
             <GarmentImage src={promo.image} alt={promo.alt} sizes="(max-width: 900px) 100vw, 50vw" />
           </Link>
         )}

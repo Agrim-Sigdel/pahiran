@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/Icon";
+import PreviewFrame from "@/components/PreviewFrame";
 import ImageCropper from "@/components/ImageCropper";
 import { confirmAsync } from "@/components/Dialog";
 import { fileToDataURL } from "@/lib/images";
@@ -12,11 +13,13 @@ import {
   accentClass, toneClass, layoutShowsHeroImages,
   STOREFRONT_DEFAULTS, STOREFRONT_SECTIONS, STOREFRONT_ACCENTS,
   STOREFRONT_LAYOUTS, STOREFRONT_TONES, STOREFRONT_CORNERS, STOREFRONT_FONTS,
+  STOREFRONT_CARDS, STOREFRONT_DENSITIES, STOREFRONT_BUTTONS, STOREFRONT_HEADERS,
+  STOREFRONT_TYPE_SCALES, STOREFRONT_TILES, STOREFRONT_ANNOUNCE_TONES,
 } from "@/lib/constants";
 import { storefrontLook, accentPreviewHex, tonePreviewHex } from "@/lib/storefront-theme";
 import { storefrontFontVars } from "@/lib/storefront-fonts";
 import {
-  AnnounceBar, HeroSection, FeaturedSection, PromoSection, ShopCard,
+  AnnounceBar, HeroSection, FeaturedSection, PromoSection, ShopCard, StorefrontNav,
   resolveStorefrontSlots, defaultHeroBody, type SectionLayout,
 } from "@/components/storefront";
 import { offersTryOn } from "@/components/TryOnCta";
@@ -33,7 +36,35 @@ import type {
    settings — and leaving with unsaved edits runs the same guard as every
    other dashboard form. */
 
-const PHONE_W = 390; // the preview's design width — a phone, like most shoppers
+/* ── the editor's own navigation ──
+   Grouped by the KIND of edit, not by which band of the page it lands in. A
+   vendor rewriting their words rewrites all of them in one sitting, and a
+   vendor curating pictures does the same — laid out by section, the hero's
+   paragraph and the promo's paragraph were four scrolls apart with the colour
+   wheel somewhere in between.
+
+   Preview is a tab rather than a permanent sidecar. As a 420px column it was
+   the one pane that could never show the page at a width anybody browses at;
+   as a tab it gets the whole width, and a vendor who wants it live beside the
+   form pins it (wide screens only — see .sfe-pin). */
+const TABS = [
+  { id: "layout", label: "Layout", note: "how the page is put together" },
+  { id: "text", label: "Text", note: "every word on the page" },
+  { id: "photos", label: "Photos", note: "which picture goes where" },
+  { id: "look", label: "Look", note: "colour, shape and lettering" },
+  { id: "preview", label: "Preview", note: "" },
+] as const;
+type Tab = (typeof TABS)[number]["id"];
+
+/* Real device widths, because the frame below renders at them for real —
+   media queries and vw/svh inside it answer to the number on the label. 390 is
+   the phone peeq is designed against; 820 crosses the 641px breakpoint where
+   the grid goes back to auto-fill; 1280 is the two-column hero. */
+const PREVIEW_WIDTHS = [
+  { id: "phone", label: "Phone", w: 390, note: "390px" },
+  { id: "tablet", label: "Tablet", w: 820, note: "820px" },
+  { id: "desktop", label: "Desktop", w: 1280, note: "1280px" },
+] as const;
 
 /* A stitched fit as the picker offers it: the render, and the words the fits
    tab already uses for it. Stored into the config as a labelled image URL —
@@ -51,7 +82,24 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
 }) {
   const [cfg, setCfg] = useState<StorefrontConfig>(shop.storefront);
   const [saved, setSaved] = useState(false);
-  const [pane, setPane] = useState<"edit" | "preview">("edit"); // phones only
+  const [tab, setTab] = useState<Tab>("layout");
+  /* Wide screens only: the preview live in a column beside the form. On by
+     default — an edit you can see land is worth the width on a screen that has
+     it — and unpinnable for the vendor who wants the form to itself. */
+  const [pinned, setPinned] = useState(true);
+  const [previewW, setPreviewW] = useState<number>(PREVIEW_WIDTHS[0].w);
+  /* .sfe-side is display:none below 1080px, but a hidden iframe still mounts
+     and still clones the whole stylesheet — so the pin is gated on the real
+     width too, not only in CSS. Starts false so the server's HTML and the
+     first client render agree. */
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1080px)");
+    const sync = () => setWide(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
   /* Which slot an in-progress upload or pick is for. */
   const [uploadFor, setUploadFor] = useState<"hero" | "promo" | null>(null);
   const [pickFor, setPickFor] = useState<"hero" | "promo" | null>(null);
@@ -196,20 +244,52 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
 
   return (
     <div style={{ marginTop: 16 }}>
-      {/* edit/preview toggle — phones only; wide screens show both */}
-      <div className="sfe-toggle">
-        {(["edit", "preview"] as const).map((p) => (
-          <button key={p} className="ph-btn" onClick={() => setPane(p)} aria-pressed={pane === p}
-            style={{ ...smallBtn, background: pane === p ? "var(--ink)" : "transparent", color: pane === p ? "var(--card)" : "var(--ink)" }}>
-            {p}
+      {/* Four kinds of edit and the preview, at every width. The dot on
+          Preview says the page you are about to look at is still a draft. */}
+      <div className="sfe-tabs" role="tablist" aria-label="Storefront editor">
+        {TABS.map((t) => (
+          <button key={t.id} className={"sfe-tab" + (tab === t.id ? " on" : "")}
+            role="tab" aria-selected={tab === t.id} title={t.note || undefined}
+            onClick={() => setTab(t.id)}>
+            {t.label}
+            {t.id === "preview" && dirty && <span className="dot" aria-hidden />}
           </button>
         ))}
       </div>
 
-      <div className="sfe-split">
-        <div className="sfe-form" data-pane={pane}>
+      <div className="sfe-split" data-pinned={pinned && tab !== "preview" ? "1" : "0"}>
+        <div className="sfe-form">
+
+          {tab === "preview" && (
+            <>
+              <div className="sfe-ptools">
+                {PREVIEW_WIDTHS.map((p) => (
+                  <button key={p.id} className="ph-btn" onClick={() => setPreviewW(p.w)} aria-pressed={previewW === p.w}
+                    style={{ ...smallBtn, background: previewW === p.w ? "var(--ink)" : "transparent", color: previewW === p.w ? "var(--card)" : "var(--ink)" }}>
+                    {p.label} <span style={{ opacity: 0.6, fontWeight: 500 }}>{p.note}</span>
+                  </button>
+                ))}
+                {/* Only offered where there is room for it — below 1080px a
+                    pinned column would leave the form too narrow to hold a
+                    two-across row of controls. */}
+                <button className="ph-btn sfe-pin" onClick={() => setPinned((v) => !v)} aria-pressed={pinned}
+                  style={{ ...smallBtn, marginLeft: "auto", background: pinned ? "var(--ink)" : "transparent", color: pinned ? "var(--card)" : "var(--ink)" }}>
+                  {pinned ? "unpin from the form" : "pin beside the form"}
+                </button>
+              </div>
+              <div className="sfe-stage">
+                <PreviewFrame width={previewW} title="Your storefront, as shoppers will see it">
+                  <StorefrontPreview shop={shop} cfg={cfg} catalog={catalog} />
+                </PreviewFrame>
+              </div>
+              <p style={{ fontSize: 12, color: "var(--stone)", margin: "10px 0 0", lineHeight: 1.5 }}>
+                This is the real page at {previewW}px.
+              </p>
+            </>
+          )}
 
           {/* ---- layout ---- */}
+          {tab === "layout" && (
           <div className="panel">
             <div className="panel-head"><span className="title">Layout</span>
               <span className="sub">how the page is put together</span></div>
@@ -243,8 +323,10 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
               })}
             </div>
           </div>
+          )}
 
           {/* ---- colours ---- */}
+          {tab === "look" && (
           <div className="panel">
             <div className="panel-head"><span className="title">Colours</span>
               <span className="sub">the paper, and the accent on it</span></div>
@@ -318,8 +400,10 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
               )}
             </div>
           </div>
+          )}
 
           {/* ---- corners + heading face ---- */}
+          {tab === "look" && (
           <div className="panel">
             <div className="panel-head"><span className="title">Style</span>
               <span className="sub">shape and lettering</span></div>
@@ -328,14 +412,67 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
               <Segmented options={STOREFRONT_CORNERS} value={cfg.corners ?? "soft"}
                 onPick={(id) => edit((c) => ({ ...c, corners: id }))} />
             </div>
-            <div className="field">Heading face
+            <div className="field" style={{ marginBottom: 16 }}>Heading face
               <span style={hint}>Headings, buttons and prices. Body text stays the same so Nepali always renders.</span>
               <Segmented options={STOREFRONT_FONTS} value={cfg.font ?? "peeq"}
                 onPick={(id) => edit((c) => ({ ...c, font: id }))} />
             </div>
+            <div className="field" style={{ marginBottom: 16 }}>Heading size
+              <span style={hint}>Moves every heading on the page together, from the hero down.</span>
+              <Segmented options={STOREFRONT_TYPE_SCALES} value={cfg.typeScale ?? "medium"}
+                onPick={(id) => edit((c) => ({ ...c, typeScale: id }))} />
+            </div>
+            <div className="field">Buttons
+              <span style={hint}>Every button at once — the hero, the promo and each add-to-bag.</span>
+              <Segmented options={STOREFRONT_BUTTONS} value={cfg.buttons ?? "solid"}
+                onPick={(id) => edit((c) => ({ ...c, buttons: id }))} />
+            </div>
           </div>
+          )}
+
+          {/* ---- the rack ---- */}
+          {tab === "layout" && (
+          <div className="panel">
+            <div className="panel-head"><span className="title">The rack</span>
+              <span className="sub">how your pieces are shown</span></div>
+            <div className="field" style={{ marginBottom: 16 }}>Card style
+              <span style={hint}>How each piece is framed in the grid.</span>
+              <Segmented options={[AUTO, ...STOREFRONT_CARDS]} value={cfg.cards}
+                onPick={(id) => edit((c) => ({ ...c, cards: id }))} />
+            </div>
+            <div className="field" style={{ marginBottom: 16 }}>Photo shape
+              <span style={hint}>
+                Pieces are always shown whole — this changes the frame around them, never the crop.
+              </span>
+              <Segmented options={[AUTO, ...STOREFRONT_TILES]} value={cfg.tiles}
+                onPick={(id) => edit((c) => ({ ...c, tiles: id }))} />
+            </div>
+            <div className="field">Spacing
+              <span style={hint}>Padding, gaps and how many pieces fit across.</span>
+              <Segmented options={[AUTO, ...STOREFRONT_DENSITIES]} value={cfg.density}
+                onPick={(id) => edit((c) => ({ ...c, density: id }))} />
+            </div>
+          </div>
+          )}
+
+          {/* ---- the nav ---- */}
+          {tab === "layout" && (
+          <div className="panel">
+            <div className="panel-head"><span className="title">Header</span>
+              <span className="sub">the bar at the top of every page</span></div>
+            <div className="field">Arrangement
+              <span style={hint}>
+                Minimal drops the category links — worth it for a shop with two or three,
+                not for one with a dozen.
+              </span>
+              <Segmented options={STOREFRONT_HEADERS} value={cfg.header ?? "centred"}
+                onPick={(id) => edit((c) => ({ ...c, header: id }))} />
+            </div>
+          </div>
+          )}
 
           {/* ---- sections ---- */}
+          {tab === "layout" && (
           <div className="panel">
             <div className="panel-head"><span className="title">Sections</span>
               <span className="sub">what shows, and in what order</span></div>
@@ -362,8 +499,10 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
               })}
             </div>
           </div>
+          )}
 
-          {/* ---- announcement ---- */}
+          {/* ---- announcement: the words here, the colour under Look ---- */}
+          {tab === "text" && (
           <div className="panel">
             <div className="panel-head"><span className="title">Announcement bar</span></div>
             <label className="field">Message
@@ -373,8 +512,21 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
                 onChange={(e) => edit((c) => ({ ...c, announceText: text(e.target.value) }))} />
             </label>
           </div>
+          )}
+          {tab === "look" && (
+          <div className="panel">
+            <div className="panel-head"><span className="title">Announcement bar</span>
+              <span className="sub">the strip above the header</span></div>
+            <div className="field">Colour
+              <span style={hint}>Each option carries its own text colour, so the line always reads.</span>
+              <Segmented options={STOREFRONT_ANNOUNCE_TONES} value={cfg.announceTone ?? "butter"}
+                onPick={(id) => edit((c) => ({ ...c, announceTone: id }))} />
+            </div>
+          </div>
+          )}
 
-          {/* ---- hero ---- */}
+          {/* ---- hero: words ---- */}
+          {tab === "text" && (
           <div className="panel">
             <div className="panel-head"><span className="title">Hero</span>
               <span className="sub">the first thing a shopper sees</span></div>
@@ -395,7 +547,16 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
                   placeholder={defaultHeroBody(shop)}
                   onChange={(e) => edit((c) => ({ ...c, hero: { ...c.hero, body: text(e.target.value) } }))} />
               </label>
+            </div>
+          </div>
+          )}
 
+          {/* ---- hero: pictures ---- */}
+          {tab === "photos" && (
+          <div className="panel">
+            <div className="panel-head"><span className="title">Hero</span>
+              <span className="sub">the first thing a shopper sees</span></div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="field">Hero pictures
                 <span style={hint}>
                   {/* The warning belongs here as well as in the layout picker:
@@ -441,16 +602,25 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
               </div>
             </div>
           </div>
+          )}
 
-          {/* ---- featured ---- */}
+          {/* ---- featured: heading ---- */}
+          {tab === "text" && (
+          <div className="panel">
+            <div className="panel-head"><span className="title">Featured pieces</span></div>
+            <label className="field">Heading
+              <input style={input} value={cfg.featured.heading ?? ""} maxLength={60}
+                placeholder={STOREFRONT_DEFAULTS.featuredHeading}
+                onChange={(e) => edit((c) => ({ ...c, featured: { ...c.featured, heading: text(e.target.value) } }))} />
+            </label>
+          </div>
+          )}
+
+          {/* ---- featured: picks ---- */}
+          {tab === "photos" && (
           <div className="panel">
             <div className="panel-head"><span className="title">Featured pieces</span></div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <label className="field">Heading
-                <input style={input} value={cfg.featured.heading ?? ""} maxLength={60}
-                  placeholder={STOREFRONT_DEFAULTS.featuredHeading}
-                  onChange={(e) => edit((c) => ({ ...c, featured: { ...c.featured, heading: text(e.target.value) } }))} />
-              </label>
               <div className="field">Which pieces
                 <span style={hint}>
                   {cfg.featured.picks.length === 0
@@ -470,9 +640,11 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
               </div>
             </div>
           </div>
+          )}
 
-          {/* ---- promo (try-on shops only — a general shop never renders it) ---- */}
-          {promoApplies && (
+          {/* ---- promo: words (try-on shops only — a general shop never
+                  renders this section, so it is never offered as one) ---- */}
+          {promoApplies && tab === "text" && (
             <div className="panel">
               <div className="panel-head"><span className="title">Try-on promo</span></div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -491,6 +663,15 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
                     placeholder={STOREFRONT_DEFAULTS.promoBody}
                     onChange={(e) => edit((c) => ({ ...c, promo: { ...c.promo, body: text(e.target.value) } }))} />
                 </label>
+              </div>
+            </div>
+          )}
+
+          {/* ---- promo: photo ---- */}
+          {promoApplies && tab === "photos" && (
+            <div className="panel">
+              <div className="panel-head"><span className="title">Try-on promo</span></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <div className="field">Photo
                   <span style={hint}>
                     {cfg.promo.image === null
@@ -545,15 +726,28 @@ export default function StorefrontEditor({ shop, catalog, fabrics, styles, compo
           </div>
         </div>
 
-        {/* ---- the live preview: the real sections, scaled to a phone ---- */}
-        <div className="sfe-preview" data-pane={pane}>
-          <div style={{ fontSize: 12, color: "var(--stone)", marginBottom: 6 }}>
-            preview — how your page will look{dirty ? " (unsaved)" : ""}
+        {/* The pinned column — the same frame, at phone width, riding along
+            beside the form. Rendered only when pinned so the iframe and its
+            cloned stylesheets aren't paid for on every tab; .sfe-side also
+            hides it below 1080px, where the tab is the only way in. */}
+        {wide && pinned && tab !== "preview" && (
+          <div className="sfe-side">
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 12, color: "var(--stone)" }}>
+                preview — 390px{dirty ? " (unsaved)" : ""}
+              </span>
+              <button className="ph-btn" onClick={() => setPinned(false)}
+                style={{ fontSize: 12, fontWeight: 600, color: "var(--stone)", textDecoration: "underline", textUnderlineOffset: 3 }}>
+                unpin
+              </button>
+            </div>
+            <div className="sfe-stage">
+              <PreviewFrame width={PREVIEW_WIDTHS[0].w} title="Your storefront at phone width">
+                <StorefrontPreview shop={shop} cfg={cfg} catalog={catalog} />
+              </PreviewFrame>
+            </div>
           </div>
-          <PhoneFrame>
-            <StorefrontPreview shop={shop} cfg={cfg} catalog={catalog} />
-          </PhoneFrame>
-        </div>
+        )}
       </div>
 
       {cropping && (
@@ -600,18 +794,27 @@ function Swatch({ label, title, on, className, fill, wheel = false, onClick }: {
 
 /* A row of mutually exclusive choices, each with the one-liner that says what
    it's for — the note is the whole point, since "Soft / Round / Square" alone
-   asks a vendor to imagine three pages. */
+   asks a vendor to imagine three pages.
+
+   A null id is a real option, not a missing one: on the three axes a layout
+   also has an opinion about (card style, photo shape, spacing) null means
+   "whatever this layout wants", which is a different answer from any of the
+   named ones and the only one that keeps following the layout when the vendor
+   changes it. AUTO below is that option; axes no layout touches don't offer
+   it, because there "auto" would just be a second name for peeq's default. */
+const AUTO = { id: null, label: "Auto", note: "the layout decides" } as const;
+
 function Segmented({ options, value, onPick }: {
-  options: readonly { id: string; label: string; note: string }[];
-  value: string;
-  onPick: (id: string) => void;
+  options: readonly { id: string | null; label: string; note: string }[];
+  value: string | null;
+  onPick: (id: string | null) => void;
 }) {
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {options.map((o) => {
         const on = value === o.id;
         return (
-          <button key={o.id} className="ph-btn" onClick={() => onPick(o.id)} aria-pressed={on}
+          <button key={o.id ?? "auto"} className="ph-btn" onClick={() => onPick(o.id)} aria-pressed={on}
             style={{ flex: "1 1 140px", textAlign: "left", padding: "9px 12px", borderRadius: "var(--radius-md)", border: "2px solid " + (on ? "var(--violet)" : "var(--line)"), background: on ? "var(--paper)" : "transparent" }}>
             <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>{o.label}</span>
             <span style={{ display: "block", fontSize: 11.5, color: "var(--stone)", marginTop: 1 }}>{o.note}</span>
@@ -667,6 +870,50 @@ function LayoutThumb({ id, on }: { id: string; on: boolean }) {
               <span key={i} style={bar(10, "calc(33.33% - 1.4px)")} />
             ))}
           </span>
+        </>
+      )}
+      {/* editorial: two fat lines of type, then a wide strip, then the mosaic */}
+      {id === "editorial" && (
+        <>
+          <span style={bar(5, "84%", true)} />
+          <span style={bar(5, "62%", true)} />
+          <span style={{ ...bar(14, "100%"), background: "var(--line)" }} />
+          <span style={{ display: "flex", gap: 3 }}>
+            <span style={bar(12, "62%")} /><span style={bar(12, "38%")} />
+          </span>
+        </>
+      )}
+      {/* catalogue: rows — a square of photo with two lines beside it */}
+      {id === "catalogue" && (
+        <>
+          <span style={{ ...bar(4, "70%"), background: "var(--line)" }} />
+          {[0, 1, 2, 3].map((i) => (
+            <span key={i} style={{ display: "flex", gap: 3, alignItems: "center" }}>
+              <span style={bar(9, "22%", i === 0)} />
+              <span style={bar(4, "48%")} />
+              <span style={{ ...bar(6, "26%"), background: ink, opacity: 0.55 }} />
+            </span>
+          ))}
+        </>
+      )}
+      {/* poster: the split — a solid block of colour beside the photo */}
+      {id === "poster" && (
+        <>
+          <span style={{ display: "flex", gap: 3 }}>
+            <span style={{ ...bar(30, "50%"), background: ink }} />
+            <span style={{ ...bar(30, "50%"), background: "var(--line)" }} />
+          </span>
+          <span style={{ display: "flex", gap: 3 }}>
+            <span style={bar(11, "50%")} /><span style={bar(11, "50%")} />
+          </span>
+        </>
+      )}
+      {/* story: one piece per screen, stacked full width */}
+      {id === "story" && (
+        <>
+          <span style={bar(21, "100%", true)} />
+          <span style={{ ...bar(21, "100%"), background: "var(--line)" }} />
+          <span style={bar(6, "100%")} />
         </>
       )}
     </span>
@@ -817,42 +1064,6 @@ function GarmentPickGrid({ catalog, picks, onPick }: {
 
 /* ---------- the preview ---------- */
 
-/* The page at phone width, scaled to whatever column it gets. Non-interactive
-   by construction — pointer-events off, hidden from the accessibility tree —
-   because its links point at the real storefront and a preview that navigates
-   away mid-edit would be a trap. */
-function PhoneFrame({ children }: { children: React.ReactNode }) {
-  const outerRef = useRef<HTMLDivElement>(null);
-  const innerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-  const [height, setHeight] = useState(0);
-
-  useEffect(() => {
-    const measure = () => {
-      const ow = outerRef.current?.clientWidth ?? PHONE_W;
-      const ih = innerRef.current?.offsetHeight ?? 0;
-      const s = Math.min(1, ow / PHONE_W);
-      setScale(s);
-      setHeight(Math.round(ih * s));
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    if (outerRef.current) ro.observe(outerRef.current);
-    if (innerRef.current) ro.observe(innerRef.current);
-    return () => ro.disconnect();
-  }, []);
-
-  return (
-    <div ref={outerRef} style={{ border: "1px solid var(--line-strong)", borderRadius: "var(--radius-lg)", overflow: "hidden", maxHeight: "72vh", overflowY: "auto", background: "var(--paper)" }}>
-      <div style={{ height: height || undefined, overflow: "hidden" }}>
-        <div ref={innerRef} aria-hidden style={{ width: PHONE_W, transform: `scale(${scale})`, transformOrigin: "top left", pointerEvents: "none" }}>
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function StorefrontPreview({ shop, cfg, catalog }: {
   shop: Shop;
   cfg: StorefrontConfig;
@@ -905,7 +1116,7 @@ function StorefrontPreview({ shop, cfg, catalog }: {
            page description — nothing on it is editable here. */
         return (
           <section className="section-pad">
-            <h2 className="ph-display" style={{ fontWeight: 600, fontSize: 22, color: "var(--ink)", margin: "0 0 16px" }}>the collection</h2>
+            <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "calc(22px * var(--sf-h, 1))", color: "var(--ink)", margin: "0 0 16px" }}>the collection</h2>
             {catalog.length === 0 ? (
               <div style={{ color: "var(--stone)", padding: 30, textAlign: "center", fontSize: 13 }}>Your pieces will show here.</div>
             ) : (
@@ -916,11 +1127,30 @@ function StorefrontPreview({ shop, cfg, catalog }: {
     }
   };
 
+  /* Same rule the live page follows: the announce bar sits ABOVE the header
+     when it leads the order, and in place like any other section when it
+     doesn't. Fragments rather than <div> wrappers for the same reason the nav
+     is real markup — the preview's DOM should be the page's DOM. */
+  const visible = cfg.sections.filter((s) => !s.hidden);
+  const announceFirst = visible[0]?.id === "announce";
+  const body = announceFirst ? visible.slice(1) : visible;
+
   return (
-    <div className={[look.className, storefrontFontVars].filter(Boolean).join(" ")}
+    <div data-sf-root className={[look.className, storefrontFontVars].filter(Boolean).join(" ")}
       style={{ ...look.style, background: "var(--paper)" }}>
-      {cfg.sections.filter((s) => !s.hidden).map((s) => (
-        <div key={s.id}>{sectionFor(s.id)}</div>
+      {announceFirst && sectionFor("announce")}
+      {/* The real bar, not a stand-in. The preview had no header at all, so
+          the Header panel's arrangements were options that previewed
+          identically and only differed once the page was live. Rendering the
+          shipped component is also the only way it can't drift — and it is
+          safe to render its real controls because PreviewFrame marks the whole
+          frame inert. */}
+      <StorefrontNav shop={shop} slug={slug}
+        savedCount={0} onSaved={noop}
+        cartCount={0} onOpenCart={noop}
+        contactWa={shop.whatsapp ? "#" : null} />
+      {body.map((s) => (
+        <Fragment key={s.id}>{sectionFor(s.id)}</Fragment>
       ))}
       {/* the footer exists on the page but isn't configurable — one line
           stands in for it so the preview doesn't just stop mid-air */}

@@ -155,16 +155,16 @@ export function OverviewTab({ events, catalog, leads = [], compositions = [], on
         <StatTile label="This week" value={week} />
         <StatTile label="Shoppers · 30 days" value={sessions} hint="unique kiosk sessions" />
         <StatTile label="Orders · 30 days" value={orderStats.last30} />
-        <StatTile label="To call back" value={orderStats.open} warn={orderStats.open > 0} />
+        <StatTile label="open" value={orderStats.open} warn={orderStats.open > 0} />
       </div>
 
       {/* What needs the vendor today, each chip a door to the tab that fixes
-          it. Replaces the lone "orders to call back" banner: same signal, and
+          it. Replaces the lone "orders open" banner: same signal, and
           the other two things a landing screen should nag about beside it. */}
       {onGo && (orderStats.open > 0 || outOfStock > 0 || draftFits > 0) && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
           {orderStats.open > 0 && (
-            <AttentionChip warn label={`${orderStats.open} to call back`} onClick={() => onGo("leads")} />
+            <AttentionChip warn label={`${orderStats.open} open`} onClick={() => onGo("leads")} />
           )}
           {outOfStock > 0 && (
             <AttentionChip label={`${outOfStock} out of stock`} onClick={() => onGo("catalog")} />
@@ -467,13 +467,16 @@ export function LeadsTab({ leads, catalog, onOpen }: {
        its own, and a wide screen shows several at once. */
     <>
       <div className="cat-bar">
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", minWidth: 0 }}>
+        <div className="sub-bar">
           <div className="subtabs">
-            {([["all", "All"], ["open", "To call back"], ["done", "Done"]] as const).map(([s, label]) => (
+            {([["all", "All"], ["open", "open"], ["done", "Done"]] as const).map(([s, label]) => (
               <button key={s} className={status === s ? "on" : ""} aria-pressed={status === s} onClick={() => pick(s)}>
                 {label}
+                {/* no marginLeft on the count: .subtabs button is a flex row
+                    with a gap of its own now, and the two together read as a
+                    stray space between the word and its number */}
                 {s === "open" && openCount > 0 && (
-                  <span style={{ background: "var(--butter)", color: "var(--on-light)", fontSize: 11, fontWeight: 700, borderRadius: "var(--radius-pill)", padding: "1px 7px", marginLeft: 6 }}>
+                  <span style={{ background: "var(--butter)", color: "var(--on-light)", fontSize: 11, fontWeight: 700, borderRadius: "var(--radius-pill)", padding: "1px 7px" }}>
                     {openCount}
                   </span>
                 )}

@@ -10,14 +10,14 @@ import { storefrontFontVars } from "@/lib/storefront-fonts";
 import { osmViewUrl } from "@/lib/osm";
 import { useCart, useWishlist } from "@/lib/cart";
 import { useAccount, getContact } from "@/lib/account";
-import AccountMenu from "@/components/AccountMenu";
 import {
-  ShopCard, CartDrawer,
+  ShopCard, CartDrawer, StorefrontNav,
   AnnounceBar, HeroSection, FeaturedSection, PromoSection,
   resolveStorefrontSlots, defaultHeroBody, type SectionLayout,
 } from "@/components/storefront";
 import TryOnCta, { offersTryOn, type TryOnState } from "@/components/TryOnCta";
 import Icon from "@/components/Icon";
+import Dropdown from "@/components/Dropdown";
 import type { Garment, Shop, StorefrontSectionId } from "@/lib/types";
 
 /* Public storefront — a traditional shopping experience: browse, save, pick a
@@ -134,7 +134,6 @@ export default function StorefrontClient({
   const contactWa = waLink(shop.whatsapp, `Namaste! I have a question about ${shop.name || "your shop"}. (via peeq)`);
 
   const searchId = useId();
-  const sortId = useId();
   const askId = useId();
 
   const openCollectionSaved = () => {
@@ -146,7 +145,7 @@ export default function StorefrontClient({
   // first row is above the fold on most screens — let it load eagerly
   const card = (g: Garment, i: number) => (
     <ShopCard key={g.id} g={g} slug={slug} priority={i < 2} shop={shop} tryOn={tryOn}
-      saved={wish.has(g.id)} onToggleSave={() => wish.toggle(g.id)} onAdd={() => cart.add(g, g.sizes[0] || "")} />
+      saved={wish.has(g.id)} onToggleSave={() => wish.toggle(g.id)} onAdd={(size) => cart.add(g, size)} />
   );
 
   /* The sections, in the vendor's order, hidden ones dropped. Every text is
@@ -187,7 +186,7 @@ export default function StorefrontClient({
         return (
           <section id="collection" className="section-pad">
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-              <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(20px, 3vw, 26px)", color: "var(--ink)", margin: 0 }}>
+              <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "calc(clamp(20px, 3vw, 26px) * var(--sf-h, 1))", color: "var(--ink)", margin: 0 }}>
                 {savedOnly ? "saved pieces" : "the collection"}
               </h2>
               {/* aria-live, so a shopper filtering with a screen reader hears the
@@ -199,8 +198,11 @@ export default function StorefrontClient({
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
               <div style={{ flex: "1 1 220px", position: "relative", display: "flex" }}>
                 <label htmlFor={searchId} className="sr-only">Search the collection</label>
-                <input id={searchId} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the collection…"
-                  style={{ flex: 1, padding: "11px 16px", paddingRight: query ? 40 : 16, borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)", fontSize: 14 }} />
+                {/* .sf-input rather than an inline fontSize — below 16px iOS
+                    zooms the whole page in on focus and does not zoom back,
+                    and an inline size beats every rule in globals.css. */}
+                <input id={searchId} className="sf-input" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the collection…"
+                  style={{ flex: 1, padding: "11px 16px", paddingRight: query ? 40 : 16, borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)" }} />
                 {query && (
                   <button className="ph-btn" onClick={() => setQuery("")} aria-label="Clear the search"
                     style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", padding: 8, color: "var(--stone)", fontSize: 14 }}>
@@ -209,15 +211,21 @@ export default function StorefrontClient({
                 )}
               </div>
               {/* No "Sort:" prefix on one option and not on the others — it read
-                  as a heading above a list of three rather than one of four. */}
-              <label htmlFor={sortId} className="sr-only">Sort the collection</label>
-              <select id={sortId} value={sort} onChange={(e) => setSort(e.target.value as Sort)}
-                className="ph-select"
-                style={{ padding: "11px 16px", borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", backgroundColor: "var(--card)", color: "var(--ink)", fontSize: 14, fontWeight: 500, cursor: "pointer" }}>
-                <option value="new">Newest first</option>
-                <option value="price-asc">Price: low to high</option>
-                <option value="price-desc">Price: high to low</option>
-              </select>
+                  as a heading above a list of three rather than one of four.
+
+                  Ours, not a native select: on a phone that control handed the
+                  storefront's one act of arrangement to an OS wheel that looks
+                  nothing like the page around it — and its list, unlike this
+                  one, could not be given the pill and the paper the shop is
+                  built out of. `.sf-sort` in globals.css carries the size, so
+                  the phone rule can still raise it. */}
+              <Dropdown value={sort} onChange={(v) => setSort(v as Sort)}
+                className="sf-sort" ariaLabel="Sort the collection"
+                options={[
+                  { value: "new", label: "Newest first" },
+                  { value: "price-asc", label: "Price: low to high" },
+                  { value: "price-desc", label: "Price: high to low" },
+                ]} />
             </div>
 
             {(cats.length > 1 || savedOnly) && (
@@ -257,63 +265,24 @@ export default function StorefrontClient({
        scope for everything below, nav and footer included. The font variables
        ride along because .sf-font-* names them; on a shop that never chose a
        face they are simply unused. */
-    <div className={[look.className, storefrontFontVars].filter(Boolean).join(" ")}
+    /* data-sf-root: where a dialog opened from inside a card portals out to.
+       It has to be this element and not the body — the shop's tokens are
+       declared right here, and an overlay outside them repaints itself in
+       peeq's own colours. See the note at the end of Dialog.tsx. */
+    <div data-sf-root className={[look.className, storefrontFontVars].filter(Boolean).join(" ")}
       style={{ ...look.style, background: "var(--paper)", minHeight: "100dvh" }}>
       {/* The announce bar belongs above the nav when it leads the order —
           which is the default, and the strip this page always opened with.
           Moved down the order, it renders in place like any other section. */}
       {announceFirst && sectionFor("announce")}
 
-      {/* nav */}
-      <nav className="efc-nav">
-        {/* These set filter state, so they are buttons that scroll — not <a>s
-            pretending the hash is the whole story. They carry the same active
-            state as the chips further down doing the identical job, which they
-            previously did not. */}
-        <div className="nav-links garment-rail">
-          {cats.slice(0, 4).map((c) => {
-            const on = !savedOnly && filter === c;
-            return (
-              <button key={c} className="ph-btn" aria-pressed={on}
-                onClick={() => { setSavedOnly(false); setFilter(c); document.getElementById("collection")?.scrollIntoView({ behavior: "smooth" }); }}
-                style={{ color: on ? "var(--violet)" : "inherit", fontWeight: on ? 700 : 500, fontSize: 14, padding: "2px 0", whiteSpace: "nowrap", textDecoration: on ? "underline" : "none", textUnderlineOffset: 5 }}>
-                {c}
-              </button>
-            );
-          })}
-        </div>
-        <div className="nav-logo">
-          <div className="ph-display" style={{ fontSize: "clamp(17px, 4vw, 21px)", fontWeight: 600, color: "var(--ink)" }}>
-            {shop.name || "The shop"}
-          </div>
-          {shop.area && (
-            <div style={{ fontSize: 11, letterSpacing: ".08em", color: "var(--stone)", marginTop: 2 }}>{shop.area}</div>
-          )}
-        </div>
-        <div className="nav-tools">
-          {/* Always rendered, disabled until there is something in it. It used
-              to appear the instant you hearted your first piece, which shoved
-              the whole nav sideways under the shopper's thumb. */}
-          <button className="ph-btn" onClick={openCollectionSaved} disabled={wish.count === 0}
-            aria-label={wish.count === 0 ? "Saved pieces — nothing saved yet" : `Saved pieces (${wish.count})`}
-            style={{ color: wish.count > 0 ? "var(--violet)" : "var(--stone)", fontWeight: 600, opacity: wish.count > 0 ? 1 : 0.55, cursor: wish.count > 0 ? "pointer" : "default" }}>
-            <Icon name={wish.count > 0 ? "heart-filled" : "heart"} /> saved{wish.count > 0 ? ` (${wish.count})` : ""}
-          </button>
-          {contactWa && (
-            <a href={contactWa} target="_blank" rel="noopener noreferrer" style={{ color: "var(--whatsapp)" }}>Contact</a>
-          )}
-          <AccountMenu />
-          <button className="ph-btn" onClick={() => setCartOpen(true)} aria-label={`Bag, ${cart.count} item${cart.count !== 1 ? "s" : ""}`}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--ink)", fontWeight: 600 }}>
-             <Icon name="bag" /> bag
-            {cart.count > 0 && (
-              <span style={{ background: "var(--violet)", color: "var(--on-accent)", fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, borderRadius: "var(--radius-pill)", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
-                {cart.count}
-              </span>
-            )}
-          </button>
-        </div>
-      </nav>
+      {/* nav — one component shared with the product page (storefront.tsx),
+          because two copies of this bar is exactly how the two pages' headers
+          drifted apart last time. */}
+      <StorefrontNav shop={shop} slug={slug}
+        savedCount={wish.count} onSaved={openCollectionSaved}
+        cartCount={cart.count} onOpenCart={() => setCartOpen(true)}
+        contactWa={contactWa} />
 
       {/* The skip-link's target: everything below the nav, in whatever order
           the vendor put it. The hero markup (and the fallback stock shot for
@@ -358,8 +327,8 @@ export default function StorefrontClient({
                   prose: anything ON the slab takes --on-slab, which is light
                   in both themes. */}
               <label htmlFor={askId} className="sr-only">What are you looking for?</label>
-                <input id={askId} value={ask} maxLength={200} onChange={(e) => setAsk(e.target.value)} placeholder="What are you looking for?"
-                  style={{ flex: 1, padding: "11px 15px", borderRadius: "var(--radius-pill)", border: "1px solid rgba(250,246,240,.25)", background: "rgba(255,255,255,.06)", color: "var(--on-slab)", fontSize: 13 }} />
+                <input id={askId} className="sf-input" value={ask} maxLength={200} onChange={(e) => setAsk(e.target.value)} placeholder="What are you looking for?"
+                  style={{ flex: 1, padding: "11px 15px", borderRadius: "var(--radius-pill)", border: "1px solid rgba(250,246,240,.25)", background: "rgba(255,255,255,.06)", color: "var(--on-slab)" }} />
                 <a href={askWa} target="_blank" rel="noopener noreferrer" className="ph-btn"
                   style={{ background: "var(--whatsapp)", color: "#fff", padding: "11px 20px", fontSize: 13, fontWeight: 600, borderRadius: "var(--radius-pill)", textDecoration: "none", display: "flex", alignItems: "center" }}>
                   send

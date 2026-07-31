@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Icon from "@/components/Icon";
 
 /* ── the one dialog ───────────────────────────────────────────────────
@@ -76,6 +77,7 @@ export default function Dialog({
   panelClassName = "",
   scrimClassName = "",
   scrimStyle,
+  container,
   children,
 }: {
   onClose: () => void;
@@ -96,6 +98,10 @@ export default function Dialog({
   panelClassName?: string;
   scrimClassName?: string;
   scrimStyle?: React.CSSProperties;
+  /** Portal the whole overlay here. Needed when the opener sits inside a
+      transformed element, which would otherwise be the scrim's containing
+      block — see the note above the return. */
+  container?: Element | null;
   children: React.ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -171,7 +177,7 @@ export default function Dialog({
     : variant === "full" ? "dlg-full"
     : "";
 
-  return (
+  const tree = (
     <div
       className={`dlg-scrim ${shapeClass} ${scrimClassName}`}
       style={scrimStyle}
@@ -220,6 +226,17 @@ export default function Dialog({
       )}
     </div>
   );
+
+  /* A dialog opened from inside a transformed element is trapped by it: a
+     `transform` — even the finished one an `animation: … both` leaves behind —
+     makes that element the containing block for `position: fixed`, so the
+     scrim covers the card it came from instead of the page. That is what
+     `container` is for. It is NOT document.body by default, and must not
+     become that: a storefront dialog portalled to the body would leave the
+     shop's token subtree behind and repaint itself in peeq's own colours.
+     Call sites pass the nearest [data-sf-root] instead — outside every card,
+     inside the shop's look. */
+  return container ? createPortal(tree, container) : tree;
 }
 
 /* ── confirm ──────────────────────────────────────────────────────────

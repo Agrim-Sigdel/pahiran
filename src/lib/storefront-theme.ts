@@ -28,6 +28,8 @@
 
 import {
   accentClass, toneClass, cornersClass, fontClass, layoutClass,
+  cardsClass, densityClass, buttonsClass, headerClass, typeScaleClass,
+  tilesClass, announceToneClass,
 } from "@/lib/constants";
 import type { StorefrontConfig } from "@/lib/types";
 
@@ -167,9 +169,19 @@ export function deriveAccent(input: string): AccentPair | null {
    Both clamps below are load-bearing. Lightness floors at the point where
    --stone (#6E675C, the price and caption colour) still clears 4.5:1, because
    a "tone" dark enough to break that isn't a tone — it's a dark theme, and the
-   page already has one of those. Saturation caps at 18% because this colour
-   sits behind photographs of clothes: past that the paper starts casting on
-   every garment on the page. */
+   page already has one of those. And the colour is capped, because this
+   surface sits behind photographs of clothes: past a point the paper starts
+   casting on every garment on the page.
+
+   That cap is on CHROMA, not on HSL saturation, and the difference is the
+   whole thing. Saturation is a ratio against the room a given lightness has:
+   at 93% lightness a perfectly ordinary cream reads as S=0.51, so capping S
+   at some flat "sensible" number greys out exactly the pale, tinted papers
+   this feature exists to offer — peeq's own Sand (#F6EFE3) came back as
+   #F0EDE9, a colour with the tint filed off. Chroma is the absolute spread
+   between the channels, which is what the eye actually reads as "how coloured
+   is this", and it means the same limit is fair to a pale cream and to a
+   fluorescent pink. */
 export interface TonePair {
   paperLight: string; deepLight: string; cardLight: string;
   paperDark: string; deepDark: string; cardDark: string; lineDark: string;
@@ -177,18 +189,35 @@ export interface TonePair {
 
 const STONE: Rgb = { r: 0x6e, g: 0x67, b: 0x5c };
 
+/** The widest channel spread a page background may have, 0–1. Peeq's own Sand
+    sits at .075 and Blush at .047, so the presets pass unchanged and a
+    fluorescent pick lands just past them. */
+const PAPER_CHROMA_MAX = 0.1;
+
 export function deriveTone(input: string): TonePair | null {
   const rgb = parseHex(input);
   if (!rgb) return null;
   const base = rgbToHsl(rgb);
   const h = base.h;
-  const s = Math.min(base.s, 0.18);
+
+  /* The colour at a given lightness, with its chroma capped. The cap has to be
+     applied *per lightness* rather than once up front, because the saturation
+     that produces a given chroma changes as the lightness moves — which is
+     exactly what the walk below does. */
+  const atL = (l: number): Rgb => {
+    const span = 1 - Math.abs(2 * clamp(l, 0, 1) - 1);
+    const sMax = span > 0.001 ? PAPER_CHROMA_MAX / span : 0;
+    return hslToRgb({ h, s: Math.min(base.s, sMax), l: clamp(l, 0, 1) });
+  };
 
   /* Light: lighten until secondary text still reads on it. */
-  const paperL = rgbToHsl(
-    walkLightness({ h, s, l: Math.max(base.l, 0.9) }, 1, (c) => contrast(c, STONE) >= 4.5)
-  ).l;
-  const light = (l: number) => hex(hslToRgb({ h, s, l: clamp(l, 0, 1) }));
+  let paperL = Math.max(base.l, 0.9);
+  for (let i = 0; i <= 100 && paperL < 1; i++) {
+    if (contrast(atL(paperL), STONE) >= 4.5) break;
+    paperL += 0.01;
+  }
+  paperL = Math.min(paperL, 1);
+  const light = (l: number) => hex(atL(l));
 
   /* Dark: the same hue at the rungs the dark theme already uses (--paper
      #1E1310 sits at 9% lightness, --card at 12.4%, --paper-deep at 5.9%), so a
@@ -223,12 +252,24 @@ export interface StorefrontLook {
 }
 
 export function storefrontLook(cfg: StorefrontConfig): StorefrontLook {
+  /* Layout first, on purpose. A layout sets some of the same tokens the finer
+     axes below do (lookbook's 2:3 frames, bazaar's tight padding), and the
+     cascade settles that by source order in globals.css rather than by the
+     order of this array — but keeping the array in the same order as the
+     stylesheet is what makes the stylesheet's ordering legible from here. */
   const classes = [
     layoutClass(cfg.layout),
     toneClass(cfg.tone),
     accentClass(cfg.accent),
     cornersClass(cfg.corners),
     fontClass(cfg.font),
+    cardsClass(cfg.cards),
+    densityClass(cfg.density),
+    buttonsClass(cfg.buttons),
+    headerClass(cfg.header),
+    typeScaleClass(cfg.typeScale),
+    tilesClass(cfg.tiles),
+    announceToneClass(cfg.announceTone),
   ];
   const vars: Record<string, string> = {};
 

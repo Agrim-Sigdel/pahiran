@@ -9,8 +9,7 @@ import { storefrontLook } from "@/lib/storefront-theme";
 import { storefrontFontVars } from "@/lib/storefront-fonts";
 import { useCart, useWishlist } from "@/lib/cart";
 import { useAccount, getContact } from "@/lib/account";
-import AccountMenu from "@/components/AccountMenu";
-import { ShopCard, CartDrawer, HeartButton } from "@/components/storefront";
+import { ShopCard, CartDrawer, HeartButton, AnnounceBar, StorefrontNav } from "@/components/storefront";
 import GarmentImage from "@/components/GarmentImage";
 import TryOnCta, { type TryOnState } from "@/components/TryOnCta";
 import Icon from "@/components/Icon";
@@ -101,51 +100,24 @@ export default function ProductClient({
   const look = storefrontLook(shop.storefront);
 
   return (
-    <div className={[look.className, storefrontFontVars].filter(Boolean).join(" ")}
+    /* data-sf-root — see the note in StorefrontClient: the related-pieces
+       cards down the page open the same size dialog. */
+    <div data-sf-root className={[look.className, storefrontFontVars].filter(Boolean).join(" ")}
       style={{ ...look.style, background: "var(--paper)", minHeight: "100dvh" }}>
-      {/* Same announce bar and same nav tools as the collection page. They had
-          diverged: a plain "account" link instead of the AccountMenu, no
-          wishlist, no Contact, no announce bar — so walking between the two
-          pages shifted the entire top of the site. And the words are the
-          shop's own: the bar quoted peeq's default even where the vendor had
-          written their own line for it on the collection page. */}
-      <div style={{ background: "var(--butter)", color: "var(--on-light)", textAlign: "center", fontSize: 13, fontWeight: 500, padding: "9px 12px" }}>
-        {shop.storefront.announceText ?? STOREFRONT_DEFAULTS.announceText}
-      </div>
+      {/* The same top as the collection page, and now literally the same two
+          components rather than a second copy of each. The copies had already
+          drifted once — a plain "account" link instead of the account menu, no
+          wishlist, no announce bar — so walking between the two pages shifted
+          the entire top of the site. The bar's colour is a vendor's choice
+          now too, which a hand-rolled copy here would have ignored. */}
+      <AnnounceBar text={shop.storefront.announceText ?? STOREFRONT_DEFAULTS.announceText} />
 
-      <nav className="efc-nav">
-        <div className="nav-links garment-rail">
-          <Link href={"/s/" + slug} style={{ color: "inherit" }}>← {shop.name || "the shop"}</Link>
-        </div>
-        <div className="nav-logo">
-          <Link href={"/s/" + slug} className="ph-display" style={{ fontSize: "clamp(17px, 4vw, 21px)", fontWeight: 600, color: "var(--ink)", textDecoration: "none" }}>
-            {shop.name || "The shop"}
-          </Link>
-          {shop.area && (
-            <div style={{ fontSize: 11, letterSpacing: ".08em", color: "var(--stone)", marginTop: 2 }}>{shop.area}</div>
-          )}
-        </div>
-        <div className="nav-tools">
-          <Link href={"/s/" + slug} className="ph-btn" aria-label={wish.count === 0 ? "Saved pieces — nothing saved yet" : `Saved pieces (${wish.count})`}
-            style={{ color: wish.count > 0 ? "var(--violet)" : "var(--stone)", fontWeight: 600, opacity: wish.count > 0 ? 1 : 0.55, textDecoration: "none" }}>
-            <Icon name={wish.count > 0 ? "heart-filled" : "heart"} /> saved{wish.count > 0 ? ` (${wish.count})` : ""}
-          </Link>
-          {contactWa && (
-            <a href={contactWa} target="_blank" rel="noopener noreferrer" style={{ color: "var(--whatsapp)" }}>Contact</a>
-          )}
-          <AccountMenu />
-          {/* "Bag, 1 items". The collection page next door pluralises. */}
-          <button className="ph-btn" onClick={() => setCartOpen(true)} aria-label={`Bag, ${cart.count} item${cart.count !== 1 ? "s" : ""}`}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--ink)", fontWeight: 600 }}>
-            <Icon name="bag" /> bag
-            {cart.count > 0 && (
-              <span style={{ background: "var(--violet)", color: "var(--on-accent)", fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, borderRadius: "var(--radius-pill)", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
-                {cart.count}
-              </span>
-            )}
-          </button>
-        </div>
-      </nav>
+      {/* the same nav the collection page wears — see StorefrontNav. "Saved"
+          is a link back to the shop here, since the saved view lives there. */}
+      <StorefrontNav shop={shop} slug={slug}
+        savedCount={wish.count} savedHref={"/s/" + slug}
+        cartCount={cart.count} onOpenCart={() => setCartOpen(true)}
+        contactWa={contactWa} />
 
       {/* breadcrumb */}
       <div id="main" style={{ maxWidth: 1040, margin: "0 auto", padding: "16px min(32px, 5vw) 0", fontSize: 12.5, color: "var(--stone)" }}>
@@ -195,7 +167,7 @@ export default function ProductClient({
                  has run out of try-ons — hid the CTA at the top of the page and
                  then offered "see it on you" on four cards underneath it. */
               <ShopCard key={g.id} g={g} slug={slug} shop={shop} tryOn={tryOn}
-                saved={wish.has(g.id)} onToggleSave={() => wish.toggle(g.id)} onAdd={() => cart.add(g, g.sizes[0] || "")} />
+                saved={wish.has(g.id)} onToggleSave={() => wish.toggle(g.id)} onAdd={(size) => cart.add(g, size)} />
             ))}
           </div>
         </section>
@@ -264,18 +236,13 @@ function BuyPanel({ garment, slug, shop, tryOn, onAdd }: {
               <div id={sizeLabelId} style={{ fontSize: 13, fontWeight: 600, color: "var(--stone)", marginBottom: 9 }}>
                 Size {err && <span role="alert" style={{ color: "var(--danger)" }}>· please pick one</span>}
               </div>
+              {/* .size-chip is shared with the card's size dialog — the same
+                  control asking the same question in two places */}
               <div role="radiogroup" aria-labelledby={sizeLabelId} aria-required
                 style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {garment.sizes.map((s) => (
-                  <button key={s} className="ph-btn" role="radio" aria-checked={size === s}
-                    onClick={() => { setSize(s); setErr(false); }}
-                    style={{
-                      minWidth: 44, minHeight: 44, padding: "9px 14px", fontSize: 13.5, fontWeight: 600,
-                      borderRadius: "var(--radius-md)",
-                      background: size === s ? "var(--violet)" : "var(--card)",
-                      color: size === s ? "var(--on-accent)" : "var(--ink)",
-                      border: "1.5px solid " + (size === s ? "var(--violet)" : "var(--line)"),
-                    }}>
+                  <button key={s} className="ph-btn size-chip" role="radio" aria-checked={size === s}
+                    onClick={() => { setSize(s); setErr(false); }}>
                     {s}
                   </button>
                 ))}

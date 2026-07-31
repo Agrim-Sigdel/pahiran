@@ -194,18 +194,21 @@ export const CHECKOUT = {
    (a null override means "say the default") and the editor (the default is
    the placeholder, so a vendor sees what silence will say). */
 export const STOREFRONT_DEFAULTS = {
-  announceText: "try it on before you buy · one photo, account optional · order in a tap",
+  /* Short on purpose, all of it. These are the words a vendor who never opens
+     the editor ships, and they sit at the top of somebody else's shop — the
+     strip above the shop's own name is not the place for peeq's pitch. Every
+     line here is one clause; the vendor's own text replaces any of them. */
+  announceText: "made using peeq",
   heroKicker: "a little look before you buy",
   heroHeadline: "look first,\nthen buy",
   /* Two bodies because the default pitch depends on what the shop offers —
-     a general shop must not promise try-on. A vendor's own text replaces
-     either. */
-  heroBodyTryOn: "Browse the collection, add your pieces to the bag, and order in one message — or take a photo and see anything on you first.",
-  heroBody: "Browse the collection, add what you want to the bag, and order in one message.",
+     a general shop must not promise try-on. */
+  heroBodyTryOn: "Browse the collection, or take a photo and see a piece on you first.",
+  heroBody: "Browse the collection and order in one message.",
   featuredHeading: "featured pieces",
   promoKicker: "the trial room, reinvented",
   promoHeading: "not sure? see it on you first",
-  promoBody: "No queue, no changing room. Take one photo, see the piece on you, then add it to your bag with a tap.",
+  promoBody: "One photo, and the piece is on you. No queue, no changing room.",
 } as const;
 
 /* The sections a shop can reorder, in their default order. `collection` is
@@ -281,6 +284,34 @@ export const STOREFRONT_LAYOUTS = [
     best: "a big rack — fifty pieces and shoppers who come to dig",
     drops: "Your hero pictures aren't shown in this layout.",
   },
+  {
+    id: "editorial",
+    label: "Editorial",
+    blurb: "Oversized type on a tinted band, a wide photo under it, then a mosaic of featured pieces.",
+    best: "a shop with a point of view — where the words sell as hard as the photos",
+    drops: null,
+  },
+  {
+    id: "catalogue",
+    label: "Catalogue",
+    blurb: "Every piece a row: photo, name, price and add-to-bag on one line.",
+    best: "a big rack shopped on price — rows compare where tiles don't",
+    drops: "Your hero pictures aren't shown in this layout.",
+  },
+  {
+    id: "poster",
+    label: "Poster",
+    blurb: "A split screen: your headline on a block of your accent colour, your photo beside it.",
+    best: "a shop with one strong photo rather than a dozen",
+    drops: "Only your first hero picture is shown in this layout.",
+  },
+  {
+    id: "story",
+    label: "Story",
+    blurb: "One piece per screen, edge to edge, its name over the photo.",
+    best: "a small curated rack — a dozen pieces you want looked at one at a time",
+    drops: "Featured pieces aren't shown in this layout — every piece gets a full screen anyway.",
+  },
 ] as const;
 
 export type StorefrontLayoutId = (typeof STOREFRONT_LAYOUTS)[number]["id"];
@@ -291,8 +322,12 @@ export const layoutClass = (id: string | null | undefined): string =>
   id && id !== "boutique" && STOREFRONT_LAYOUTS.some((l) => l.id === id) ? "sf-layout-" + id : "";
 
 /** Does this layout render the hero image slots at all? The editor asks so it
-    can warn beside the hero pictures, not only in the layout picker. */
-export const layoutShowsHeroImages = (id: string | null | undefined): boolean => id !== "bazaar";
+    can warn beside the hero pictures, not only in the layout picker. Poster
+    counts as showing them — it shows one — so the warning beside a vendor's
+    slots stays "this layout ignores these" rather than crying wolf about a
+    picture that is on the page. */
+export const layoutShowsHeroImages = (id: string | null | undefined): boolean =>
+  id !== "bazaar" && id !== "catalogue";
 
 /* ── tones ──
    Accents recolour the buttons; a tone recolours the *stage* — the paper the
@@ -341,3 +376,107 @@ export const STOREFRONT_FONTS = [
 
 export const fontClass = (id: string | null | undefined): string =>
   id && id !== "peeq" && STOREFRONT_FONTS.some((f) => f.id === id) ? "sf-font-" + id : "";
+
+/* ── the finer axes ──
+   Seven more knobs, all of the same shape: a preset list here, one
+   token-repointing class per id in globals.css, one control in the editor.
+
+   They differ from the five above in one way, and it is the reason they get
+   their own helper. A LAYOUT already has opinions on some of them — lookbook
+   wants 2:3 frames, story wants the caption on the photo, bazaar wants tight
+   padding — so the layout classes set these tokens too. If `lookClass` swallowed
+   the nominal default the way toneClass swallows "warm", a vendor on lookbook
+   could never say "actually, 3:4": picking the default id would emit nothing
+   and the layout's 2:3 would stand. So every chosen id emits a class, and the
+   `.sf-*` blocks are ordered after the `.sf-layout-*` blocks in globals.css.
+
+   null is still "no class at all", and that is the meaningful default: it
+   means "whatever the layout wanted", which for a shop on boutique is peeq's
+   own values. */
+const lookClass = (prefix: string, ids: readonly { id: string }[]) =>
+  (id: string | null | undefined): string =>
+    id && ids.some((p) => p.id === id) ? prefix + id : "";
+
+/* How a piece is drawn in a grid. The frame is the loudest thing on a
+   collection page after the photographs themselves — a bordered card reads as
+   a catalogue, the same photo with no chrome reads as a lookbook. */
+export const STOREFRONT_CARDS = [
+  { id: "framed", label: "Framed", note: "peeq's own — a bordered card" },
+  { id: "borderless", label: "Borderless", note: "photo and words straight on the paper" },
+  { id: "overlay", label: "Overlay", note: "name and price on the photo" },
+] as const;
+
+export const cardsClass = lookClass("sf-cards-", STOREFRONT_CARDS);
+
+/* How much air the page has. One switch moves section padding, the grid gap
+   and the tile size together, because moving one without the others just makes
+   a page that doesn't add up: a ten-piece shop and a sixty-piece shop want
+   opposite answers to all three at once. */
+export const STOREFRONT_DENSITIES = [
+  { id: "compact", label: "Compact", note: "more pieces per screen" },
+  { id: "cozy", label: "Cozy", note: "peeq's own" },
+  { id: "roomy", label: "Roomy", note: "fewer, larger, more air" },
+] as const;
+
+export const densityClass = lookClass("sf-density-", STOREFRONT_DENSITIES);
+
+/* Button treatment. Re-points the shared button classes rather than restyling
+   each call site, so it reaches the hero CTA, the promo band and every
+   add-to-bag on the rack at once — the same stance the corners axis takes. */
+export const STOREFRONT_BUTTONS = [
+  { id: "solid", label: "Solid", note: "peeq's own — filled in your accent" },
+  { id: "outline", label: "Outline", note: "hollow, accent border and text" },
+  { id: "block", label: "Block", note: "wide, square, fills its row" },
+] as const;
+
+export const buttonsClass = lookClass("sf-buttons-", STOREFRONT_BUTTONS);
+
+/* The nav — where the shop's name sits against its row of tools.
+
+   Two arrangements, not three. `minimal` used to mean "without the category
+   strip", and the strip has since left the bar on every storefront: it was
+   four of a shop's categories duplicating the chips above the collection,
+   which carry the full list AND the active state, and it was the widest thing
+   in the bar. An option that describes every shop is not an option. A config
+   still holding "minimal" normalises to null — see cfgPreset — and gets the
+   centred default. */
+export const STOREFRONT_HEADERS = [
+  { id: "centred", label: "Centred", note: "peeq's own — shop name in the middle" },
+  { id: "left", label: "Left", note: "shop name against the left edge" },
+] as const;
+
+export const headerClass = lookClass("sf-header-", STOREFRONT_HEADERS);
+
+/* Heading size, as one multiplier on every display size on the page. The
+   section headings all read their size through --sf-h for this, so the scale
+   moves the hero and the collection heading in step rather than leaving a
+   giant hero over normal-sized section titles. */
+export const STOREFRONT_TYPE_SCALES = [
+  { id: "small", label: "Small", note: "quieter headings" },
+  { id: "medium", label: "Medium", note: "peeq's own" },
+  { id: "large", label: "Large", note: "headings lead the page" },
+] as const;
+
+export const typeScaleClass = lookClass("sf-type-", STOREFRONT_TYPE_SCALES);
+
+/* The shape of every product photo's frame. Pieces are *fitted* into it, never
+   cropped (see .shop-tile), so this changes how much paper surrounds a garment
+   rather than how much of the garment survives. */
+export const STOREFRONT_TILES = [
+  { id: "portrait", label: "Portrait", note: "peeq's own — 3:4" },
+  { id: "square", label: "Square", note: "1:1, for flat-lays" },
+  { id: "tall", label: "Tall", note: "2:3, for full-length shots" },
+] as const;
+
+export const tilesClass = lookClass("sf-tiles-", STOREFRONT_TILES);
+
+/* The announcement strip's colour. Butter is peeq's own and the safe one; the
+   other two are the page's own tokens, so a vendor can't pick a pair that
+   doesn't carry its own text. */
+export const STOREFRONT_ANNOUNCE_TONES = [
+  { id: "butter", label: "Butter", note: "peeq's own — warm yellow" },
+  { id: "accent", label: "Accent", note: "your accent colour" },
+  { id: "ink", label: "Ink", note: "near-black, quiet" },
+] as const;
+
+export const announceToneClass = lookClass("sf-announce-", STOREFRONT_ANNOUNCE_TONES);
