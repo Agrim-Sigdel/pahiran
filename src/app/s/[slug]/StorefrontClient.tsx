@@ -4,7 +4,9 @@ import { Fragment, useState, useEffect, useId, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getShopBySlug, loadCatalog } from "@/lib/storage";
-import { waLink, accentClass, STOREFRONT_DEFAULTS } from "@/lib/constants";
+import { waLink, STOREFRONT_DEFAULTS } from "@/lib/constants";
+import { storefrontLook } from "@/lib/storefront-theme";
+import { storefrontFontVars } from "@/lib/storefront-fonts";
 import { osmViewUrl } from "@/lib/osm";
 import { useCart, useWishlist } from "@/lib/cart";
 import { useAccount, getContact } from "@/lib/account";
@@ -12,7 +14,7 @@ import AccountMenu from "@/components/AccountMenu";
 import {
   ShopCard, CartDrawer,
   AnnounceBar, HeroSection, FeaturedSection, PromoSection,
-  resolveStorefrontSlots, defaultHeroBody,
+  resolveStorefrontSlots, defaultHeroBody, type SectionLayout,
 } from "@/components/storefront";
 import TryOnCta, { offersTryOn, type TryOnState } from "@/components/TryOnCta";
 import Icon from "@/components/Icon";
@@ -103,6 +105,12 @@ export default function StorefrontClient({
      renders exactly the page this file always rendered. */
   const cfg = shop.storefront;
   const slots = resolveStorefrontSlots(cfg, catalog, slug);
+  /* The shop's look: the preset classes it wears, plus the derived light/dark
+     pairs for any colour it picked off the wheel. Both are computed from the
+     config alone, so this is settled in the server-rendered HTML rather than
+     painted on after hydration. */
+  const look = storefrontLook(cfg);
+  const layout = (cfg.layout ?? "boutique") as SectionLayout;
 
   // collection pipeline: category / saved → search → sort
   let shown = savedOnly ? catalog.filter((g) => wish.has(g.id)) : (filter === "All" ? catalog : catalog.filter((g) => g.category === filter));
@@ -157,11 +165,11 @@ export default function StorefrontClient({
             kicker={cfg.hero.kicker ?? STOREFRONT_DEFAULTS.heroKicker}
             headline={cfg.hero.headline ?? STOREFRONT_DEFAULTS.heroHeadline}
             body={cfg.hero.body ?? defaultHeroBody(shop)}
-            slides={slots.heroSlides} tryOn={tryOn} tryonHref={tryonHref} />
+            slides={slots.heroSlides} tryOn={tryOn} tryonHref={tryonHref} layout={layout} />
         );
       case "featured":
         return slots.featured.length > 0 ? (
-          <FeaturedSection heading={cfg.featured.heading ?? STOREFRONT_DEFAULTS.featuredHeading}>
+          <FeaturedSection heading={cfg.featured.heading ?? STOREFRONT_DEFAULTS.featuredHeading} layout={layout}>
             {slots.featured.map(card)}
           </FeaturedSection>
         ) : null;
@@ -173,7 +181,7 @@ export default function StorefrontClient({
             kicker={cfg.promo.kicker ?? STOREFRONT_DEFAULTS.promoKicker}
             heading={cfg.promo.heading ?? STOREFRONT_DEFAULTS.promoHeading}
             body={cfg.promo.body ?? STOREFRONT_DEFAULTS.promoBody}
-            promo={slots.promo} tryOn={tryOn} tryonHref={tryonHref} />
+            promo={slots.promo} tryOn={tryOn} tryonHref={tryonHref} layout={layout} />
         ) : null;
       case "collection":
         return (
@@ -243,7 +251,14 @@ export default function StorefrontClient({
   };
 
   return (
-    <div className={accentClass(cfg.accent)} style={{ background: "var(--paper)", minHeight: "100dvh" }}>
+    /* The look classes and the picked-colour variables sit on the same element
+       the page's background comes from, so every token they re-point — the
+       accent, the paper ramp, the radii, the heading face — is already in
+       scope for everything below, nav and footer included. The font variables
+       ride along because .sf-font-* names them; on a shop that never chose a
+       face they are simply unused. */
+    <div className={[look.className, storefrontFontVars].filter(Boolean).join(" ")}
+      style={{ ...look.style, background: "var(--paper)", minHeight: "100dvh" }}>
       {/* The announce bar belongs above the nav when it leads the order —
           which is the default, and the strip this page always opened with.
           Moved down the order, it renders in place like any other section. */}

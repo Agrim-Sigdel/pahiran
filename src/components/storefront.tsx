@@ -718,7 +718,13 @@ export function AnnounceBar({ text }: { text: string }) {
   );
 }
 
-export function HeroSection({ shop, kicker, headline, body, slides, tryOn, tryonHref }: {
+/* Which shell the sections wear. One value for the whole page — the layout the
+   vendor picked — passed down rather than read from context, so the editor can
+   render a draft layout beside the saved one without a provider in between.
+   Unknown/absent means boutique, which is the page peeq has always rendered. */
+export type SectionLayout = "boutique" | "lookbook" | "bazaar";
+
+export function HeroSection({ shop, kicker, headline, body, slides, tryOn, tryonHref, layout = "boutique" }: {
   shop: Shop;
   kicker: string;
   headline: string; // "\n" is a line break — rendered pre-line
@@ -726,7 +732,72 @@ export function HeroSection({ shop, kicker, headline, body, slides, tryOn, tryon
   slides: HeroSlide[];
   tryOn: TryOnState;
   tryonHref: string;
+  layout?: SectionLayout;
 }) {
+  /* ── lookbook: the photo IS the top of the page ──
+     The copy sits on the photo, so none of it can take a theme token: --ink is
+     near-white in the dark theme and --violet is a near-black green on paper,
+     and both would vanish against a photograph. Everything here is fixed light
+     over the scrim in .hero-bleed, the same stance .hero-bar takes. */
+  if (layout === "lookbook") {
+    return (
+      <section className="hero-bleed">
+        {slides.length > 0 ? (
+          <HeroCarousel slides={slides} className="hero-bleed-visual" caption={false} />
+        ) : (
+          <div className="hero-bleed-visual">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/hero/hero-a.jpg" alt="Someone seeing a piece on themselves with peeq"
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          </div>
+        )}
+        <div className="hero-bleed-copy">
+          <div className="kicker" style={{ color: "var(--butter)" }}>{kicker}</div>
+          <h1 className="ph-display" style={{ fontSize: "clamp(32px, 5.4vw, 56px)", lineHeight: 1.08, color: "#fff", margin: 0, whiteSpace: "pre-line", textShadow: "0 2px 18px rgba(16,11,8,.45)" }}>
+            {headline}
+          </h1>
+          <p style={{ color: "rgba(255,255,255,.88)", fontSize: 15.5, lineHeight: 1.65, margin: 0, maxWidth: 460 }}>
+            {body}
+          </p>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <a href="#collection" className="btn-solid" style={{ background: "#fff", color: "#1A1714" }}>shop the collection</a>
+            <TryOnCta shop={shop} state={tryOn} href={tryonHref} className="btn-outline"
+              style={{ borderColor: "rgba(255,255,255,.8)", color: "#fff" }} />
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  /* ── bazaar: the hero condenses to a line ──
+     It doesn't disappear — the vendor's kicker, headline and paragraph all
+     still say what they say. They just stop taking a screen to say it, because
+     this layout's promise is that the rack starts above the fold. The hero
+     pictures have nowhere to go here, which the editor warns about rather than
+     silently dropping. */
+  if (layout === "bazaar") {
+    return (
+      <section className="hero-condensed">
+        <div className="kicker">{kicker}</div>
+        <div className="hero-condensed-row">
+          <h1 className="ph-display" style={{ fontSize: "clamp(21px, 3.4vw, 30px)", lineHeight: 1.15, color: "var(--ink)", margin: 0 }}>
+            {/* one line, whatever the vendor's line breaks say — this heading
+                shares a row with the paragraph */}
+            {headline.replace(/\s*\n\s*/g, " ")}
+          </h1>
+          <p style={{ color: "var(--stone)", fontSize: 14, lineHeight: 1.55, margin: 0, flex: "1 1 260px", minWidth: 0 }}>
+            {body}
+          </p>
+        </div>
+        {offersTryOn(shop) && (
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
+            <TryOnCta shop={shop} state={tryOn} href={tryonHref} className="linklike" />
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
     <div className="hero-grid">
       <div className="hero-copy">
@@ -763,21 +834,29 @@ export function HeroSection({ shop, kicker, headline, body, slides, tryOn, tryon
   );
 }
 
-export function FeaturedSection({ heading, children }: { heading: string; children: React.ReactNode }) {
+export function FeaturedSection({ heading, children, layout = "boutique" }: {
+  heading: string;
+  children: React.ReactNode;
+  layout?: SectionLayout;
+}) {
+  /* A rail in the lookbook, a grid everywhere else. Same cards, same picks —
+     on a phone a rail showing two and a half cards asks to be swiped, where a
+     2×2 grid of the same four just asks to be scrolled past. */
+  const rail = layout === "lookbook";
   return (
     <section className="section-pad">
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 22, flexWrap: "wrap", gap: 10 }}>
         <h2 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(20px, 3vw, 26px)", color: "var(--ink)", margin: 0 }}>{heading}</h2>
         <a className="linklike" href="#collection">view all →</a>
       </div>
-      <div className="shop-grid">
+      <div className={rail ? "shop-rail" : "shop-grid"}>
         {children}
       </div>
     </section>
   );
 }
 
-export function PromoSection({ shop, kicker, heading, body, promo, tryOn, tryonHref }: {
+export function PromoSection({ shop, kicker, heading, body, promo, tryOn, tryonHref, layout = "boutique" }: {
   shop: Shop;
   kicker: string;
   heading: string;
@@ -785,7 +864,55 @@ export function PromoSection({ shop, kicker, heading, body, promo, tryOn, tryonH
   promo: ResolvedSlots["promo"];
   tryOn: TryOnState;
   tryonHref: string;
+  layout?: SectionLayout;
 }) {
+  /* ── lookbook: one loud band in the shop's own accent ──
+     Everything inside takes --on-accent rather than --ink, because the accent
+     is the ground here: it's a deep fill on paper and a bright one in the dark
+     theme, and --ink flips with the theme instead of with the band. */
+  if (layout === "lookbook") {
+    return (
+      <section className="promo-band">
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 520 }}>
+          <div className="kicker">{kicker}</div>
+          <h3 className="ph-display" style={{ fontWeight: 600, fontSize: "clamp(24px, 3.6vw, 34px)", lineHeight: 1.18, margin: 0 }}>
+            {heading}
+          </h3>
+          <p style={{ fontSize: 15, lineHeight: 1.7, margin: 0, opacity: 0.82 }}>{body}</p>
+          <div><TryOnCta shop={shop} state={tryOn} href={tryonHref} className="btn-on-accent" /></div>
+        </div>
+        {promo && (
+          <Link href={promo.href} className="promo-band-media">
+            <GarmentImage src={promo.image} alt={promo.alt} sizes="(max-width: 820px) 100vw, 46vw" />
+          </Link>
+        )}
+      </section>
+    );
+  }
+
+  /* ── bazaar: a slim banner inside the grid flow ──
+     A shopper who came to dig scrolls past a full-width pitch without reading
+     it. One row, in the middle of the thing they ARE reading, gets seen. */
+  if (layout === "bazaar") {
+    return (
+      <section style={{ padding: "6px 0 14px" }}>
+        <div className="promo-banner">
+          {promo && (
+            <Link href={promo.href} className="promo-banner-media" aria-hidden tabIndex={-1}>
+              <GarmentImage src={promo.image} alt="" sizes="62px" />
+            </Link>
+          )}
+          <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+            <div className="ph-display" style={{ fontSize: 16, fontWeight: 600, color: "var(--ink)", lineHeight: 1.25 }}>{heading}</div>
+            <div style={{ fontSize: 12.5, color: "var(--stone)", marginTop: 2 }}>{kicker}</div>
+          </div>
+          <TryOnCta shop={shop} state={tryOn} href={tryonHref} className="ph-btn"
+            style={{ background: "var(--violet)", color: "var(--on-accent)", fontWeight: 700, fontFamily: "var(--font-display), sans-serif", fontSize: 13.5, padding: "9px 20px", borderRadius: "var(--radius-pill)", flexShrink: 0, textDecoration: "none" }} />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="section-pad" style={{ background: "var(--paper-deep)" }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", background: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>

@@ -4,7 +4,9 @@ import { useState, useEffect, useId, useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { getShopBySlug, loadCatalog } from "@/lib/storage";
-import { npr, waLink } from "@/lib/constants";
+import { npr, waLink, STOREFRONT_DEFAULTS } from "@/lib/constants";
+import { storefrontLook } from "@/lib/storefront-theme";
+import { storefrontFontVars } from "@/lib/storefront-fonts";
 import { useCart, useWishlist } from "@/lib/cart";
 import { useAccount, getContact } from "@/lib/account";
 import AccountMenu from "@/components/AccountMenu";
@@ -92,14 +94,23 @@ export default function ProductClient({
     .sort((a, b) => Number(b.category === garment.category) - Number(a.category === garment.category))
     .slice(0, 4);
 
+  /* The same look the collection page wears. It used to stop at /s/{slug}: a
+     shop with a wine accent and sand paper went back to peeq green on peeq
+     paper the moment a shopper tapped a piece, which read as leaving the shop.
+     One call, so the two pages cannot drift again. */
+  const look = storefrontLook(shop.storefront);
+
   return (
-    <div style={{ background: "var(--paper)", minHeight: "100dvh" }}>
+    <div className={[look.className, storefrontFontVars].filter(Boolean).join(" ")}
+      style={{ ...look.style, background: "var(--paper)", minHeight: "100dvh" }}>
       {/* Same announce bar and same nav tools as the collection page. They had
           diverged: a plain "account" link instead of the AccountMenu, no
           wishlist, no Contact, no announce bar — so walking between the two
-          pages shifted the entire top of the site. */}
+          pages shifted the entire top of the site. And the words are the
+          shop's own: the bar quoted peeq's default even where the vendor had
+          written their own line for it on the collection page. */}
       <div style={{ background: "var(--butter)", color: "var(--on-light)", textAlign: "center", fontSize: 13, fontWeight: 500, padding: "9px 12px" }}>
-        try it on before you buy · one photo, account optional · order in a tap
+        {shop.storefront.announceText ?? STOREFRONT_DEFAULTS.announceText}
       </div>
 
       <nav className="efc-nav">

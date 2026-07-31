@@ -327,6 +327,179 @@
   :root:not([data-theme="light"]) .sf-accent-ink    { --violet: #C9C9D2; --on-accent: #1B1B22; }
 }
 
+/* ── per-shop tones ──
+   The accent recolours the buttons; a tone recolours the *stage* — the paper
+   the shop's photos sit on. Same shape as the accents above: token overrides
+   inside each theme's own selector, so a shop that picks a tone is still
+   getting a hand-checked light palette and a hand-checked dark one rather than
+   one palette machine-inverted into a room it was never drawn for.
+
+   Only the surface ramp moves. --ink and --stone stay put, which is the whole
+   constraint on these values: every light paper below keeps --stone (#6E675C,
+   the price and caption colour) above 4.5:1, and every dark paper keeps --ink
+   above 12:1. A tone that failed that wouldn't be a tone, it would be a
+   different theme. */
+.sf-tone-porcelain { --paper: #F8F7F5; --paper-deep: #EFEDE9; --card: #FFFFFF; --raised: #FFFFFF; }
+.sf-tone-sand      { --paper: #F6EFE3; --paper-deep: #ECE2D0; --card: #FEFCF8; --raised: #FEFCF8; }
+.sf-tone-blush     { --paper: #FAF1EE; --paper-deep: #F3E4DF; --card: #FFFCFB; --raised: #FFFCFB; }
+
+/* ── free colours ──
+   The two axes a vendor can take off the preset list entirely. An inline style
+   cannot answer a media query, so the picked colour arrives as a PAIR of
+   custom properties — one end drawn for paper, one for the dark room, both
+   derived with the contrast walk in storefront-theme.ts — and these two rules
+   decide which end the real token takes. Declared after the preset classes on
+   purpose: same specificity, so source order is what makes a picked colour win
+   over the preset id still stored beside it. */
+.sf-custom-tone {
+  --paper: var(--sf-paper-l); --paper-deep: var(--sf-deep-l);
+  --card: var(--sf-card-l); --raised: var(--sf-card-l);
+}
+.sf-custom-accent { --violet: var(--sf-accent-l); --on-accent: var(--sf-on-accent-l); }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sf-tone-porcelain { --paper: #171614; --paper-deep: #100F0D; --card: #232120; --raised: #1F1D1C; --line-strong: #3B3835; }
+  :root:not([data-theme="light"]) .sf-tone-sand      { --paper: #201709; --paper-deep: #171006; --card: #2E2312; --raised: #291F10; --line-strong: #4A3A1E; }
+  :root:not([data-theme="light"]) .sf-tone-blush     { --paper: #20130F; --paper-deep: #170C09; --card: #2E1D18; --raised: #291916; --line-strong: #4A2A24; }
+
+  :root:not([data-theme="light"]) .sf-custom-tone {
+    --paper: var(--sf-paper-d); --paper-deep: var(--sf-deep-d);
+    --card: var(--sf-card-d); --raised: var(--sf-card-d);
+    --line-strong: var(--sf-line-d);
+  }
+  :root:not([data-theme="light"]) .sf-custom-accent { --violet: var(--sf-accent-d); --on-accent: var(--sf-on-accent-d); }
+}
+
+/* ── corners ──
+   How round the whole page is, in one class. It re-points the radius tokens
+   rather than restyling components, so it reaches the inline
+   `borderRadius: var(--radius-pill)` on a quick-add button as surely as it
+   reaches .panel — which is the only way "square" can mean square instead of
+   meaning "square in the six places someone remembered". --radius-pill moves
+   too for that reason: left at 999px it would leave every button on a
+   supposedly sharp page a lozenge. */
+.sf-corners-round {
+  --radius-xs: 6px; --radius-sm: 10px; --radius-md: 16px; --radius-lg: 20px;
+  --radius-xl: 24px; --radius-card: 28px; --radius-btn: 999px; --radius-modal: 26px;
+}
+.sf-corners-square {
+  --radius-xs: 0px; --radius-sm: 0px; --radius-md: 2px; --radius-lg: 2px;
+  --radius-xl: 2px; --radius-card: 2px; --radius-btn: 2px; --radius-modal: 3px;
+  --radius-pill: 3px;
+}
+
+/* ── heading faces ──
+   Re-points --font-display, so the choice reaches every heading, button, price
+   and chip through the token they already name. The families themselves are
+   loaded by src/lib/storefront-fonts.ts and are only in scope on the pages
+   that carry storefrontFontVars — everywhere else these classes never appear.
+   Body text is deliberately not switchable: it stays Mukta, which carries the
+   Devanagari a shop name or a piece written in Nepali needs. */
+.sf-font-serif  { --font-display: var(--font-sf-serif); }
+.sf-font-modern { --font-display: var(--font-sf-modern); }
+
+/* ── layout: lookbook ──
+   Photography leads. The hero photo is the page's first surface rather than a
+   framed picture beside a paragraph, featured pieces swipe instead of tiling,
+   and the try-on pitch is one loud band. */
+
+/* The nav rides over a full-bleed photo, so it can't sit on nothing: it stays
+   solid-but-translucent and blurs what passes under it. (Fully transparent was
+   the sketch; it loses to the nav's own per-control colours — the shop name,
+   the bag count and the account menu each carry an --ink or --violet that a
+   photograph underneath cannot be trusted to sit behind.) The plain --paper
+   line first is the fallback where color-mix isn't understood. */
+.sf-layout-lookbook .efc-nav {
+  position: sticky; top: 0; z-index: 30;
+  background: var(--paper);
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.hero-bleed {
+  position: relative; display: flex; align-items: flex-end;
+  min-height: clamp(400px, 74svh, 640px);
+  overflow: hidden; background: var(--paper-deep);
+}
+.hero-bleed-visual { position: absolute; inset: 0; }
+/* One scrim, dark in both themes, because it sits on a photograph rather than
+   on the page — the same reasoning as .hero-bar and .hero-arrow. Inert to
+   pointer events or it would eat the taps meant for the slide beneath it. */
+.hero-bleed::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background: linear-gradient(to top, rgba(16,11,8,.84) 0%, rgba(16,11,8,.30) 46%, rgba(16,11,8,.34) 100%);
+}
+.hero-bleed-copy {
+  position: relative; z-index: 2;
+  display: flex; flex-direction: column; gap: 16px;
+  /* clears the carousel's dots, which stay at the bottom edge */
+  padding: 0 min(40px, 6vw) 52px;
+  max-width: 620px;
+}
+.hero-bleed-visual:hover .hero-arrow { opacity: 1; }
+
+/* Featured, as a rail you swipe. Bleeds off the right edge on purpose: a rail
+   that ends inside the page margin looks like a grid that came up short, and
+   the half-card past the edge is the thing that says "keep going". */
+.shop-rail {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(158px, 44%);
+  gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory;
+  padding-bottom: 8px;
+  margin-right: calc(-1 * min(32px, 5vw)); padding-right: min(32px, 5vw);
+}
+.shop-rail > * { scroll-snap-align: start; }
+.shop-rail::-webkit-scrollbar { height: 0; }
+@media (min-width: 760px) { .shop-rail { grid-auto-columns: minmax(190px, 232px); } }
+
+/* The try-on pitch as one full-width band in the shop's own accent. Everything
+   inside takes --on-accent, never --ink: the fill is dark on paper and bright
+   in the dark theme, and --ink flips with the theme rather than with the band. */
+.promo-band {
+  background: var(--violet); color: var(--on-accent);
+  padding: clamp(34px, 6vw, 64px) min(32px, 5vw);
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; align-items: center;
+}
+@media (min-width: 820px) { .promo-band { grid-template-columns: 1.05fr .95fr; } }
+.promo-band .kicker { color: var(--on-accent); opacity: .74; }
+.promo-band-media {
+  position: relative; overflow: hidden; aspect-ratio: 4 / 3;
+  border-radius: var(--radius-card); background: rgba(0,0,0,.18);
+}
+/* the band's own button: the page's accent is the ground here, so the button
+   inverts rather than disappearing into it */
+.btn-on-accent {
+  font-family: var(--font-display), sans-serif; background: var(--on-accent); color: var(--violet);
+  padding: 13px 30px; font-size: 16px; font-weight: 700; border-radius: var(--radius-btn);
+  text-decoration: none; display: inline-block; text-align: center; border: none; cursor: pointer;
+}
+
+/* Taller frames: this vendor's photographs are the reason they chose it. */
+.sf-layout-lookbook .shop-tile { aspect-ratio: 2 / 3; }
+.sf-layout-lookbook .shop-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 240px)); }
+
+/* ── layout: bazaar ──
+   The rack is the page. The hero condenses to a line so search, filters and
+   stock are all in the first screen, and the try-on pitch rides inside the
+   grid flow where a digging shopper actually passes it. */
+.hero-condensed {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 20px min(32px, 5vw) 2px;
+}
+.hero-condensed-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.sf-layout-bazaar .section-pad { padding: 22px min(32px, 5vw); }
+.sf-layout-bazaar .shop-grid { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 12px; }
+
+.promo-banner {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin: 0 min(32px, 5vw); padding: 13px 16px;
+  border: 1px dashed var(--violet); border-radius: var(--radius-card);
+  background: var(--paper-deep);
+}
+.promo-banner-media {
+  position: relative; overflow: hidden; flex-shrink: 0;
+  width: 62px; height: 62px; border-radius: var(--radius-md); background: var(--card);
+}
+
 /* ── storefront editor ── the form beside a live preview of the page it
    describes. One column on a phone, where an edit/preview toggle swaps the
    panes; side by side from 980px, where the preview rides along stickily and

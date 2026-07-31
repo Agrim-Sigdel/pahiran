@@ -316,3 +316,115 @@ model limit, not a wording problem.
   duplicating, the revision trigger fires on wording and coverage but not on
   rename, and staleness clears on re-stitch.
 - **Not verified: render quality** — that's item 3 above.
+
+---
+
+# Session — dashboard pages, minimal copy, orders/fits/overview, mobile density
+
+Five passes over the vendor dashboard, all UI/UX, no schema changes. (The
+storefront-editor work — `StorefrontConfig`, its migration and the `/s/[slug]`
+refactor — happened in parallel in the same tree and is **not** covered here.)
+
+## 1. Every modal is now a page
+
+Every dashboard modal became a page in the shape Plan & billing already had: a
+back button plus a breadcrumb trail, rendered in place of the tab content under
+the same header and tab bar.
+
+| Former modal | Trail |
+|---|---|
+| Add/edit garment | catalog / add a garment · edit garment |
+| Add/edit fabric | fabrics / add a fabric · edit fabric |
+| Fabric studio (Cuts) | fabrics / *bolt name* cuts |
+| Cut form (incl. from inside the studio) | … cuts / add your own cut · change this cut · make it your own |
+| Photo fix from the studio | … cuts / fix the photo |
+| Try-on QR / hanger tags | catalog / try-on qr · print qr tags |
+| At the counter | at the counter |
+| Order detail (new, see §3) | orders / *shopper name* |
+
+Machinery in `Dashboard.tsx`:
+
+- **`PageHeader`** — back + `nav aria-label="Breadcrumb"`; every segment
+  before the last navigates up. No "dashboard" root crumb (back and the
+  wordmark already cover it).
+- **Derived `page` view** — deepest state wins (photo-fix over studio over
+  forms …); the modals' existing state flags were kept, only the rendering
+  changed, so stacked flows (studio → cut form → back, studio → photo fix →
+  back) still round-trip.
+- **Leave guard** — dirty forms (garment, fabric, cut) register a check that
+  back, any crumb, any tab, the wordmark, and the counter/kiosk buttons all
+  run through before discarding typed work — the job the Dialog's `dirty`
+  prop used to do on backdrop-click. The cut form *gained* this (as a dialog
+  it discarded silently).
+- **Scroll save/restore** — opening a page records the list scroll; closing
+  restores it; pages open at the top.
+- `FabricStudio` lost its `Dialog` wrapper and its internal cut modal (lifted
+  to the dashboard via a new `onEditCut` prop; `onCreateStyle`/`onUpdateStyle`
+  moved with it). `CutModal` was renamed **`CutPage`**.
+- Deliberately still overlays: ImageCropper, ProShot, ImageZoom, stitching
+  overlay, all confirm dialogs, and every shopper-facing kiosk/storefront
+  sheet and drawer.
+
+## 2. Pages use the page's width
+
+- New **`.page-split`** grid (globals.css): photo column (≤420px) beside a
+  fields column (≤560px), stacking under 820px. Garment, fabric and cut forms
+  use it — photos went from 150–190px strips to real columns
+  (`clamp(260-280px, …, 400-460px)`).
+- Studio uncapped from 760px (auto-fill grid gains a column); QR page is a
+  two-column card with a larger scannable code; tag sheet became a page-wide
+  grid of pick-cards with the print button in the header row.
+
+## 3. Orders: minimal cards + an order page
+
+- The inbox card carries **three things**: shopper name, one line
+  ("2× Red Sari +1 more"), a **Call** button (stretched-hit-area pattern —
+  the card opens, the button floats above).
+- Everything else — badge, phone/time/ref, full item list, total, WhatsApp,
+  Done/Reopen — moved to the order's own page (`OrderCard`, now exported from
+  `Analytics.tsx`; "Done" pressed there updates live).
+- Header is the catalog's shape: **All / To call back / Done** segmented
+  pills (amber count on open), result count, search, Export CSV.
+
+## 4. Fits tab + overview upgrade
+
+- **Fits** (apparel shops, after Fabrics): every `status === "ready"` render
+  across every bolt in one grid — PUBLISHED/DRAFT chip, the bolt's photo as a
+  corner swatch, cut + fabric names, price. Family filter. Tapping opens that
+  fabric's studio; the studio's breadcrumb names whichever tab it was entered
+  from (fits or fabrics).
+- **Overview** is a landing screen now: two new tiles (Orders · 30 days,
+  To call back — amber when non-zero) and a **needs-attention chip row**
+  ("3 to call back →", "2 out of stock →", "5 unpublished fits →") that jumps
+  to the right tab. Replaces the old lone orders banner. Chart and most-tried
+  table sit side by side ≥880px (`.overview-grid`).
+
+## 5. Minimal copy (≤5 words) + mobile density
+
+- Helper text across the app cut to ~5 words — hints, explainers, banners,
+  placeholders, photo-box sublabels — in `Dashboard`, `FabricStudio`,
+  `CounterTryOn`, `PlanTab`, `Onboarding`, `ColorList`, `ProShot`,
+  `LocationPicker`, `PendingReview`, `AuthPage`, `storefront`, and the kiosk
+  strings in `i18n.ts` (**both English and Nepali**, kept in sync).
+  Left long on purpose: validation/error messages, confirm-dialog bodies, the
+  kiosk photo-consent disclosure, the Nepali stitching wait-lines.
+  `COVERAGES` notes in `types.ts` also trimmed.
+- Mobile: card styling moved from inline styles to classes so the 640px
+  breakpoint can shrink them — `.tile-pad` (card bodies), `.card-act`
+  (Edit/QR/Restock rows: 38px → 30px), `.order-tile`/`.orders-grid`,
+  `.stat-tile`/`.stat-grid` (34px numbers → 24px). Desktop unchanged.
+
+### Files
+
+`src/components/Dashboard.tsx` (major), `FabricStudio.tsx`, `Analytics.tsx`,
+`CounterTryOn.tsx`, `PlanTab.tsx`, `Onboarding.tsx`, `ColorList.tsx`,
+`ProShot.tsx`, `LocationPicker.tsx`, `PendingReview.tsx`, `AuthPage.tsx`,
+`storefront.tsx`, `src/lib/i18n.ts`, `src/lib/types.ts` (copy only),
+`src/app/globals.css`.
+
+### Verified
+
+- `tsc --noEmit` and `next build` clean after every pass.
+- Not verified in a browser: the flows were exercised through types and build
+  only — worth a click-through of studio → cut form → back, the dirty-form
+  guard, and the orders card → order page round trip.
